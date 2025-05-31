@@ -110,7 +110,7 @@ struct SimpleFFT {
 	void resize(size_t size) {
 		twiddles.resize(size*3/4);
 		for (size_t i = 0; i < size*3/4; ++i) {
-			Sample twiddlePhase = -2*M_PI*i/size;
+			Sample twiddlePhase = -2*Sample(M_PI)*i/size;
 			twiddles[i] = std::polar(Sample(1), twiddlePhase);
 		}
 		working.resize(size);
@@ -756,7 +756,7 @@ private:
 		auto *f1i = f0i + innerSize;
 		auto *f2r = f0r + innerSize*2;
 		auto *f2i = f0i + innerSize*2;
-		const Sample tw1r = -0.5, tw1i = -std::sqrt(0.75)*(inverse ? -1 : 1);
+		const Sample tw1r = -0.5, tw1i = -std::sqrt(Sample(0.75))*(inverse ? -1 : 1);
 		
 		for (size_t i = 0; i < innerSize; ++i) {
 			Sample ar = f0r[i], ai = f0i[i], br = f1r[i], bi = f1i[i], cr = f2r[i], ci = f2i[i];
@@ -818,10 +818,10 @@ private:
 		auto *f2 = f0 + innerSize*2;
 		auto *f3 = f0 + innerSize*3;
 		auto *f4 = f0 + innerSize*4;
-		const Sample tw1r = 0.30901699437494745;
-		const Sample tw1i = -0.9510565162951535*(inverse ? -1 : 1);
-		const Sample tw2r = -0.8090169943749473;
-		const Sample tw2i = -0.5877852522924732*(inverse ? -1 : 1);
+		const Sample tw1r = Sample(0.30901699437494745);
+		const Sample tw1i = Sample(-0.9510565162951535)*(inverse ? -1 : 1);
+		const Sample tw2r = Sample(-0.8090169943749473);
+		const Sample tw2i = Sample(-0.5877852522924732)*(inverse ? -1 : 1);
 		for (size_t i = 0; i < innerSize; ++i) {
 			Complex a = f0[i], b = f1[i], c = f2[i], d = f3[i], e = f4[i];
 
@@ -851,10 +851,10 @@ private:
 		auto *f4r = f0r + innerSize*4;
 		auto *f4i = f0i + innerSize*4;
 		
-		const Sample tw1r = 0.30901699437494745;
-		const Sample tw1i = -0.9510565162951535*(inverse ? -1 : 1);
-		const Sample tw2r = -0.8090169943749473;
-		const Sample tw2i = -0.5877852522924732*(inverse ? -1 : 1);
+		const Sample tw1r = Sample(0.30901699437494745);
+		const Sample tw1i = Sample(-0.9510565162951535)*(inverse ? -1 : 1);
+		const Sample tw2r = Sample(-0.8090169943749473);
+		const Sample tw2i = Sample(-0.5877852522924732)*(inverse ? -1 : 1);
 		for (size_t i = 0; i < innerSize; ++i) {
 			Sample ar = f0r[i], ai = f0i[i], br = f1r[i], bi = f1i[i], cr = f2r[i], ci = f2i[i], dr = f3r[i], di = f3i[i], er = f4r[i], ei = f4i[i];
 
@@ -892,7 +892,7 @@ private:
 			offsetFreq[0] = sum;
 			
 			for (size_t f = 1; f < outerSize; ++f) {
-				Complex sum = dftTmp[0];
+				sum = dftTmp[0];
 
 				for (size_t i2 = 1; i2 < outerSize; ++i2) {
 					size_t twistIndex = (i2*f)%outerSize;
@@ -923,7 +923,7 @@ private:
 			offsetI[0] = sumI;
 			
 			for (size_t f = 1; f < outerSize; ++f) {
-				Sample sumR = *tmpR, sumI = *tmpI;
+				sumR = *tmpR, sumI = *tmpI;
 
 				for (size_t i2 = 1; i2 < outerSize; ++i2) {
 					size_t twistIndex = (i2*f)%outerSize;
@@ -966,18 +966,18 @@ struct RealFFT {
 		
 		if (!halfBinShift) {
 			for (size_t i = 0; i < twiddles.size(); ++i) {
-				Sample rotPhase = i*(-2*M_PI/size) - M_PI/2; // bake rotation by (-i) into twiddles
+				Sample rotPhase = i*(-2*Sample(M_PI)/size) - Sample(M_PI)/2; // bake rotation by (-i) into twiddles
 				twiddles[i] = std::polar(Sample(1), rotPhase);
 			}
 		} else {
 			for (size_t i = 0; i < twiddles.size(); ++i) {
-				Sample rotPhase = (i + 0.5)*(-2*M_PI/size) - M_PI/2;
+				Sample rotPhase = (i + Sample(0.5))*(-2*Sample(M_PI)/size) - Sample(M_PI)/2;
 				twiddles[i] = std::polar(Sample(1), rotPhase);
 			}
 	
 			halfBinTwists.resize(hSize);
 			for (size_t i = 0; i < hSize; ++i) {
-				Sample twistPhase = -2*M_PI*i/size;
+				Sample twistPhase = -2*Sample(M_PI)*i/size;
 				halfBinTwists[i] = std::polar(Sample(1), twistPhase);
 			}
 		}
@@ -1001,7 +1001,7 @@ struct RealFFT {
 			Sample *tmpTimeR = (Sample *)tmpTime.data(), *tmpTimeI = tmpTimeR + hSize;
 			Sample *tmpFreqR = (Sample *)tmpFreq.data(), *tmpFreqI = tmpFreqR + hSize;
 			if (step-- == 0) {
-				size_t hSize = complexFft.size();
+				hSize = complexFft.size();
 				if (halfBinShift) {
 					for (size_t i = 0; i < hSize; ++i) {
 						Sample tr = time[2*i], ti = time[2*i + 1];
@@ -1209,7 +1209,7 @@ struct RealFFT {
 			} else if (step < complexFft.steps()) {
 				complexFft.ifft(step, tmpFreqR, tmpFreqI, tmpTimeR, tmpTimeI);
 			} else {
-				size_t hSize = complexFft.size();
+				hSize = complexFft.size();
 				if (halfBinShift) {
 					for (size_t i = 0; i < hSize; ++i) {
 						Sample tr = tmpTimeR[i], ti = tmpTimeI[i];

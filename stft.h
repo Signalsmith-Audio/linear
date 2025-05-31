@@ -445,7 +445,7 @@ struct DynamicSTFT {
 	Output output;
 
 private:
-	static constexpr Sample almostZero = 1e-30;
+	static constexpr Sample almostZero = Sample(1e-30);
 
 	size_t _analysisChannels, _synthesisChannels, _inputLengthSamples, _blockSamples, _fftSamples, _fftBins;
 	size_t _defaultInterval = 0;
@@ -588,7 +588,7 @@ private:
 			for (size_t i = 0; i < size; ++i) {
 				double r = (2*i + 1)*invSize - 1;
 				double arg = std::sqrt(1 - r*r);
-				data[i] = bessel0(beta*arg)*invB0;
+				data[i] = static_cast<std::remove_reference<decltype(data[i])>::type>(bessel0(beta*arg)*invB0);
 			}
 		}
 	};
@@ -617,7 +617,7 @@ private:
 			double norm = 1/(gaussian(0) - 2*offsetScale*(gaussian(2)));
 			for (size_t i = 0; i < size; ++i) {
 				double r = (2*i + 1)*invSize - 1;
-				data[i] = norm*(gaussian(r) - offsetScale*(gaussian(r - 2) + gaussian(r + 2)));
+				data[i] = static_cast<std::remove_reference<decltype(data[i])>::type>(norm*(gaussian(r) - offsetScale*(gaussian(r - 2) + gaussian(r + 2))));
 			}
 		}
 	};
@@ -629,7 +629,7 @@ private:
 			for (size_t index = i; index < windowLength; index += interval) {
 				sum2 += data[index]*data[index];
 			}
-			double factor = 1/std::sqrt(sum2);
+			auto factor = static_cast<std::remove_reference<decltype(data[i])>::type>(1/std::sqrt(sum2));
 			for (size_t index = i; index < windowLength; index += interval) {
 				data[index] *= factor;
 			}
