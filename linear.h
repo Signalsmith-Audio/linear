@@ -52,6 +52,49 @@ struct SplitPointer {
 	const std::complex<V> operator[](std::ptrdiff_t i) const {
 		return {real[i], imag[i]};
 	}
+
+	// Assignable (if not const) and converts to `std::complex<V>`
+	struct Value : public std::complex<V> {
+		Value(V &_real, V &_imag) : std::complex<V>(_real, _imag),  _real(_real), _imag(_imag) {}
+	
+		V real() const {
+			return _real;
+		}
+		void real(V v) {
+			_real = v;
+			std::complex<V>::real(v);
+		}
+		V imag() const {
+			return _imag;
+		}
+		void imag(V v) {
+			_imag = v;
+			std::complex<V>::imag(v);
+		}
+
+#define LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(OP) \
+		template<class Other> \
+		Value & operator OP(Other &&v) { \
+			std::complex<V>::operator OP(std::forward<Other>(v)); \
+			_real = v.real(); \
+			_imag = v.imag(); \
+			return *this; \
+		}
+		LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(=);
+		LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(+=);
+		LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(-=);
+		LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(*=);
+		LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(/=);
+#undef LINEAR_SPLIT_POINTER_ASSIGNMENT_OP
+
+	private:
+		V &_real;
+		V &_imag;
+	};
+
+	Value operator[](std::ptrdiff_t i) {
+		return {real[i], imag[i]};
+	}
 };
 
 template<bool=true>
@@ -348,6 +391,15 @@ struct WritableExpression : public Expression<BaseExpr> {
 		this->linear.fill(this->pointer, expr, this->size);
 		return *this;
 	}
+
+	// Use the pointer's `operator[]` instead of the expression
+	auto operator[](std::ptrdiff_t i) -> decltype(this->pointer[i]) {
+		return this->pointer[i];
+	}
+
+	auto operator[](std::ptrdiff_t i) const -> decltype(this->pointer[i]) {
+		return this->pointer[i];
+	}
 };
 
 /// Helper class for temporary storage
@@ -640,6 +692,13 @@ struct LinearImplBase {
 		V get(std::ptrdiff_t i) const {
 			return pointer[i];
 		}
+
+		V & operator[](std::ptrdiff_t i) {
+			return pointer[i];
+		}
+		const V & operator[](std::ptrdiff_t i) const {
+			return pointer[i];
+		}
 	};
 	template<typename V>
 	struct WritableComplex {
@@ -654,6 +713,13 @@ struct LinearImplBase {
 		}
 
 		std::complex<V> get(std::ptrdiff_t i) const {
+			return pointer[i];
+		}
+
+		std::complex<V> & operator[](std::ptrdiff_t i) {
+			return pointer[i];
+		}
+		const std::complex<V> & operator[](std::ptrdiff_t i) const {
 			return pointer[i];
 		}
 	};
@@ -671,6 +737,9 @@ struct LinearImplBase {
 
 		std::complex<V> get(std::ptrdiff_t i) const {
 			return {pointer.real[i], pointer.imag[i]};
+		}
+		auto operator[](std::ptrdiff_t i) -> decltype(pointer[i]) {
+			return pointer[i];
 		}
 	};
 
