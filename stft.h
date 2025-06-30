@@ -82,7 +82,7 @@ struct DynamicSTFT {
 		moveOutput(_defaultInterval); // ready for first block immediately
 	}
 
-	void writeInput(size_t channel, size_t offset, size_t length, Sample *inputArray) {
+	void writeInput(size_t channel, size_t offset, size_t length, const Sample *inputArray) {
 		Sample *buffer = input.buffer.data() + channel*_inputLengthSamples;
 
 		size_t offsetPos = (input.pos + offset)%_inputLengthSamples;
@@ -97,7 +97,7 @@ struct DynamicSTFT {
 			buffer[i2] = inputArray[i];
 		}
 	}
-	void writeInput(size_t channel, size_t length, Sample *inputArray) {
+	void writeInput(size_t channel, size_t length, const Sample *inputArray) {
 		writeInput(channel, 0, length, inputArray);
 	}
 	void moveInput(size_t samples, bool clearInput=false) {

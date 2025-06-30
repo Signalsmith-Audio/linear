@@ -756,6 +756,10 @@ struct LinearImplBase {
 	Expression<expression::ReadableSplit<V>> wrap(ConstSplitPointer<V> pointer) {
 		return {pointer};
 	}
+	template<typename V>
+	Expression<expression::ReadableSplit<V>> wrap(ConstRealPointer<V> real, ConstRealPointer<V> imag) {
+		return {ConstSplitPointer<V>{real, imag}};
+	}
 
 	// When a length is supplied, make it writable
 	template<typename V>
@@ -769,6 +773,10 @@ struct LinearImplBase {
 	template<typename V>
 	WritableExpression<WritableSplit<V>> wrap(SplitPointer<V> pointer, size_t size) {
 		return {self(), pointer, size};
+	}
+	template<typename V>
+	WritableExpression<WritableSplit<V>> wrap(RealPointer<V> real, RealPointer<V> imag, size_t size) {
+		return {self(), SplitPointer<V>{real, imag}, size};
 	}
 
 	template<typename V>
