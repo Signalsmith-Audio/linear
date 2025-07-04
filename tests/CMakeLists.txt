@@ -15,7 +15,7 @@ FetchContent_Declare(
 	signalsmith_dsp
 	GIT_REPOSITORY https://github.com/Signalsmith-Audio/dsp.git
 	GIT_TAG 5c7d1f3eb375b4862b682d310ccfbaafb6a4477e # main
-	GIT_SHALLOW ON
+	GIT_SHALLOW OFF
 	SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/others/dsp"
 )
 FetchContent_MakeAvailable(signalsmith_dsp)
