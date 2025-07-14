@@ -119,7 +119,7 @@ private:
 	template<class V, class Expr>
 	void fillBasic(SplitPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
-		using Complex = decltype(pointer[0]);
+		using Complex = typename SplitPointer<V>::Complex;
 		for (size_t i = 0; i < size; ++i) {
 			Complex c = expr.get(i);
 			pointer.real[i] = c.real();

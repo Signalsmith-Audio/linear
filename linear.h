@@ -42,6 +42,8 @@ struct ConstSplitPointer {
 
 template<typename V>
 struct SplitPointer {
+	using Complex = std::complex<V>;
+
 	RealPointer<V> real, imag;
 	SplitPointer(RealPointer<V> real, RealPointer<V> imag) : real(real), imag(imag) {}
 	operator ConstSplitPointer<V>() {
@@ -49,27 +51,27 @@ struct SplitPointer {
 	}
 
 	// Array-like access for convenience
-	const std::complex<V> operator[](std::ptrdiff_t i) const {
+	const Complex operator[](std::ptrdiff_t i) const {
 		return {real[i], imag[i]};
 	}
-
+	
 	// Assignable (if not const) and converts to `std::complex<V>`
-	struct Value : public std::complex<V> {
-		Value(V &_real, V &_imag) : std::complex<V>(_real, _imag),  _real(_real), _imag(_imag) {}
+	struct Value : public Complex {
+		Value(V &_real, V &_imag) : Complex(_real, _imag),  _real(_real), _imag(_imag) {}
 	
 		V real() const {
 			return _real;
 		}
 		void real(V v) {
 			_real = v;
-			std::complex<V>::real(v);
+			Complex::real(v);
 		}
 		V imag() const {
 			return _imag;
 		}
 		void imag(V v) {
 			_imag = v;
-			std::complex<V>::imag(v);
+			Complex::imag(v);
 		}
 
 #define LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(OP) \
