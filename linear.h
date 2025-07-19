@@ -140,6 +140,16 @@ namespace expression {
 		}
 	};
 
+	// If the constant is one of our assignable complex proxies, use the basic one instead
+	template<>
+	struct ConstantExpr<typename SplitPointer<float>::Value> : public ConstantExpr<std::complex<float>> {
+		using ConstantExpr<std::complex<float>>::ConstantExpr;
+	};
+	template<>
+	struct ConstantExpr<typename SplitPointer<double>::Value> : public ConstantExpr<std::complex<double>> {
+		using ConstantExpr<std::complex<double>>::ConstantExpr;
+	};
+
 	template<class V, typename=void>
 	struct ExprTest {
 		using Constant = ConstantExpr<V>;
@@ -317,6 +327,35 @@ namespace expression {
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Imag, std::imag)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Arg, std::arg)
 #undef SIGNALSMITH_AUDIO_LINEAR_FUNC1
+
+#define SIGNALSMITH_AUDIO_LINEAR_FUNC2(Name, funcName, func) \
+	template<class A, class B> \
+	struct Name : public Base { \
+		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
+		A a; \
+		B b; \
+		Name(const A &a, const B &b) : a(a), b(b) {} \
+		auto get(std::ptrdiff_t i) const -> decltype(func(a.get(i), b.get(i))) const { \
+			return func(a.get(i), b.get(i)); \
+		} \
+	}; \
+	template<class A, class B> \
+	Name<A, B> make##Name(A a, B b) { \
+		return {a, b}; \
+	} \
+
+	template<typename VA, typename VB>
+	auto commonMax(VA a, VB b) -> decltype(a + b) {
+		return std::max<decltype(a + b)>(a, b);
+	}
+	template<typename VA, typename VB>
+	auto commonMin(VA a, VB b) -> decltype(a + b) {
+		return std::min<decltype(a + b)>(a, b);
+	}
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, max, commonMax);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, min, commonMin);
+#undef SIGNALSMITH_AUDIO_LINEAR_FUNC2
+
 } // expression::
 
 template<class BaseExpr>
@@ -841,6 +880,15 @@ struct LinearImplBase {
 		return self().fill(pointer, (Expr &)expr, size);
 	};
 
+	template<class A, class B>
+	static auto max(A a, B b) -> decltype(expression::makeMax(expression::ensureExpr(a), expression::ensureExpr(b))) {
+		return expression::makeMax(expression::ensureExpr(a), expression::ensureExpr(b));
+	}
+	template<class A, class B>
+	static auto min(A a, B b) -> decltype(expression::makeMin(expression::ensureExpr(a), expression::ensureExpr(b))) {
+		return expression::makeMin(expression::ensureExpr(a), expression::ensureExpr(b));
+	}
+
 protected:
 	LinearImplBase(Linear *linearThis) {
 		assert((LinearImplBase *)linearThis == this);
@@ -889,10 +937,14 @@ struct LinearImpl : public LinearImplBase<useLinear> {
 	
 	template<typename V>
 	void reserve(size_t) {}
-	// This makes sure we don't allocate - unless there's an expression with multiple sqrts in it!
+	// Makes sure we don't allocate
 	template<>
 	void reserve<float>(size_t size) {
 		cached.reserveFloats(size);
+	}
+	template<>
+	void reserve<double>(size_t size) {
+		cached.reserveDoubles(size);
 	}
 private:
 	CachedResults<LinearImpl, 32> cached;

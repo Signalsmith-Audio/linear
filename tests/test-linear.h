@@ -539,6 +539,9 @@ TEST_EXPR5(SubSubMul, a = (b - c)*(d - e), a = (b - c)*(d - e));
 TEST_EXPR5(MulMulAdd, a = b*c + d*e, a = b*c + d*e);
 TEST_EXPR5(MulMulSub, a = b*c - d*e, a = b*c - d*e);
 
+TEST_EXPR3(Max, a = std::max(b, c), a = signalsmith::linear::Linear::max(b, c));
+TEST_EXPR3(Min, a = std::min(b, c), a = signalsmith::linear::Linear::min(b, c));
+
 void testLinear(int maxSize, double benchmarkSeconds) {
 	std::cout << "\nExpressions\n-----------\n";
 	{
@@ -563,6 +566,9 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidAB<Floor, 0, 0>>("Floor");
 		test.addOp<OpVoidAB<MinusFloor, 0, 0>>("MinusFloor");
 		test.addOp<OpVoidAB<Ceil, 0, 0>>("Ceil");
+
+		test.addOp<OpVoidABC<Max, 0, 0, 0>>("Max");
+		test.addOp<OpVoidABC<Min, 0, 0, 0>>("Min");
 	}
 	{
 		TestLinear test(maxSize, benchmarkSeconds, "realConstants");
@@ -577,6 +583,11 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidABkC<Mul, 0, 0, 0>>("Mul2");
 		test.addOp<OpVoidABCk<Div, 0, 0, 0>>("Div");
 		test.addOp<OpVoidABkC<Div, 0, 0, 0>>("Div2");
+
+		test.addOp<OpVoidABkC<Max, 0, 0, 0>>("Max");
+		test.addOp<OpVoidABkC<Min, 0, 0, 0>>("Min");
+		test.addOp<OpVoidABCk<Max, 0, 0, 0>>("Max2");
+		test.addOp<OpVoidABCk<Min, 0, 0, 0>>("Min2");
 	}
 	{
 		TestLinear test(maxSize, benchmarkSeconds, "complex");
