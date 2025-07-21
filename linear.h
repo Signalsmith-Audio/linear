@@ -803,6 +803,20 @@ struct LinearImplBase {
 		}
 	};
 
+	// Plain values get turned into constants
+	Expression<expression::Constant<float>> wrap(float v) {
+		return {v};
+	}
+	Expression<expression::Constant<double>> wrap(double v) {
+		return {v};
+	}
+
+	// Pass `Expression`s through
+	template<class V>
+	Expression<V> wrap(Expression<V> expr) {
+		return expr;
+	}
+
 	// Wrap a pointer as an expression
 	template<typename V>
 	Expression<expression::ReadableReal<V>> wrap(ConstRealPointer<V> pointer) {
@@ -868,12 +882,6 @@ struct LinearImplBase {
 		return {pointer};
 	}
 
-	// Otherwise, pass `Expression`s through, and wrap everything else as a constant
-	template<typename V>
-	auto wrap(V && v) -> decltype(expression::ensureExpr(v)) {
-		return expression::ensureExpr(v);
-	}
-
 	template<class ...Args>
 	auto operator()(Args &&...args) -> decltype(wrap(std::forward<Args>(args)...)) {
 		return wrap(std::forward<Args>(args)...);
@@ -908,7 +916,7 @@ struct LinearImplBase {
 
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(ExprName, methodName) \
 	template<class A> \
-	auto methodName(A a) -> decltype(expression::make##ExprName(wrap(a))) { \
+	auto methodName(A a) -> Expression<decltype(expression::make##ExprName(wrap(a)))> { \
 		return expression::make##ExprName(wrap(a)); \
 	}
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Abs, abs)
@@ -949,7 +957,7 @@ struct LinearImplBase {
 
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC2(ExprName, methodName) \
 	template<class A, class B> \
-	auto methodName(A a, B b) -> decltype(expression::make##ExprName(wrap(a), wrap(b))) { \
+	auto methodName(A a, B b) -> Expression<decltype(expression::make##ExprName(wrap(a), wrap(b)))> { \
 		return expression::make##ExprName(wrap(a), wrap(b)); \
 	}
 	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, max);
