@@ -469,6 +469,7 @@ private:
 		fillMul(pointer, expression::makeMul(expr.a, recipB), size);
 	}
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR
+#undef SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR
 
 // R x R -> R operators in vForce
 #define SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR(Name, vForce_float, vForce_double) \
@@ -530,6 +531,31 @@ private:
 //	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Mul, Add, vDSP_vma, 1)
 //	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Sub, Mul, vDSP_vsbm, 2)
 //	SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Mul, Sub, vDSP_vmsb, 3)
+
+// Forwards .fillExpr() to .fillName(), but doesn't define that
+#define SIGNALSMITH_AUDIO_LINEAR_OP2_C(Name) \
+public: \
+	template<class A, class B> \
+	void fillExpr(ComplexPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
+		fill##Name(pointer, expr, size); \
+	} \
+	template<class A, class B> \
+	void fillExpr(ComplexPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
+		fill##Name(pointer, expr, size); \
+	} \
+	template<class A, class B> \
+	void fillExpr(SplitPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
+		fill##Name(pointer, expr, size); \
+	} \
+	template<class A, class B> \
+	void fillExpr(SplitPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
+		fill##Name(pointer, expr, size); \
+	} \
+private:
+//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Add)
+//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Sub)
+//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Mul)
+//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Div)
 
 protected:
 	CachedResults<LinearImpl, 32> cached;

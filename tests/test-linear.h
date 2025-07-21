@@ -49,7 +49,7 @@ struct OpVoidAB {
 	void linear(L &linear, Data &data) const {
 		auto a = data.template get<typeA>(0);
 		auto b = data.template get<typeB>(1);
-		op.op(linear.wrap(a, data.size), linear.wrap(b, data.size));
+		op.op(linear, linear.wrap(a, data.size), linear.wrap(b, data.size));
 	}
 };
 
@@ -71,7 +71,7 @@ struct OpVoidABk {
 	void linear(L &linear, Data &data) const {
 		auto a = data.template get<typeA>(0);
 		auto b = data.template get<typeB>(1)[0]; // scalar value
-		op.op(linear.wrap(a, data.size), b);
+		op.op(linear, linear.wrap(a, data.size), b);
 	}
 };
 
@@ -96,7 +96,7 @@ struct OpVoidABC {
 		auto b = data.template get<typeB>(1);
 		auto c = data.template get<typeC>(2);
 		size_t size = data.size;
-		op.op(linear(a, size), linear(b, size), linear(c, size));
+		op.op(linear, linear(a, size), linear(b, size), linear(c, size));
 	}
 };
 
@@ -121,7 +121,7 @@ struct OpVoidABCk {
 		auto b = data.template get<typeB>(1);
 		auto c = data.template get<typeC>(2)[0];
 		size_t size = data.size;
-		op.op(linear(a, size), linear(b, size), c);
+		op.op(linear, linear(a, size), linear(b, size), c);
 	}
 };
 
@@ -146,7 +146,7 @@ struct OpVoidABkC {
 		auto b = data.template get<typeB>(1)[0];
 		auto c = data.template get<typeC>(2);
 		size_t size = data.size;
-		op.op(linear(a, size), b, linear(c, size));
+		op.op(linear, linear(a, size), b, linear(c, size));
 	}
 };
 
@@ -173,7 +173,7 @@ struct OpVoidABCD {
 		auto c = data.template get<typeC>(2);
 		auto d = data.template get<typeD>(3);
 		size_t size = data.size;
-		op.op(linear(a, size), linear(b, size), linear(c, size), linear(d, size));
+		op.op(linear, linear(a, size), linear(b, size), linear(c, size), linear(d, size));
 	}
 };
 
@@ -202,7 +202,7 @@ struct OpVoidABCDE {
 		auto d = data.template get<typeD>(3);
 		auto e = data.template get<typeE>(4);
 		size_t size = data.size;
-		op.op(linear(a, size), linear(b, size), linear(c, size), linear(d, size), linear(e, size));
+		op.op(linear, linear(a, size), linear(b, size), linear(c, size), linear(d, size), linear(e, size));
 	}
 };
 
@@ -448,8 +448,9 @@ struct Name { \
 		auto b = toVal(rb); \
 		refExpr; \
 	} \
-	template<class A, class B> \
-	void op(A &&a, B &&b) const { \
+	template<class L, class A, class B> \
+	void op(L &&linear, A &&a, B &&b) const { \
+		(void)linear; \
 		expr; \
 	} \
 };
@@ -462,8 +463,9 @@ struct Name { \
 		auto c = toVal(rc); \
 		refExpr; \
 	} \
-	template<class A, class B, class C> \
-	void op(A &&a, B &&b, C &&c) const { \
+	template<class L, class A, class B, class C> \
+	void op(L &&linear, A &&a, B &&b, C &&c) const { \
+		(void)linear; \
 		expr; \
 	} \
 };
@@ -477,8 +479,9 @@ struct Name { \
 		auto d = toVal(rd); \
 		refExpr; \
 	} \
-	template<class A, class B, class C, class D> \
-	void op(A &&a, B &&b, C &&c, D &&d) const { \
+	template<class L, class A, class B, class C, class D> \
+	void op(L &&linear, A &&a, B &&b, C &&c, D &&d) const { \
+		(void)linear; \
 		expr; \
 	} \
 };
@@ -493,8 +496,9 @@ struct Name { \
 		auto e = toVal(re); \
 		refExpr; \
 	} \
-	template<class A, class B, class C, class D, class E> \
-	void op(A &&a, B &&b, C &&c, D &&d, E &&e) const { \
+	template<class L, class A, class B, class C, class D, class E> \
+	void op(L &&linear, A &&a, B &&b, C &&c, D &&d, E &&e) const { \
+		(void)linear; \
 		expr; \
 	} \
 };
@@ -539,8 +543,8 @@ TEST_EXPR5(SubSubMul, a = (b - c)*(d - e), a = (b - c)*(d - e));
 TEST_EXPR5(MulMulAdd, a = b*c + d*e, a = b*c + d*e);
 TEST_EXPR5(MulMulSub, a = b*c - d*e, a = b*c - d*e);
 
-TEST_EXPR3(Max, a = std::max(b, c), a = signalsmith::linear::Linear::max(b, c));
-TEST_EXPR3(Min, a = std::min(b, c), a = signalsmith::linear::Linear::min(b, c));
+TEST_EXPR3(Max, a = std::max(b, c), a = linear.max(b, c));
+TEST_EXPR3(Min, a = std::min(b, c), a = linear.min(b, c));
 
 void testLinear(int maxSize, double benchmarkSeconds) {
 	std::cout << "\nExpressions\n-----------\n";

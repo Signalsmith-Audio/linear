@@ -313,6 +313,10 @@ namespace expression {
 	}
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Norm, fastNorm)
 
+	// Single-argument functions
+	// Abs, Norm, Exp, Exp2, Log, Log2, Log10, Sqrt, Cbrt, Ceil, Floor, Trunc, Round, Conj, Real, Imag, Arg, Proj, Sin, Cos, Tan, Asin, Acos, Atan, Sinh, Cosh, Tanh, Asinh, Acosh, Atanh, Erf, Erfc, Tgamma, Lgamma
+
+	// .abs and .norm are handled above
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Exp, std::exp)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Exp2, std::exp2)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log, std::log)
@@ -320,40 +324,61 @@ namespace expression {
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log10, std::log10)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sqrt, std::sqrt)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cbrt, std::cbrt)
-	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Floor, std::floor)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Ceil, std::ceil)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Floor, std::floor)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Trunc, std::trunc)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Round, std::round)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Conj, std::conj)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Real, std::real)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Imag, std::imag)
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Arg, std::arg)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Proj, std::proj)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sin, std::sin)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cos, std::cos)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tan, std::tan)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Asin, std::asin)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Acos, std::acos)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Atan, std::atan)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sinh, std::sinh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cosh, std::cosh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tanh, std::tanh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Asinh, std::asinh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Acosh, std::acosh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Atanh, std::atanh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Erf, std::erf)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Erfc, std::erfc)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tgamma, std::tgamma)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Lgamma, std::lgamma)
 #undef SIGNALSMITH_AUDIO_LINEAR_FUNC1
 
-#define SIGNALSMITH_AUDIO_LINEAR_FUNC2(Name, funcName, func) \
+#define SIGNALSMITH_AUDIO_LINEAR_FUNC2(Name, func) \
+	template<typename VA, typename VB> \
+	auto common##Name(VA a, VB b) -> decltype(func((decltype(a + b))a, (decltype(a + b))b)) { \
+		return func((decltype(a + b))a, (decltype(a + b))b); \
+	} \
 	template<class A, class B> \
 	struct Name : public Base { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
 		A a; \
 		B b; \
 		Name(const A &a, const B &b) : a(a), b(b) {} \
-		auto get(std::ptrdiff_t i) const -> decltype(func(a.get(i), b.get(i))) const { \
-			return func(a.get(i), b.get(i)); \
+		auto get(std::ptrdiff_t i) const -> decltype(common##Name(a.get(i), b.get(i))) const { \
+			return common##Name(a.get(i), b.get(i)); \
 		} \
 	}; \
 	template<class A, class B> \
 	Name<A, B> make##Name(A a, B b) { \
 		return {a, b}; \
-	} \
-
-	template<typename VA, typename VB>
-	auto commonMax(VA a, VB b) -> decltype(a + b) {
-		return std::max<decltype(a + b)>(a, b);
 	}
-	template<typename VA, typename VB>
-	auto commonMin(VA a, VB b) -> decltype(a + b) {
-		return std::min<decltype(a + b)>(a, b);
-	}
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, max, commonMax);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, min, commonMin);
+	// Min, Max, Dim, Pow, Atan2, Hypot, Copysign, Polar
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, std::fmax);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, std::fmin);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Dim, std::fdim);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Pow, std::pow);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Atan2, std::atan2);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Hypot, std::hypot);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Copysign, std::copysign);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Polar, std::polar);
 #undef SIGNALSMITH_AUDIO_LINEAR_FUNC2
 
 } // expression::
@@ -370,51 +395,45 @@ struct Expression : public BaseExpr {
 		return BaseExpr::get(i);
 	}
 
-	const Expression<expression::Abs<BaseExpr>> abs() const {
-		return {*this};
+#define SIGNALSMITH_AUDIO_LINEAR_FUNC1(ExprName, methodName) \
+	const Expression<expression::ExprName<BaseExpr>> methodName() const { \
+		return {*this}; \
 	}
-	const Expression<expression::Norm<BaseExpr>> norm() const {
-		return {*this};
-	}
-	const Expression<expression::Exp<BaseExpr>> exp() const {
-		return {*this};
-	}
-	const Expression<expression::Exp2<BaseExpr>> exp2() const {
-		return {*this};
-	}
-	const Expression<expression::Log<BaseExpr>> log() const {
-		return {*this};
-	}
-	const Expression<expression::Log2<BaseExpr>> log2() const {
-		return {*this};
-	}
-	const Expression<expression::Log10<BaseExpr>> log10() const {
-		return {*this};
-	}
-	const Expression<expression::Sqrt<BaseExpr>> sqrt() const {
-		return {*this};
-	}
-	const Expression<expression::Cbrt<BaseExpr>> cbrt() const {
-		return {*this};
-	}
-	const Expression<expression::Conj<BaseExpr>> conj() const {
-		return {*this};
-	}
-	const Expression<expression::Real<BaseExpr>> real() const {
-		return {*this};
-	}
-	const Expression<expression::Imag<BaseExpr>> imag() const {
-		return {*this};
-	}
-	const Expression<expression::Arg<BaseExpr>> arg() const {
-		return {*this};
-	}
-	const Expression<expression::Floor<BaseExpr>> floor() const {
-		return {*this};
-	}
-	const Expression<expression::Ceil<BaseExpr>> ceil() const {
-		return {*this};
-	}
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Abs, abs)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Norm, norm)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Exp, exp)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Exp2, exp2)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log, log)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log2, log2)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log10, log10)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sqrt, sqrt)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cbrt, cbrt)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Ceil, ceil)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Floor, floor)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Trunc, trunc)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Round, round)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Conj, conj)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Real, real)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Imag, imag)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Arg, arg)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Proj, proj)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sin, sin)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cos, cos)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tan, tan)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Asin, asin)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Acos, acos)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Atan, atan)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sinh, sinh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cosh, cosh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tanh, tanh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Asinh, asinh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Acosh, acosh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Atanh, atanh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Erf, erf)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Erfc, erfc)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tgamma, tgamma)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Lgamma, lgamma)
+#undef SIGNALSMITH_AUDIO_LINEAR_FUNC1
 };
 template<class BaseExpr>
 struct WritableExpression : public Expression<BaseExpr> {
@@ -849,6 +868,12 @@ struct LinearImplBase {
 		return {pointer};
 	}
 
+	// Otherwise, pass `Expression`s through, and wrap everything else as a constant
+	template<typename V>
+	auto wrap(V && v) -> decltype(expression::ensureExpr(v)) {
+		return expression::ensureExpr(v);
+	}
+
 	template<class ...Args>
 	auto operator()(Args &&...args) -> decltype(wrap(std::forward<Args>(args)...)) {
 		return wrap(std::forward<Args>(args)...);
@@ -880,14 +905,62 @@ struct LinearImplBase {
 		return self().fill(pointer, (Expr &)expr, size);
 	};
 
-	template<class A, class B>
-	static auto max(A a, B b) -> decltype(expression::makeMax(expression::ensureExpr(a), expression::ensureExpr(b))) {
-		return expression::makeMax(expression::ensureExpr(a), expression::ensureExpr(b));
+
+#define SIGNALSMITH_AUDIO_LINEAR_FUNC1(ExprName, methodName) \
+	template<class A> \
+	auto methodName(A a) -> decltype(expression::make##ExprName(wrap(a))) { \
+		return expression::make##ExprName(wrap(a)); \
 	}
-	template<class A, class B>
-	static auto min(A a, B b) -> decltype(expression::makeMin(expression::ensureExpr(a), expression::ensureExpr(b))) {
-		return expression::makeMin(expression::ensureExpr(a), expression::ensureExpr(b));
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Abs, abs)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Norm, norm)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Exp, exp)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Exp2, exp2)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log, log)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log2, log2)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Log10, log10)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sqrt, sqrt)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cbrt, cbrt)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Ceil, ceil)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Floor, floor)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Trunc, trunc)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Round, round)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Conj, conj)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Real, real)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Imag, imag)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Arg, arg)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Proj, proj)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sin, sin)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cos, cos)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tan, tan)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Asin, asin)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Acos, acos)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Atan, atan)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Sinh, sinh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Cosh, cosh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tanh, tanh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Asinh, asinh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Acosh, acosh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Atanh, atanh)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Erf, erf)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Erfc, erfc)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Tgamma, tgamma)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Lgamma, lgamma)
+#undef SIGNALSMITH_AUDIO_LINEAR_FUNC1
+
+#define SIGNALSMITH_AUDIO_LINEAR_FUNC2(ExprName, methodName) \
+	template<class A, class B> \
+	auto methodName(A a, B b) -> decltype(expression::make##ExprName(wrap(a), wrap(b))) { \
+		return expression::make##ExprName(wrap(a), wrap(b)); \
 	}
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, max);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, min);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Dim, dim);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Pow, pow);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Atan2, atan2);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Hypot, hypot);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Copysign, copysign);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Polar, polar);
+#undef SIGNALSMITH_AUDIO_LINEAR_FUNC2
 
 protected:
 	LinearImplBase(Linear *linearThis) {
