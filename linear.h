@@ -121,7 +121,6 @@ struct WritableExpression;
 //		return typeid(Class).name(); \
 //	}
 
-
 // Expression templates, which always hold const pointers
 namespace expression {
 	// All base Exprs inherit from this, so we can SFINAE-test for them
@@ -172,6 +171,22 @@ namespace expression {
 	auto ensureExpr(const Expr &expr) -> decltype(ExprTest<Expr>::wrap(expr)){
 		return ExprTest<Expr>::wrap(expr);
 	};
+	
+	// Remove `Expression<>` or `WritableExpression<>` layers
+	template<class E>
+	E unwrapped(E e) {
+		return e;
+	}
+	template<class E>
+	E unwrapped(Expression<E> e) {
+		return e;
+	}
+	template<class E>
+	E unwrapped(WritableExpression<E> e) {
+		return e;
+	}
+	template<class E>
+	using Unwrapped = decltype(unwrapped(std::declval<E>()));
 
 	// Expressions that just read from a pointer
 	template<typename V>
@@ -223,7 +238,7 @@ namespace expression { \
 		} \
 	}; \
 	template<class A> \
-	Name<A> make##Name(A a) { \
+	Name<Unwrapped<A>> make##Name(A a) { \
 		return {a}; \
 	} \
 } \
@@ -252,7 +267,7 @@ namespace expression { \
 		} \
 	}; \
 	template<class A, class B> \
-	Name<A, B> make##Name(A a, B b) { \
+	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \
 		return {a, b}; \
 	} \
 } \
@@ -279,7 +294,7 @@ namespace expression {
 	template<class A> \
 	struct Name; \
 	template<class A> \
-	Name<A> make##Name(A a) { \
+	Name<Unwrapped<A>> make##Name(A a) { \
 		return {a}; \
 	} \
 	template<class A> \
@@ -367,7 +382,7 @@ namespace expression {
 		} \
 	}; \
 	template<class A, class B> \
-	Name<A, B> make##Name(A a, B b) { \
+	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \
 		return {a, b}; \
 	}
 	// Min, Max, Dim, Pow, Atan2, Hypot, Copysign, Polar
@@ -387,8 +402,8 @@ template<class BaseExpr>
 struct Expression : public BaseExpr {
 	template<class ...Args>
 	Expression(Args &&...args) : BaseExpr(std::forward<Args>(args)...) {
-		static_assert(std::is_trivially_copyable<Expression>::value, "Expression<> must be trivially copyable");
 		static_assert(std::is_trivially_copyable<BaseExpr>::value, "BaseExpr must be trivially copyable");
+		static_assert(std::is_trivially_copyable<Expression>::value, "Expression<> must be trivially copyable");
 	}
 
 	auto operator[](std::ptrdiff_t i) -> decltype(BaseExpr::get(i)) const {
