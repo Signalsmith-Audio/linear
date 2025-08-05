@@ -5,9 +5,17 @@
 
 namespace signalsmith { namespace linear {
 
+enum {
+	STFT_SPECTRUM_PACKED=0,
+	STFT_SPECTRUM_MODIFIED=1,
+	STFT_SPECTRUM_UNPACKED=2,
+};
+
 /// A self-normalising STFT, with variable position/window for output blocks
-template<typename Sample, bool splitComputation=false, bool modified=false>
+template<typename Sample, bool splitComputation=false, int spectrumType=STFT_SPECTRUM_PACKED>
 struct DynamicSTFT {
+	static constexpr bool modified = (spectrumType == STFT_SPECTRUM_MODIFIED);
+	static constexpr bool unpacked = (spectrumType == STFT_SPECTRUM_UNPACKED);
 	RealFFT<Sample, splitComputation, modified> fft;
 
 	using Complex = std::complex<Sample>;
@@ -22,7 +30,7 @@ struct DynamicSTFT {
 		_blockSamples = blockSamples;
 		_fftSamples = fft.fastSizeAbove((blockSamples + 1)/2)*2;
 		fft.resize(_fftSamples);
-		_fftBins = _fftSamples/2;
+		_fftBins = _fftSamples/2 + (spectrumType == STFT_SPECTRUM_UNPACKED);
 		
 		_inputLengthSamples = _blockSamples + extraInputHistory;
 		input.buffer.resize(_inputLengthSamples*_analysisChannels);
@@ -324,10 +332,19 @@ struct DynamicSTFT {
 			}
 			if (splitComputation) return;
 		}
+		auto *spectrumPtr = spectrum(channel);
 		if (splitComputation) {
-			fft.fft(step, timeBuffer.data(), spectrum(channel));
+			fft.fft(step, timeBuffer.data(), spectrumPtr);
+			if (unpacked && step == fft.steps() - 1) {
+				spectrumPtr[_fftBins - 1] = spectrumPtr[0].imag();
+				spectrumPtr[0].imag(0);
+			}
 		} else {
 			fft.fft(timeBuffer.data(), spectrum(channel));
+			if (unpacked) {
+				spectrumPtr[_fftBins - 1] = spectrumPtr[0].imag();
+				spectrumPtr[0].imag(0);
+			}
 		}
 	}
 
@@ -350,13 +367,18 @@ struct DynamicSTFT {
 		size_t channel = step/(fftSteps + 1);
 		step -= channel*(fftSteps + 1);
 
+		auto *spectrumPtr = spectrum(channel);
+		if (unpacked && step == 0) { // re-pack
+			spectrumPtr[0].imag(spectrumPtr[_fftBins - 1].real());
+		}
+
 		if (splitComputation) {
 			if (step < fftSteps) {
-				fft.ifft(step, spectrum(channel), timeBuffer.data());
+				fft.ifft(step, spectrumPtr, timeBuffer.data());
 				return;
 			}
 		} else {
-			fft.ifft(spectrum(channel), timeBuffer.data());
+			fft.ifft(spectrumPtr, timeBuffer.data());
 		}
 		
 		// extra step after each channel's FFT

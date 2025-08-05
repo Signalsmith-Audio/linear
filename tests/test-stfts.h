@@ -327,6 +327,88 @@ void compareStfts() {
 	figure.write("stft-compare.svg");
 }
 
+void testUnpackedStft(unsigned seed) {
+	signalsmith::linear::DynamicSTFT<float, false, 0> packed;
+	signalsmith::linear::DynamicSTFT<float, false, 2> unpacked;
+	packed.configure(1, 1, 256);
+	unpacked.configure(1, 1, 256);
+	if (unpacked.bands() != packed.bands() + 1) {
+		LOG_EXPR(packed.bands());
+		LOG_EXPR(unpacked.bands());
+		abort();
+	}
+
+	std::default_random_engine randomEngine(seed);
+	std::uniform_int_distribution<size_t> intervalDist{1, 200};
+	std::uniform_real_distribution<float> realDist{-10, 10};
+	
+	std::vector<float> buffer1(256), buffer2(256);
+
+	for (size_t r = 0; r < 10; ++r) {
+		size_t interval = intervalDist(randomEngine);
+		for (size_t i = 0; i < interval; ++i) {
+			buffer1[i] = realDist(randomEngine);
+		}
+		
+		packed.writeInput(0, interval, buffer1.data());
+		unpacked.writeInput(0, interval, buffer1.data());
+		packed.moveInput(interval);
+		unpacked.moveInput(interval);
+		
+		packed.analyse();
+		unpacked.analyse();
+		
+		for (size_t b = 1; b < packed.bands(); ++b) {
+			auto pV = packed.spectrum(0)[b];
+			auto uV = packed.spectrum(0)[b];
+			if (pV != uV) {
+				LOG_EXPR(b);
+				LOG_EXPR(pV);
+				LOG_EXPR(uV);
+				abort();
+			}
+		}
+		auto p0 = packed.spectrum(0)[0];
+		auto u0 = unpacked.spectrum(0)[0];
+		auto uN = unpacked.spectrum(0)[unpacked.bands() - 1];
+		if (p0.real() != u0.real() || u0.imag() != 0 || uN.real() != p0.imag() || uN.imag() != 0) {
+			LOG_EXPR(p0);
+			LOG_EXPR(u0);
+			LOG_EXPR(uN);
+			abort();
+		}
+
+		for (size_t b = 1; b < packed.bands(); ++b) {
+			auto &pV = packed.spectrum(0)[b];
+			auto &uV = packed.spectrum(0)[b];
+			pV = uV = {realDist(randomEngine), realDist(randomEngine)};
+		}
+		p0 = {realDist(randomEngine), realDist(randomEngine)};
+		packed.spectrum(0)[0] = p0;
+		unpacked.spectrum(0)[0] = {p0.real(), realDist(randomEngine)/*discarded*/};
+		unpacked.spectrum(0)[unpacked.bands() - 1] = {p0.imag(), realDist(randomEngine)/*discarded*/};
+
+		packed.synthesise();
+		unpacked.synthesise();
+		
+		// also randomise synthesis interval
+		interval = intervalDist(randomEngine);
+		packed.readOutput(0, interval, buffer1.data());
+		unpacked.readOutput(0, interval, buffer2.data());
+		packed.moveOutput(interval);
+		unpacked.moveOutput(interval);
+		
+		for (size_t i = 0; i < interval; ++i) {
+			if (buffer1[i] != buffer2[i]) {
+				LOG_EXPR(buffer1[i]);
+				LOG_EXPR(buffer2[i]);
+				abort();
+			}
+		}
+	}
+
+}
+
 void testStfts(int, double) {
 	std::cout << "STFT\n----\n";
 	

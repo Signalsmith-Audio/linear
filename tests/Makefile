@@ -14,7 +14,7 @@ benchmark-fast: out/tests
 out/tests: *.cpp *.h ../*.h ../platform/*.h
 	mkdir -p out
 	g++ -std=c++11 \
-		-Ofast -DSIGNALSMITH_IGNORE_BROKEN_APPLECLANG \
+		-O3 -ffast-math -DSIGNALSMITH_IGNORE_BROKEN_APPLECLANG \
 		-Wall -Wextra -Wfatal-errors -Wpedantic -pedantic-errors \
 		-framework Accelerate -DSIGNALSMITH_USE_ACCELERATE -DACCELERATE_NEW_LAPACK \
 		main.cpp -o out/tests
