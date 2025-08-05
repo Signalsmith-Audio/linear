@@ -93,7 +93,7 @@ struct Pow2FFT<float> {
 		splitImag.resize(size);
 		log2 = std::round(std::log2(size));
 		fftSetup = vDSP_create_fftsetup(log2, FFT_RADIX2);
-		hasSetup = true;
+		hasSetup = fftSetup;
 	}
 
 	void fft(const Complex* input, Complex* output) {
@@ -153,7 +153,7 @@ struct Pow2RealFFT<float> {
 		splitImag.resize(size);
 		log2 = std::log2(size);
 		fftSetup = vDSP_create_fftsetup(log2, FFT_RADIX2);
-		hasSetup = true;
+		hasSetup = fftSetup;
 	}
 
 	void fft(const float* input, Complex* output) {
@@ -219,7 +219,7 @@ struct Pow2FFT<double> {
 
 		log2 = std::round(std::log2(size));
 		fftSetup = vDSP_create_fftsetupD(log2, FFT_RADIX2);
-		hasSetup = true;
+		hasSetup = fftSetup;
 
 		splitReal.resize(size);
 		splitImag.resize(size);
@@ -282,7 +282,7 @@ struct Pow2RealFFT<double> {
 		splitImag.resize(size);
 		log2 = std::log2(size);
 		fftSetup = vDSP_create_fftsetupD(log2, FFT_RADIX2);
-		hasSetup = true;
+		hasSetup = fftSetup;
 	}
 
 	void fft(const double* input, Complex* output) {
