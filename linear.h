@@ -132,12 +132,17 @@ namespace expression {
 		EXPRESSION_NAME(Constant, "V");
 		V value;
 
+		static_assert(std::is_trivially_copyable<V>::value, "ConstantExpr<V> values must be trivially copyable");
+
 		ConstantExpr(V value) : value(value) {}
 		
 		const V get(std::ptrdiff_t) const {
 			return value;
 		}
 	};
+	
+	template<typename V>
+	using Arithmetic = decltype(std::declval<V>() + std::declval<V>());
 
 	// If the constant is one of our assignable complex proxies, use the basic one instead
 	template<>
@@ -151,7 +156,9 @@ namespace expression {
 
 	template<class V, typename=void>
 	struct ExprTest {
-		using Constant = ConstantExpr<V>;
+		using Constant = ConstantExpr<Arithmetic<V>>;
+
+		static_assert(std::is_trivially_copyable<Constant>::value, "ConstantExpr<V> must be trivially copyable");
 
 		static Constant wrap(const V &v) {
 			return {v};
@@ -168,7 +175,7 @@ namespace expression {
 	using Constant = typename ExprTest<Expr>::Constant;
 	
 	template<class Expr>
-	auto ensureExpr(const Expr &expr) -> decltype(ExprTest<Expr>::wrap(expr)){
+	auto ensureExpr(const Expr &expr) -> decltype(ExprTest<Expr>::wrap(expr)) {
 		return ExprTest<Expr>::wrap(expr);
 	};
 	
@@ -814,6 +821,9 @@ struct LinearImplBase {
 			return {pointer.real[i], pointer.imag[i]};
 		}
 		auto operator[](std::ptrdiff_t i) -> decltype(pointer[i]) {
+			return pointer[i];
+		}
+		auto operator[](std::ptrdiff_t i) const -> decltype(pointer[i]) {
 			return pointer[i];
 		}
 	};

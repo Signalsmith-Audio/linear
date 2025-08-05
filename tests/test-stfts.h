@@ -83,7 +83,7 @@ void testStft(size_t channels, size_t blockSize, size_t minInterval, size_t maxI
 	
 	{
 		std::uniform_real_distribution<double> dist{-1, 1};
-		int maxOffsetWobble = blockSize - maxInterval - 1;
+		int maxOffsetWobble = int(blockSize - maxInterval - 1);
 		stft.analysisOffset(blockSize*2);
 		stft.synthesisOffset(0);
 		while (std::abs(int(stft.analysisOffset()) - int(stft.synthesisOffset())) > maxOffsetWobble) {
