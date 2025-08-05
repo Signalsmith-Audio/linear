@@ -7,22 +7,7 @@
 #	include <Accelerate/Accelerate.h>
 #endif
 
-#ifndef CBLAS_INDEX
-#	define CBLAS_INT __LAPACK_int
-#	define CBLAS_INDEX size_t
-#	define CBLAS_S __LAPACK_float_complex
-#	define CBLAS_Z __LAPACK_double_complex
-#else // old Accelerate version
-#	define CBLAS_INT int
-#	define CBLAS_S void
-#	define CBLAS_Z void
-#endif
-extern "C" {
-	void cblas_scopy(const CBLAS_INT N, const float *X, const CBLAS_INT incX, float *Y, const CBLAS_INT incY);
-	void cblas_dcopy(const CBLAS_INT N, const double *X, const CBLAS_INT incX, double *Y, const CBLAS_INT incY);
-	void cblas_ccopy(const CBLAS_INT N, const CBLAS_S *X, const CBLAS_INT incX, CBLAS_S *Y, const CBLAS_INT incY);
-	void cblas_zcopy(const CBLAS_INT N, const CBLAS_Z *X, const CBLAS_INT incX, CBLAS_Z *Y, const CBLAS_INT incY);
-};
+#include <cstring> // std::memcpy
 
 namespace signalsmith { namespace linear {
 
@@ -151,28 +136,28 @@ private:
 	
 	// Copying from existing pointer
 	void fillExpr(RealPointer<float> pointer, expression::ReadableReal<float> expr, size_t size) {
-		cblas_scopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(float));
 	}
 	void fillExpr(RealPointer<float> pointer, WritableReal<float> expr, size_t size) {
-		cblas_scopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(float));
 	}
 	void fillExpr(RealPointer<double> pointer, expression::ReadableReal<double> expr, size_t size) {
-		cblas_dcopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(double));
 	}
 	void fillExpr(RealPointer<double> pointer, WritableReal<double> expr, size_t size) {
-		cblas_dcopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(double));
 	}
 	void fillExpr(ComplexPointer<float> pointer, expression::ReadableComplex<float> expr, size_t size) {
-		cblas_ccopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<float>));
 	}
 	void fillExpr(ComplexPointer<float> pointer, WritableComplex<float> expr, size_t size) {
-		cblas_ccopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<float>));
 	}
 	void fillExpr(ComplexPointer<double> pointer, expression::ReadableComplex<double> expr, size_t size) {
-		cblas_zcopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<double>));
 	}
 	void fillExpr(ComplexPointer<double> pointer, WritableComplex<double> expr, size_t size) {
-		cblas_zcopy(CBLAS_INT(size), expr.pointer, 1, pointer, 1);
+		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<double>));
 	}
 
 	// Filling with a constant
@@ -587,7 +572,3 @@ protected:
 };
 
 }}; // namespace
-
-#undef CBLAS_INT
-#undef CBLAS_S
-#undef CBLAS_Z
