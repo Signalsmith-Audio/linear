@@ -828,9 +828,9 @@ struct LinearImplBase {
 		}
 	};
 
-	// Plain values get turned into constants
-	template<typename V>
-	typename std::enable_if<std::is_arithmetic<V>::value, Expression<expression::Constant<V>>>::type wrap(V v) {
+	// Arithmetic values get turned into constants
+	template<typename V, typename=typename std::enable_if<std::is_arithmetic<V>::value, V>::type>
+	Expression<expression::Constant<V>> wrap(V v) {
 		return {v};
 	}
 
