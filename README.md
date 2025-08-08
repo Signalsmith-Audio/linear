@@ -80,6 +80,12 @@ Implementations may use temporary internal storage.  This means it's not thread-
 
 If you're using CMake, include this directory.  It will add a `signalsmith-linear` target which doesn't build anything, but linking to this "library" will add the include path.
 
+By default, it will link to Accelerate on Mac.  If you don't want this, set the CMake option `SIGNALSMITH_USE_ACCELERATE` to `OFF`.
+
+The similar option `SIGNALSMITH_USE_IPP` if `OFF` by default.  When enabled, it will link to IPP and set the `SIGNALSMITH_USE_IPP` preprocessor definition.
+
+`SIGNALSMITH_USE_PFFFT` and `SIGNALSMITH_USE_PFFFT_DOUBLE` don't link to anything, because there are multiple versions.
+
 ### Other
 
 To use Accelerate on Mac, link the framework and define `SIGNALSMITH_USE_ACCELERATE`:
@@ -88,4 +94,6 @@ To use Accelerate on Mac, link the framework and define `SIGNALSMITH_USE_ACCELER
 g++ -framework Accelerate -DSIGNALSMITH_USE_ACCELERATE
 ```
 
-For IPP, link to `IPP::ippcore` and `IPP::ipps`, and define `SIGNALSMITH_USE_IPP`.
+Similarly, define `SIGNALSMITH_USE_IPP` (and link to `IPP::ippcore` and `IPP::ipps`) for IPP. 
+
+Not all PFFFT versions support double-precision, so there are separate `SIGNALSMITH_USE_PFFFT`/`SIGNALSMITH_USE_PFFFT_DOUBLE` flags.

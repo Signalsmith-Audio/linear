@@ -96,6 +96,52 @@ namespace _impl {
 			}
 		}
 	}
+
+	// Fallback in-place power-of-2 FFT with nothing precomputed
+	template<typename Sample>
+	void fallbackInPlaceFFT(size_t size, std::complex<Sample> *v) {
+		if (size <= 1) return;
+		size_t hSize = size/2;
+
+		// Butterfly
+		Sample twiddlePhase = Sample(-2*M_PI/size);
+		std::complex<Sample> twiddle = 1, twiddleStep = std::polar(Sample(1), twiddlePhase);
+		for (size_t i = 0; i < hSize; ++i) {
+			auto a = v[i], b = v[i + hSize];
+			v[i] = a + b;
+			v[i + hSize] = twiddle*(a - b);
+			twiddle *= twiddleStep;
+		}
+
+		// Two smaller FFTs (recursive)
+		fallbackInPlaceFFT(hSize, v);
+		fallbackInPlaceFFT(hSize, v + hSize);
+
+		// De-interleave results in-place, which is a binary rotation for the indices:
+		//	ABC...Z -> BCD...ZA
+		size_t mask = (size - 1);
+		size_t rShift = 0; // right-shift to take A from MSB to LSB
+		while (size_t(1)<<rShift < hSize) ++rShift;
+
+		// Odd indices (of the form 0[???]1) are always the smallest index in their "rotation group"
+		for (size_t startIndex = 1; startIndex < hSize; startIndex += 2) {
+			auto value = v[startIndex];
+			size_t index = startIndex;
+			do {
+				index = ((index<<1)&mask) | (index>>rShift);
+				auto nextValue = v[index];
+				v[index] = value;
+				value = nextValue;
+			} while (index != startIndex);
+		}
+	}
+	template<typename Sample>
+	void fallbackInPlaceIFFT(size_t size, std::complex<Sample> *v) {
+		// conjugate, FFT, conjugate again
+		for (size_t i = 0; i < size; ++i) v[i].imag(-v[i].imag());
+		fallbackInPlaceFFT(size, v);
+		for (size_t i = 0; i < size; ++i) v[i].imag(-v[i].imag());
+	}
 }
 
 /// Fairly simple and very portable power-of-2 FFT
@@ -1356,8 +1402,15 @@ using ModifiedRealFFT = RealFFT<Sample, splitComputation, true>;
 
 }} // namespace
 
-// Platform-specific
-#if defined(SIGNALSMITH_USE_ACCELERATE)
+// Override templates with faster implementations
+#if defined(SIGNALSMITH_USE_PFFFT) || defined(SIGNALSMITH_USE_PFFFT_DOUBLE)
+#	if defined(SIGNALSMITH_USE_PFFFT)
+#		include "./platform/fft-pffft.h"
+#	endif
+//#	if defined(SIGNALSMITH_USE_PFFFT_DOUBLE)
+//#		include "./platform/fft-pffft-double.h"
+//#	endif
+#elif defined(SIGNALSMITH_USE_ACCELERATE)
 #	include "./platform/fft-accelerate.h"
 #elif defined(SIGNALSMITH_USE_IPP)
 #	include "./platform/fft-ipp.h"

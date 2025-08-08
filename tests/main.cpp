@@ -22,10 +22,10 @@ int main(int argc, char *argv[]) {
 #else
 	std::cout << u8"❌ SIGNALSMITH_USE_IPP\n";
 #endif
-#ifdef SIGNALSMITH_USE_CBLAS
-	std::cout << u8"✅ SIGNALSMITH_USE_CBLAS\n";
+#ifdef SIGNALSMITH_USE_PFFFT
+	std::cout << u8"✅ SIGNALSMITH_USE_PFFFT\n";
 #else
-	std::cout << u8"❌ SIGNALSMITH_USE_CBLAS\n";
+	std::cout << u8"❌ SIGNALSMITH_USE_PFFFT\n";
 #endif
 #ifdef __FAST_MATH__
 	std::cout << u8"✅ __FAST_MATH__\n";

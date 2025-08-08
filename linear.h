@@ -1060,12 +1060,6 @@ private:
 #	include "./platform/linear-accelerate.h"
 #elif 0//defined(SIGNALSMITH_USE_IPP)
 #	include "./platform/linear-ipp.h"
-#elif 0//defined(SIGNALSMITH_USE_CBLAS)
-#	include "./platform/linear-cblas.h"
 #endif
-
-#undef SIGNALSMITH_AUDIO_LINEAR_CHUNK_SIZE
-#undef SIGNALSMITH_AUDIO_LINEAR_CHUNK_FOREACH_STEP
-#undef SIGNALSMITH_AUDIO_LINEAR_CHUNK_FOREACH
 
 #endif // include guard
