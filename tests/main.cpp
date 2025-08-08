@@ -27,6 +27,11 @@ int main(int argc, char *argv[]) {
 #else
 	std::cout << u8"❌ SIGNALSMITH_USE_PFFFT\n";
 #endif
+#ifdef SIGNALSMITH_USE_PFFFT_DOUBLE
+	std::cout << u8"✅ SIGNALSMITH_USE_PFFFT_DOUBLE\n";
+#else
+	std::cout << u8"❌ SIGNALSMITH_USE_PFFFT_DOUBLE\n";
+#endif
 #ifdef __FAST_MATH__
 	std::cout << u8"✅ __FAST_MATH__\n";
 #else

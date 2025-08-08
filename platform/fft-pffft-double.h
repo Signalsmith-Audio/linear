@@ -1,10 +1,10 @@
-#ifndef SIGNALSMITH_LINEAR_PLATFORM_FFT_PFFFT_H
-#define SIGNALSMITH_LINEAR_PLATFORM_FFT_PFFFT_H
+#ifndef SIGNALSMITH_LINEAR_PLATFORM_FFT_PFFFTDOUBLE_H
+#define SIGNALSMITH_LINEAR_PLATFORM_FFT_PFFFTDOUBLE_H
 
-#if defined(__has_include) && !__has_include("pffft/pffft.h")
-#	include "pffft.h"
+#if defined(__has_include) && !__has_include("pffft/pffft_double.h")
+#	include "pffft_double.h"
 #else
-#	include "pffft/pffft.h"
+#	include "pffft/pffft_double.h"
 #endif
 
 #include <memory>
@@ -15,10 +15,10 @@
 namespace signalsmith { namespace linear {
 
 template<>
-struct Pow2FFT<float> {
+struct Pow2FFT<double> {
 	static constexpr bool prefersSplit = false;
 
-	using Complex = std::complex<float>;
+	using Complex = std::complex<double>;
 
 	Pow2FFT(size_t size=0) {
 		resize(size);
@@ -30,24 +30,24 @@ struct Pow2FFT<float> {
 	void resize(size_t size) {
 		_size = size;
 		fallback = nullptr;
-		if (hasSetup) pffft_destroy_setup(fftSetup);
-		if (work) pffft_aligned_free(work);
-		if (tmpAligned) pffft_aligned_free(tmpAligned);
+		if (hasSetup) pffftd_destroy_setup(fftSetup);
+		if (work) pffftd_aligned_free(work);
+		if (tmpAligned) pffftd_aligned_free(tmpAligned);
 
 		// We use this for split-real, even if there's no PFFFT setup
-		tmpAligned = (float *)pffft_aligned_malloc(sizeof(float)*size*2);
+		tmpAligned = (double *)pffftd_aligned_malloc(sizeof(double)*size*2);
 
 		if (size < 32) {
 			// PFFFT doesn't support smaller sizes
 			hasSetup = false;
-			fallback = std::unique_ptr<SimpleFFT<float>>{
-				new SimpleFFT<float>(size)
+			fallback = std::unique_ptr<SimpleFFT<double>>{
+				new SimpleFFT<double>(size)
 			};
 			return;
 		}
 		
-		work = (float *)pffft_aligned_malloc(sizeof(float)*size*2);
-		fftSetup = pffft_new_setup(int(size), PFFFT_COMPLEX);
+		work = (double *)pffftd_aligned_malloc(sizeof(double)*size*2);
+		fftSetup = pffftd_new_setup(int(size), PFFFT_COMPLEX);
 		hasSetup = fftSetup;
 	}
 
@@ -55,7 +55,7 @@ struct Pow2FFT<float> {
 		if (fallback) return fallback->fft(input, output);
 		fftInner(input, output, PFFFT_FORWARD);
 	}
-	void fft(const float *inR, const float *inI, float *outR, float *outI) {
+	void fft(const double *inR, const double *inI, double *outR, double *outI) {
 		if (fallback) return fallback->fft(inR, inI, outR, outI);
 		fftInner(inR, inI, outR, outI, PFFFT_FORWARD);
 	}
@@ -64,28 +64,28 @@ struct Pow2FFT<float> {
 		if (fallback) return fallback->ifft(input, output);
 		fftInner(input, output, PFFFT_BACKWARD);
 	}
-	void ifft(const float *inR, const float *inI, float *outR, float *outI) {
+	void ifft(const double *inR, const double *inI, double *outR, double *outI) {
 		if (fallback) return fallback->ifft(inR, inI, outR, outI);
 		fftInner(inR, inI, outR, outI, PFFFT_BACKWARD);
 	}
 
 private:
 	void fftInner(const Complex *input, Complex *output, pffft_direction_t direction) {
-		// 16-byte alignment
-		if (size_t(input)&0x0F) {
+		// 32-byte alignment
+		if (size_t(input)&0x1F) {
 			// `tmpAligned` is always aligned, so copy into that
 			std::memcpy(tmpAligned, input, sizeof(Complex)*_size);
 			input = (const Complex *)tmpAligned;
 		}
-		if (size_t(output)&0x0F) {
+		if (size_t(output)&0x1F) {
 			// Output to `tmpAligned` - might be in-place if input is unaligned, but that's fine
-			pffft_transform_ordered(fftSetup, (const float *)input, tmpAligned, work, direction);
+			pffftd_transform_ordered(fftSetup, (const double *)input, tmpAligned, work, direction);
 			std::memcpy(output, tmpAligned, sizeof(Complex)*_size);
 		} else {
-			pffft_transform_ordered(fftSetup, (const float *)input, (float *)output, work, direction);
+			pffftd_transform_ordered(fftSetup, (const double *)input, (double *)output, work, direction);
 		}
 	}
-	void fftInner(const float *inR, const float *inI, float *outR, float *outI, pffft_direction_t direction) {
+	void fftInner(const double *inR, const double *inI, double *outR, double *outI, pffft_direction_t direction) {
 		for (size_t i = 0; i < _size; ++i) {
 			tmpAligned[2*i] = inR[i];
 			tmpAligned[2*i + 1] = inI[i];
@@ -101,16 +101,16 @@ private:
 
 	size_t _size = 0;
 	bool hasSetup = false;
-	PFFFT_Setup *fftSetup = nullptr;
-	std::unique_ptr<SimpleFFT<float>> fallback;
-	float *work = nullptr, *tmpAligned = nullptr;
+	PFFFTD_Setup *fftSetup = nullptr;
+	std::unique_ptr<SimpleFFT<double>> fallback;
+	double *work = nullptr, *tmpAligned = nullptr;
 };
 
 template<>
-struct Pow2RealFFT<float> {
+struct Pow2RealFFT<double> {
 	static constexpr bool prefersSplit = false;
 
-	using Complex = std::complex<float>;
+	using Complex = std::complex<double>;
 
 	Pow2RealFFT(size_t size=0) {
 		resize(size);
@@ -122,33 +122,33 @@ struct Pow2RealFFT<float> {
 	void resize(size_t size) {
 		_size = size;
 		fallback = nullptr;
-		if (hasSetup) pffft_destroy_setup(fftSetup);
-		if (work) pffft_aligned_free(work);
-		if (tmpAligned) pffft_aligned_free(tmpAligned);
+		if (hasSetup) pffftd_destroy_setup(fftSetup);
+		if (work) pffftd_aligned_free(work);
+		if (tmpAligned) pffftd_aligned_free(tmpAligned);
 
 		// We use this for split-real, even if there's no PFFFT setup
-		tmpAligned = (float *)pffft_aligned_malloc(sizeof(float)*size*2);
+		tmpAligned = (double *)pffftd_aligned_malloc(sizeof(double)*size*2);
 
 		// TODO: just go for it, and check for success before allocating `work`
 		if (size < 32) {
 			// PFFFT doesn't support smaller sizes
 			hasSetup = false;
-			fallback = std::unique_ptr<SimpleRealFFT<float>>{
-				new SimpleRealFFT<float>(size)
+			fallback = std::unique_ptr<SimpleRealFFT<double>>{
+				new SimpleRealFFT<double>(size)
 			};
 			return;
 		}
 		
-		work = (float *)pffft_aligned_malloc(sizeof(float)*size);
-		fftSetup = pffft_new_setup(int(size), PFFFT_REAL);
+		work = (double *)pffftd_aligned_malloc(sizeof(double)*size);
+		fftSetup = pffftd_new_setup(int(size), PFFFT_REAL);
 		hasSetup = fftSetup;
 	}
 
-	void fft(const float *input, Complex *output) {
+	void fft(const double *input, Complex *output) {
 		if (fallback) return fallback->fft(input, output);
-		fftInner(input, (float *)output, PFFFT_FORWARD);
+		fftInner(input, (double *)output, PFFFT_FORWARD);
 	}
-	void fft(const float *inR, float *outR, float *outI) {
+	void fft(const double *inR, double *outR, double *outI) {
 		if (fallback) return fallback->fft(inR, outR, outI);
 		fftInner(inR, tmpAligned, PFFFT_FORWARD);
 		for (size_t i = 0; i < _size/2; ++i) {
@@ -157,11 +157,11 @@ struct Pow2RealFFT<float> {
 		}
 	}
 
-	void ifft(const Complex *input, float *output) {
+	void ifft(const Complex *input, double *output) {
 		if (fallback) return fallback->ifft(input, output);
-		fftInner((const float *)input, output, PFFFT_BACKWARD);
+		fftInner((const double *)input, output, PFFFT_BACKWARD);
 	}
-	void ifft(const float *inR, const float *inI, float *outR) {
+	void ifft(const double *inR, const double *inI, double *outR) {
 		if (fallback) return fallback->ifft(inR, inI, outR);
 		for (size_t i = 0; i < _size/2; ++i) {
 			tmpAligned[2*i] = inR[i];
@@ -171,27 +171,27 @@ struct Pow2RealFFT<float> {
 	}
 
 private:
-	void fftInner(const float *input, float *output, pffft_direction_t direction) {
-		// 16-byte alignment
-		if (size_t(input)&0x0F) {
+	void fftInner(const double *input, double *output, pffft_direction_t direction) {
+		// 32-byte alignment
+		if (size_t(input)&0x1F) {
 			// `tmpAligned` is always aligned, so copy into that
-			std::memcpy(tmpAligned, input, sizeof(float)*_size);
+			std::memcpy(tmpAligned, input, sizeof(double)*_size);
 			input = tmpAligned;
 		}
-		if (size_t(output)&0x0F) {
+		if (size_t(output)&0x1F) {
 			// Output to `tmpAligned` - might be in-place if input is unaligned, but that's fine
-			pffft_transform_ordered(fftSetup, input, tmpAligned, work, direction);
-			std::memcpy(output, tmpAligned, sizeof(float)*_size);
+			pffftd_transform_ordered(fftSetup, input, tmpAligned, work, direction);
+			std::memcpy(output, tmpAligned, sizeof(double)*_size);
 		} else {
-			pffft_transform_ordered(fftSetup, input, output, work, direction);
+			pffftd_transform_ordered(fftSetup, input, output, work, direction);
 		}
 	}
 
 	size_t _size = 0;
 	bool hasSetup = false;
-	PFFFT_Setup *fftSetup = nullptr;
-	std::unique_ptr<SimpleRealFFT<float>> fallback;
-	float *work = nullptr, *tmpAligned = nullptr;
+	PFFFTD_Setup *fftSetup = nullptr;
+	std::unique_ptr<SimpleRealFFT<double>> fallback;
+	double *work = nullptr, *tmpAligned = nullptr;
 };
 
 }} // namespace
