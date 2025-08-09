@@ -37,7 +37,7 @@ struct Pow2FFT<float> {
 		// We use this for split-real, even if there's no PFFFT setup
 		tmpAligned = (float *)pffft_aligned_malloc(sizeof(float)*size*2);
 
-		if (size < 32) {
+		if (size < 16) {
 			// PFFFT doesn't support smaller sizes
 			hasSetup = false;
 			fallback = std::unique_ptr<SimpleFFT<float>>{
@@ -108,6 +108,9 @@ private:
 
 template<>
 struct Pow2RealFFT<float> {
+private:
+	using FallbackFFT = SimpleRealFFT<float>; // this wraps the complex one
+public:
 	static constexpr bool prefersSplit = false;
 
 	using Complex = std::complex<float>;
@@ -133,8 +136,8 @@ struct Pow2RealFFT<float> {
 		if (size < 32) {
 			// PFFFT doesn't support smaller sizes
 			hasSetup = false;
-			fallback = std::unique_ptr<SimpleRealFFT<float>>{
-				new SimpleRealFFT<float>(size)
+			fallback = std::unique_ptr<FallbackFFT>{
+				new FallbackFFT(size)
 			};
 			return;
 		}
@@ -190,7 +193,7 @@ private:
 	size_t _size = 0;
 	bool hasSetup = false;
 	PFFFT_Setup *fftSetup = nullptr;
-	std::unique_ptr<SimpleRealFFT<float>> fallback;
+	std::unique_ptr<FallbackFFT> fallback;
 	float *work = nullptr, *tmpAligned = nullptr;
 };
 

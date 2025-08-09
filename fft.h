@@ -16,6 +16,7 @@
 namespace signalsmith { namespace linear {
 
 namespace _impl {
+	// Helpers for complex arithmetic, ignoring the NaN/Inf edge-cases you get without `-ffast-math`
 	template<class V>
 	void complexMul(std::complex<V> *a, const std::complex<V> *b, const std::complex<V> *c, size_t size) {
 		for (size_t i = 0; i < size; ++i) {
@@ -282,79 +283,6 @@ private:
 	}
 };
 
-// Wraps a complex FFT into a real one
-template<typename Sample, class ComplexFFT=SimpleFFT<Sample>>
-struct SimpleRealFFT {
-	using Complex = std::complex<Sample>;
-
-	SimpleRealFFT(size_t size=0) {
-		resize(size);
-	}
-	
-	void resize(size_t size) {
-		complexFft.resize(size);
-		tmpTime.resize(size);
-		tmpFreq.resize(size);
-	}
-	
-	void fft(const Sample *time, Complex *freq) {
-		for (size_t i = 0; i < tmpTime.size(); ++i) {
-			tmpTime[i] = time[i];
-		}
-		complexFft.fft(tmpTime.data(), tmpFreq.data());
-		for (size_t i = 0; i < tmpFreq.size()/2; ++i) {
-			freq[i] = tmpFreq[i];
-		}
-		freq[0] = {
-			tmpFreq[0].real(),
-			tmpFreq[tmpFreq.size()/2].real()
-		};
-	}
-	void fft(const Sample *inR, Sample *outR, Sample *outI) {
-		Sample *tmpFreqR = (Sample *)tmpFreq.data(), *tmpFreqI = tmpFreqR + tmpFreq.size();
-		for (size_t i = 0; i < tmpTime.size()/2; ++i) {
-			tmpTime[i] = 0;
-		}
-		complexFft.fft(inR, (const Sample *)tmpTime.data(), tmpFreqR, tmpFreqI);
-		for (size_t i = 0; i < tmpTime.size()/2; ++i) {
-			outR[i] = tmpFreqR[i];
-			outI[i] = tmpFreqI[i];
-		}
-		outI[0] = tmpFreqR[tmpFreq.size()/2];
-	}
-
-	void ifft(const Complex *freq, Sample *time) {
-		tmpFreq[0] = freq[0].real();
-		tmpFreq[tmpFreq.size()/2] = freq[0].imag();
-		for (size_t i = 1; i < tmpFreq.size()/2; ++i) {
-			tmpFreq[i] = freq[i];
-			tmpFreq[tmpFreq.size() - i] = std::conj(freq[i]);
-		}
-		complexFft.ifft(tmpFreq.data(), tmpTime.data());
-		for (size_t i = 0; i < tmpTime.size(); ++i) {
-			time[i] = tmpTime[i].real();
-		}
-	}
-	void ifft(const Sample *inR, const Sample *inI, Sample *outR) {
-		Sample *tmpFreqR = (Sample *)tmpFreq.data(), *tmpFreqI = tmpFreqR + tmpFreq.size();
-		tmpFreqR[0] = inR[0];
-		tmpFreqR[tmpFreq.size()/2] = inI[0];
-		tmpFreqI[0] = 0;
-		tmpFreqI[tmpFreq.size()/2] = 0;
-		for (size_t i = 1; i < tmpFreq.size()/2; ++i) {
-			tmpFreqR[i] = inR[i];
-			tmpFreqI[i] = inI[i];
-			tmpFreqR[tmpFreq.size() - i] = inR[i];
-			tmpFreqI[tmpFreq.size() - i] = -inI[i];
-		}
-		complexFft.ifft(tmpFreqR, tmpFreqI, outR, (Sample *)tmpTime.data());
-	}
-
-private:
-	ComplexFFT complexFft;
-	std::vector<Complex> tmpTime, tmpFreq;
-};
-
 /// A power-of-2 only FFT, specialised with platform-specific fast implementations where available
 template<typename Sample>
 struct Pow2FFT {
@@ -387,14 +315,6 @@ struct Pow2FFT {
 private:
 	std::vector<Complex> tmp;
 	SimpleFFT<Sample> simpleFFT;
-};
-
-/// A power-of-2 only Real FFT, specialised with platform-specific fast implementations where available
-template<typename Sample>
-struct Pow2RealFFT : public SimpleRealFFT<Sample, Pow2FFT<Sample>> {
-	static constexpr bool prefersSplit = Pow2FFT<Sample>::prefersSplit;
-	
-	using SimpleRealFFT<Sample, Pow2FFT<Sample>>::SimpleRealFFT;
 };
 
 /// An FFT which can handle multiples of 3 and 5, and can be computed in chunks
@@ -942,6 +862,87 @@ private:
 template<typename Sample, bool splitComputation=false>
 using FFT = SplitFFT<Sample, splitComputation>;
 
+// Wraps a complex FFT into a real one
+template<typename Sample, class ComplexFFT=Pow2FFT<Sample>>
+struct SimpleRealFFT {
+	using Complex = std::complex<Sample>;
+
+	SimpleRealFFT(size_t size=0) {
+		resize(size);
+	}
+	
+	void resize(size_t size) {
+		complexFft.resize(size);
+		tmpTime.resize(size);
+		tmpFreq.resize(size);
+	}
+	
+	void fft(const Sample *time, Complex *freq) {
+		for (size_t i = 0; i < tmpTime.size(); ++i) {
+			tmpTime[i] = time[i];
+		}
+		complexFft.fft(tmpTime.data(), tmpFreq.data());
+		for (size_t i = 0; i < tmpFreq.size()/2; ++i) {
+			freq[i] = tmpFreq[i];
+		}
+		freq[0] = {
+			tmpFreq[0].real(),
+			tmpFreq[tmpFreq.size()/2].real()
+		};
+	}
+	void fft(const Sample *inR, Sample *outR, Sample *outI) {
+		Sample *tmpFreqR = (Sample *)tmpFreq.data(), *tmpFreqI = tmpFreqR + tmpFreq.size();
+		for (size_t i = 0; i < tmpTime.size()/2; ++i) {
+			tmpTime[i] = 0;
+		}
+		complexFft.fft(inR, (const Sample *)tmpTime.data(), tmpFreqR, tmpFreqI);
+		for (size_t i = 0; i < tmpTime.size()/2; ++i) {
+			outR[i] = tmpFreqR[i];
+			outI[i] = tmpFreqI[i];
+		}
+		outI[0] = tmpFreqR[tmpFreq.size()/2];
+	}
+
+	void ifft(const Complex *freq, Sample *time) {
+		tmpFreq[0] = freq[0].real();
+		tmpFreq[tmpFreq.size()/2] = freq[0].imag();
+		for (size_t i = 1; i < tmpFreq.size()/2; ++i) {
+			tmpFreq[i] = freq[i];
+			tmpFreq[tmpFreq.size() - i] = std::conj(freq[i]);
+		}
+		complexFft.ifft(tmpFreq.data(), tmpTime.data());
+		for (size_t i = 0; i < tmpTime.size(); ++i) {
+			time[i] = tmpTime[i].real();
+		}
+	}
+	void ifft(const Sample *inR, const Sample *inI, Sample *outR) {
+		Sample *tmpFreqR = (Sample *)tmpFreq.data(), *tmpFreqI = tmpFreqR + tmpFreq.size();
+		tmpFreqR[0] = inR[0];
+		tmpFreqR[tmpFreq.size()/2] = inI[0];
+		tmpFreqI[0] = 0;
+		tmpFreqI[tmpFreq.size()/2] = 0;
+		for (size_t i = 1; i < tmpFreq.size()/2; ++i) {
+			tmpFreqR[i] = inR[i];
+			tmpFreqI[i] = inI[i];
+			tmpFreqR[tmpFreq.size() - i] = inR[i];
+			tmpFreqI[tmpFreq.size() - i] = -inI[i];
+		}
+		complexFft.ifft(tmpFreqR, tmpFreqI, outR, (Sample *)tmpTime.data());
+	}
+
+private:
+	ComplexFFT complexFft;
+	std::vector<Complex> tmpTime, tmpFreq;
+};
+
+/// A default power-of-2 FFT, specialised with platform-specific fast implementations where available
+template<typename Sample>
+struct Pow2RealFFT : public SimpleRealFFT<Sample> {
+	static constexpr bool prefersSplit = SimpleRealFFT<Sample>::prefersSplit;
+	
+	using SimpleRealFFT<Sample>::SimpleRealFFT;
+};
+
 /// A Real FFT which can handle multiples of 3 and 5, and can be computed in chunks
 template<typename Sample, bool splitComputation=false, bool halfBinShift=false>
 struct RealFFT {
@@ -1048,6 +1049,7 @@ struct RealFFT {
 				}
 			}
 		} else {
+			bool canUseTime = !halfBinShift && !(size_t(time)%alignof(Complex));
 			if (step-- == 0) {
 				size_t hSize = complexFft.size();
 				if (halfBinShift) {
@@ -1059,13 +1061,11 @@ struct RealFFT {
 							ti*twist.real() + tr*twist.imag()
 						};
 					}
-				} else {
-					for (size_t i = 0; i < hSize; ++i) {
-						tmpTime[i] = {time[2*i], time[2*i + 1]};
-					}
+				} else if (!canUseTime) {
+					std::memcpy(tmpTime.data(), time, sizeof(Complex)*hSize);
 				}
 			} else if (step < complexFft.steps()) {
-				complexFft.fft(step, tmpTime.data(), tmpFreq.data());
+				complexFft.fft(step, canUseTime ? (const Complex *)time : tmpTime.data(), tmpFreq.data());
 			} else {
 				if (!halfBinShift) {
 					Complex bin0 = tmpFreq[0];
@@ -1225,6 +1225,7 @@ struct RealFFT {
 				}
 			}
 		} else {
+			bool canUseTime = !halfBinShift && !(size_t(time)%alignof(Complex));
 			bool splitFirst = splitComputation && (step-- == 0);
 			if (splitFirst || step-- == 0) {
 				Complex bin0 = freq[0];
@@ -1260,7 +1261,7 @@ struct RealFFT {
 				}
 			} else if (step < complexFft.steps()) {
 				// Can't just use time as (Complex *), since it might not be aligned properly
-				complexFft.ifft(step, tmpFreq.data(), tmpTime.data());
+				complexFft.ifft(step, tmpFreq.data(), canUseTime ? (Complex *)time : tmpTime.data());
 			} else {
 				size_t hSize = complexFft.size();
 				if (halfBinShift) {
@@ -1270,11 +1271,8 @@ struct RealFFT {
 						time[2*i] = 	t.real()*twist.real() + t.imag()*twist.imag();
 						time[2*i + 1] = t.imag()*twist.real() - t.real()*twist.imag();
 					}
-				} else {
-					for (size_t i = 0; i < hSize; ++i) {
-						time[2*i] = tmpTime[i].real();
-						time[2*i + 1] = tmpTime[i].imag();
-					}
+				} else if (!canUseTime) {
+					std::memcpy(time, tmpTime.data(), sizeof(Complex)*hSize);
 				}
 			}
 		}
@@ -1343,12 +1341,12 @@ struct RealFFT {
 		}
 	}
 private:
-	static constexpr bool complexPrefersSplit = SplitFFT<Sample, splitComputation>::prefersSplit;
-	std::vector<Complex> tmpFreq, tmpTime;
-	std::vector<Complex> twiddles, halfBinTwists;
-
 	using ComplexFFT = SplitFFT<Sample, splitComputation>;
 	ComplexFFT complexFft;
+
+	static constexpr bool complexPrefersSplit = ComplexFFT::prefersSplit;
+	std::vector<Complex> tmpFreq, tmpTime;
+	std::vector<Complex> twiddles, halfBinTwists;
 };
 
 template<typename Sample, bool splitComputation=false>
@@ -1356,7 +1354,7 @@ using ModifiedRealFFT = RealFFT<Sample, splitComputation, true>;
 
 }} // namespace
 
-// Override templates with faster implementations
+// Override `Pow2FFT` / `Pow2RealFFT` templates with faster implementations
 #if defined(SIGNALSMITH_USE_PFFFT) || defined(SIGNALSMITH_USE_PFFFT_DOUBLE)
 #	if defined(SIGNALSMITH_USE_PFFFT)
 #		include "./platform/fft-pffft.h"
