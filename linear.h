@@ -473,6 +473,16 @@ struct WritableExpression : public Expression<BaseExpr> {
 		this->linear.fill(this->pointer, expr, this->size);
 		return *this;
 	}
+#define SIGNALSMITH_AUDIO_ASSIGNMENT_OP(assignOp, binaryOp) \
+	template<class E>\
+	WritableExpression & operator assignOp(const E &expr) { \
+		return *this = (*this) binaryOp expr; \
+	}
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(+=, +);
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(-=, -);
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(*=, *);
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(/=, /);
+#undef SIGNALSMITH_AUDIO_ASSIGNMENT_OP
 
 	// Use the pointer's `operator[]` instead of the expression
 	auto operator[](std::ptrdiff_t i) -> decltype(this->pointer[i]) {
