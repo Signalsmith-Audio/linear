@@ -26,13 +26,23 @@ struct Pow2FFT<float> {
 	~Pow2FFT() {
 		resize(0); // frees everything
 	}
+	// Allow move, but not copy
+	Pow2FFT(const Pow2FFT &other) = delete;
+	Pow2FFT(Pow2FFT &&other) : _size(other._size), hasSetup(other.hasSetup), fftSetup(other.fftSetup), fallback(std::move(other.fallback)), work(other.work), tmpAligned(other.tmpAligned) {
+		// Avoid double-free
+		other.hasSetup = false;
+		other.work = nullptr;
+		other.tmpAligned = nullptr;
+	}
 
 	void resize(size_t size) {
 		_size = size;
 		fallback = nullptr;
 		if (hasSetup) pffft_destroy_setup(fftSetup);
 		if (work) pffft_aligned_free(work);
+		work = nullptr;
 		if (tmpAligned) pffft_aligned_free(tmpAligned);
+		tmpAligned = nullptr;
 
 		// We use this for split-real, even if there's no PFFFT setup
 		tmpAligned = (float *)pffft_aligned_malloc(sizeof(float)*size*2);
@@ -121,13 +131,23 @@ public:
 	~Pow2RealFFT() {
 		resize(0);
 	}
+	// Allow move, but not copy
+	Pow2RealFFT(const Pow2RealFFT &other) = delete;
+	Pow2RealFFT(Pow2RealFFT &&other) : _size(other._size), hasSetup(other.hasSetup), fftSetup(other.fftSetup), fallback(std::move(other.fallback)), work(other.work), tmpAligned(other.tmpAligned) {
+		// Avoid double-free
+		other.hasSetup = false;
+		other.work = nullptr;
+		other.tmpAligned = nullptr;
+	}
 
 	void resize(size_t size) {
 		_size = size;
 		fallback = nullptr;
 		if (hasSetup) pffft_destroy_setup(fftSetup);
 		if (work) pffft_aligned_free(work);
+		work = nullptr;
 		if (tmpAligned) pffft_aligned_free(tmpAligned);
+		tmpAligned = nullptr;
 
 		// We use this for split-real, even if there's no PFFFT setup
 		tmpAligned = (float *)pffft_aligned_malloc(sizeof(float)*size*2);

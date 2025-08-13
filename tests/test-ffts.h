@@ -1193,7 +1193,7 @@ void testRealFft(int size) {
 
 	signalsmith::linear::FFT<Sample> complexFft(size);
 	signalsmith::linear::RealFFT<Sample, true, modified> realFft(size);
-	signalsmith::linear::Pow2RealFFT<Sample> pow2Fft(size);
+	signalsmith::linear::Pow2RealFFT<Sample> pow2Fft(isPow2 ? size : 0);
 	
 	RunData<Sample> data(size);
 	auto *realTime = data.real(0, "input");

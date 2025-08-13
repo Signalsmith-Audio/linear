@@ -80,6 +80,12 @@ struct Pow2FFT<float> {
 	~Pow2FFT() {
 		if (hasSetup) vDSP_destroy_fftsetup(fftSetup);
 	}
+	// Allow move, but not copy
+	Pow2FFT(const Pow2FFT &other) = delete;
+	Pow2FFT(Pow2FFT &&other) : _size(other._size), hasSetup(other.hasSetup), fftSetup(other.fftSetup), log2(other.log2), splitReal(std::move(other.splitReal)), splitImag(std::move(other.splitImag)) {
+		// Avoid double-free
+		other.hasSetup = false;
+	}
 
 	void resize(size_t size) {
 		_size = size;
@@ -139,6 +145,12 @@ struct Pow2RealFFT<float> {
 	}
 	~Pow2RealFFT() {
 		if (hasSetup) vDSP_destroy_fftsetup(fftSetup);
+	}
+	// Allow move, but not copy
+	Pow2RealFFT(const Pow2RealFFT &other) = delete;
+	Pow2RealFFT(Pow2RealFFT &&other) : _size(other._size), hasSetup(other.hasSetup), fftSetup(other.fftSetup), log2(other.log2), splitReal(std::move(other.splitReal)), splitImag(std::move(other.splitImag)) {
+		// Avoid double-free
+		other.hasSetup = false;
 	}
 
 	void resize(size_t size) {

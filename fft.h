@@ -292,6 +292,9 @@ struct Pow2FFT {
 	Pow2FFT(size_t size=0) {
 		resize(size);
 	}
+	// Allow move, but not copy
+	Pow2FFT(const Pow2FFT &other) = delete;
+	Pow2FFT(Pow2FFT &&other) : tmp(std::move(other.tmp)), simpleFFT(std::move(other.simpleFFT)) {}
 	
 	void resize(size_t size) {
 		simpleFFT.resize(size);
@@ -369,7 +372,6 @@ struct SplitFFT {
 			outerTwiddlesR[i] = outerTwiddles[i].real();
 			outerTwiddlesI[i] = outerTwiddles[i].imag();
 		}
-
 
 		StepType interleaveStep = StepType::interleaveOrderN;
 		StepType finalStep = StepType::finalOrderN;
@@ -866,6 +868,8 @@ using FFT = SplitFFT<Sample, splitComputation>;
 template<typename Sample, class ComplexFFT=Pow2FFT<Sample>>
 struct SimpleRealFFT {
 	using Complex = std::complex<Sample>;
+	
+	static constexpr bool prefersSplit = ComplexFFT::prefersSplit;
 
 	SimpleRealFFT(size_t size=0) {
 		resize(size);
@@ -941,6 +945,11 @@ struct Pow2RealFFT : public SimpleRealFFT<Sample> {
 	static constexpr bool prefersSplit = SimpleRealFFT<Sample>::prefersSplit;
 	
 	using SimpleRealFFT<Sample>::SimpleRealFFT;
+
+	// Prevent copying, since it might be a problem for specialisations
+	Pow2RealFFT(const Pow2RealFFT &other) = delete;
+	// Pass move-constructor through, just to be explicit about it
+	Pow2RealFFT(Pow2RealFFT &&other) : SimpleRealFFT<Sample>(std::move(other)) {}
 };
 
 /// A Real FFT which can handle multiples of 3 and 5, and can be computed in chunks
