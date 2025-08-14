@@ -280,32 +280,32 @@ struct DynamicSTFT {
 	void setInterval(size_t defaultInterval, WindowShape windowShape=WindowShape::ignore, Sample asymmetry=0) {
 		_defaultInterval = defaultInterval;
 		if (windowShape == WindowShape::ignore) return;
-		
 
 		if (windowShape == acg) {
 			auto window = ApproximateConfinedGaussian::withBandwidth(double(_blockSamples)/defaultInterval);
-			window.fill(_synthesisWindow, _blockSamples, asymmetry);
+			window.fill(_synthesisWindow, _blockSamples, asymmetry, false);
 		} else if (windowShape == kaiser) {
 			auto window = Kaiser::withBandwidth(double(_blockSamples)/defaultInterval, true);
-			window.fill(_synthesisWindow,  _blockSamples, asymmetry);
+			window.fill(_synthesisWindow,  _blockSamples, asymmetry, true);
 		}
 
+		_analysisOffset = _synthesisOffset = _blockSamples/2;
 		if (_analysisChannels == 0) {
 			for (auto &v : _analysisWindow) v = 1;
-			_synthesisOffset = _blockSamples*(0.5 - asymmetry/2);
-			_analysisOffset = _blockSamples/2;
 		} else if (asymmetry == 0) {
-			_analysisOffset = _synthesisOffset = _blockSamples/2;
 			forcePerfectReconstruction(_synthesisWindow, _blockSamples, _defaultInterval);
 			for (size_t i = 0; i < _blockSamples; ++i) {
 				_analysisWindow[i] = _synthesisWindow[i];
 			}
 		} else {
-			_synthesisOffset = _blockSamples*(0.5 - asymmetry/2);
 			for (size_t i = 0; i < _blockSamples; ++i) {
 				_analysisWindow[i] = _synthesisWindow[_blockSamples - 1 - i];
 			}
-			_analysisOffset = _blockSamples*(0.5 + asymmetry/2);
+		}
+		// Set offsets to peak's index
+		for (size_t i = 0; i < _blockSamples; ++i) {
+			if (_analysisWindow[i] > _analysisWindow[_analysisOffset]) _analysisOffset = i;
+			if (_synthesisWindow[i] > _synthesisWindow[_synthesisOffset]) _synthesisOffset = i;
 		}
 	}
 	
@@ -568,10 +568,11 @@ private:
 		}
 		
 		template<typename Data>
-		void fill(Data &&data, size_t size, double warp=0) const {
+		void fill(Data &&data, size_t size, double warp, bool isForSynthesis) const {
 			double invSize = 1.0/size;
+			size_t offsetI = (size&1) ? 1 : (isForSynthesis ? 0 : 2);
 			for (size_t i = 0; i < size; ++i) {
-				double r = (2*i + 1)*invSize - 1;
+				double r = (2*i + offsetI)*invSize - 1;
 				r = (r + warp)/(1 + r*warp);
 				double arg = std::sqrt(1 - r*r);
 				data[i] = bessel0(beta*arg)*invB0;
@@ -597,12 +598,13 @@ private:
 	
 		/// Fills an arbitrary container
 		template<typename Data>
-		void fill(Data &&data, size_t size, double warp=0) const {
+		void fill(Data &&data, size_t size, double warp, bool isForSynthesis) const {
 			double invSize = 1.0/size;
 			double offsetScale = gaussian(1)/(gaussian(3) + gaussian(-1));
 			double norm = 1/(gaussian(0) - 2*offsetScale*(gaussian(2)));
+			size_t offsetI = (size&1) ? 1 : (isForSynthesis ? 0 : 2);
 			for (size_t i = 0; i < size; ++i) {
-				double r = (2*i + 1)*invSize - 1;
+				double r = (2*i + offsetI)*invSize - 1;
 				r = (r + warp)/(1 + r*warp);
 				data[i] = norm*(gaussian(r) - offsetScale*(gaussian(r - 2) + gaussian(r + 2)));
 			}

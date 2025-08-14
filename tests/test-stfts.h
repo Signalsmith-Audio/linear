@@ -244,13 +244,13 @@ void testStft(size_t channels, size_t blockSize, size_t minInterval, size_t maxI
 
 void compareStfts() {
 	signalsmith::linear::DynamicSTFT<float, false, true> dynamic;
-	dynamic.configure(1, 1, 256, 0);
+	dynamic.configure(1, 1, 255, 0);
 	dynamic.setInterval(45, dynamic.kaiser);
 	
-	signalsmith::spectral::STFT<float> dsp(1, 256, 45);
+	signalsmith::spectral::STFT<float> dsp(1, 255, 45);
 	dsp.setWindow(dsp.kaiser, true);
 	
-	signalsmith::linear::ModifiedRealFFT<float> mrfft(256);
+	signalsmith::linear::ModifiedRealFFT<float> mrfft(255);
 	
 	std::vector<float> input(256), output, tmp(256);
 
@@ -272,7 +272,7 @@ void compareStfts() {
 	
 	auto &windowPlot = figure(0, 1).plot();
 	auto &window1 = windowPlot.line(), &window2 = windowPlot.line();
-	for (size_t i = 0; i < 256; ++i) {
+	for (size_t i = 0; i < 255; ++i) {
 		window1.add(i, dynamic.analysisWindow()[i]);
 		window2.add(i, dsp.window()[i]);
 	}
@@ -280,10 +280,10 @@ void compareStfts() {
 	for (size_t r = 0; r < 10; ++r) {
 		std::rotate(input.begin(), input.begin() + 45, input.end());
 		for (size_t i = 0; i < 45; ++i) {
-			input[256 - 45 + i] = dist(randomEngine);
+			input[255 - 45 + i] = dist(randomEngine);
 		}
 
-		dynamic.writeInput(0, 45, input.data() + 256 - 45);
+		dynamic.writeInput(0, 45, input.data() + 255 - 45);
 		dynamic.moveInput(45);
 		dynamic.analyse();
 		
@@ -303,14 +303,14 @@ void compareStfts() {
 		}
 
 		mrfft.ifft(dynamic.spectrum(0), tmp.data());
-		for (size_t f = 0; f < 256; ++f) {
+		for (size_t f = 0; f < 255; ++f) {
 			inverse1.add(f, tmp[f]);
 		}
 		mrfft.ifft(dsp.spectrum[0], tmp.data());
-		for (size_t f = 0; f < 256; ++f) {
+		for (size_t f = 0; f < 255; ++f) {
 			inverse2.add(f, tmp[f]);
 		}
-		for (size_t f = 0; f < 256; ++f) {
+		for (size_t f = 0; f < 255; ++f) {
 			inputLine.add(f, input[f]);
 		}
 
