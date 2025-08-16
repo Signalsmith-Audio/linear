@@ -125,7 +125,7 @@ struct WritableExpression;
 namespace expression {
 	// All base Exprs inherit from this, so we can SFINAE-test for them
 	struct Base {};
-	void mustBeExpr(const Base &) {}
+	inline void mustBeExpr(const Base &) {}
 
 	template<typename V>
 	struct ConstantExpr : public Base {

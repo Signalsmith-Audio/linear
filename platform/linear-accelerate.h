@@ -8,11 +8,12 @@
 #endif
 
 #include <cstring> // std::memcpy
+#include <iostream> // We log to stderr when an expression is unoptimised
 
 namespace signalsmith { namespace linear {
 
 template<class T>
-std::string typeName() {
+static std::string typeName() {
 	return typeid(T).name();
 }
 template<>
