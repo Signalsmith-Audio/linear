@@ -577,6 +577,12 @@ private:
 				double arg = std::sqrt(1 - r*r);
 				data[i] = bessel0(beta*arg)*invB0;
 			}
+			if (warp) {
+				// Warp window vertically as well, to restore some width
+				for (size_t i = 0; i < size; ++i) {
+					data[i] *= std::sqrt((warp + 1)/(1 + warp*(2*data[i] - 1)));
+				}
+			}
 		}
 	};
 
@@ -607,6 +613,12 @@ private:
 				double r = (2*i + offsetI)*invSize - 1;
 				r = (r + warp)/(1 + r*warp);
 				data[i] = norm*(gaussian(r) - offsetScale*(gaussian(r - 2) + gaussian(r + 2)));
+			}
+			if (warp) {
+				// Warp window vertically as well, to restore some width
+				for (size_t i = 0; i < size; ++i) {
+					data[i] *= std::sqrt((warp + 1)/(1 + warp*(2*data[i] - 1)));
+				}
 			}
 		}
 	};
