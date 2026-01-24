@@ -16,7 +16,7 @@ option(SIGNALSMITH_USE_PFFFT_DOUBLE "use PFFFT with double" OFF)
 
 if(APPLE AND SIGNALSMITH_USE_ACCELERATE)
 	message(STATUS "Signalsmith Linear: using Accelerate")
-	target_link_libraries(signalsmith-linear INTERFACE "-framework Accelerate" "cblas")
+	target_link_libraries(signalsmith-linear INTERFACE "-framework Accelerate")
 	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_ACCELERATE ACCELERATE_NEW_LAPACK)
 endif()
 if(SIGNALSMITH_USE_IPP)
