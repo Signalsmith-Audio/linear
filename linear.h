@@ -566,7 +566,7 @@ private:
 	}
 };
 
-template<class Linear, size_t alignBytes=1>
+template<class Linear, size_t alignBytes=64>
 struct CachedResults {
 	using TemporaryFloats = Temporary<float, alignBytes>;
 	using TemporaryDoubles = Temporary<double, alignBytes>;
@@ -1038,10 +1038,10 @@ struct LinearImpl : public LinearImplBase<useLinear> {
 	// Override .fill() for specific pointer/expressions which you can do quickly.  Calling `cached.realFloat()` etc. will call back to .fill()
 	template<class Expr>
 	void fill(RealPointer<float> pointer, expression::Sqrt<expression::Norm<Expr>> expr, size_t size) {
-		auto floats = cached.floatScope();
+		auto floats = cached.floatScope(); // temporary storage - usually not actually needed for specialisations
 		
 		auto normExpr = expr.a;
-		auto array = floats.real(normExpr, size);
+		auto array = floats.real(normExpr, size); // fill the temporary storage with real values, return a pointer Expr
 		
 		// The idea is to use an existing fast function, but this is an example
 		for (size_t i = 0; i < size; ++i) {
@@ -1061,13 +1061,15 @@ struct LinearImpl : public LinearImplBase<useLinear> {
 		cached.reserveDoubles(size);
 	}
 private:
-	CachedResults<LinearImpl, 32> cached;
+	CachedResults<LinearImpl, 16> cached;
 };
 
 }}; // namespace
 
 #if defined(SIGNALSMITH_USE_ACCELERATE)
 #	include "./platform/linear-accelerate.h"
+#elif defined(SIGNALSMITH_USE_XSIMD)
+#	include "./platform/linear-xsimd.h"
 #elif 0//defined(SIGNALSMITH_USE_IPP)
 #	include "./platform/linear-ipp.h"
 #endif

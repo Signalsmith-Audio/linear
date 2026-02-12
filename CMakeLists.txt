@@ -33,3 +33,17 @@ if(SIGNALSMITH_USE_PFFFT_DOUBLE)
 	message(STATUS "Signalsmith Linear: using PFFFT with double support")
 	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_PFFFT_DOUBLE)
 endif()
+if(SIGNALSMITH_USE_XSIMD)
+	message(STATUS "Signalsmith Linear: using XSimd")
+	FetchContent_Declare(
+		xsimd
+		GIT_REPOSITORY https://github.com/xtensor-stack/xsimd.git
+		GIT_TAG 14.0.0
+		GIT_SHALLOW ON
+		OVERRIDE_FIND_PACKAGE # Use this if the package isn't found locally
+	)
+	find_package(xsimd REQUIRED)
+	target_link_libraries(signalsmith-linear INTERFACE xsimd)
+	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_XSIMD)
+endif()
+	

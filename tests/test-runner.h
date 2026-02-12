@@ -3,7 +3,7 @@
 #include "../linear.h"
 
 #include "./stopwatch.h"
-#include "plot/plot.h"
+#include "signalsmith-plot/plot.h"
 
 #include <complex>
 #include <vector>

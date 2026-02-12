@@ -3,7 +3,7 @@
 
 #include "./test-runner.h"
 
-#include "plot/plot.h"
+#include "signalsmith-plot/plot.h"
 
 template<class Sample, bool splitComputation, bool modified>
 void testStft(size_t channels, size_t blockSize, size_t minInterval, size_t maxInterval, unsigned seed=24680) {

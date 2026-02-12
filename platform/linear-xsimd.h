@@ -1,13 +1,7 @@
-//#define ACCELERATE_NEW_LAPACK
-
-// If possible, only include vecLib, since JUCE has conflicts with vImage
-#if defined(__has_include) && __has_include(<vecLib/vecLib.h>)
-#	include <vecLib/vecLib.h>
-#else
-#	include <Accelerate/Accelerate.h>
-#endif
+#include "xsimd/xsimd.hpp"
 
 #include <cstring> // std::memcpy
+#include <cstdint> // uintptr_t
 
 #include "./basic-fill-warnings.h"
 
@@ -48,6 +42,8 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 	};
 
 private:
+	CachedResults<LinearImpl> cached;
+
 	// Most generic fill
 	template<class Pointer, class Expr>
 	void fillExpr(Pointer pointer, Expr expr, size_t size) {
@@ -75,12 +71,6 @@ private:
 	template<typename V>
 	void clear(V *v, size_t size) {
 		for (size_t i = 0; i < size; ++i) v[i] = 0;
-	}
-	void clear(float *v, size_t size) {
-		vDSP_vclr(v, 1, size);
-	}
-	void clear(double *v, size_t size) {
-		vDSP_vclrD(v, 1, size);
 	}
 	// Filling a split-complex vector with real values won't hit the specialisations below, so we handle it here
 	template<class Expr>
@@ -119,49 +109,85 @@ private:
 	void fillExpr(ComplexPointer<double> pointer, WritableComplex<double> expr, size_t size) {
 		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<double>));
 	}
+	
+	template<typename V, size_t size>
+	V * getPrevAligned(V *array) {
+		static_assert(sizeof(size_t) == sizeof(uintptr_t), "size_t != uintptr_t, which is valid but weird enough (on modern systems) to be suspicious");
+		static constexpr uintptr_t alignBytes = sizeof(V)*size;
+		static constexpr uintptr_t alignMask = alignBytes - 1;
+		uintptr_t asInt = uintptr_t(array);
+		return reinterpret_cast<V *>(asInt&alignMask);
+	}
+	template<typename V, size_t size>
+	V * getNextAligned(V *array) {
+		return getPrevAligned<V, size>(array + (size - 1));
+	}
+
+	template<class V, class Batch>
+	void fillConstant(V *array, V constantValue, size_t size) {
+		V *arrayEnd = array + size;
+		V *alignedStart = getNextAligned<V, Batch::size>(array);
+		V *alignedEnd = getPrevAligned<V, Batch::size>(arrayEnd);
+		if (alignedEnd <= alignedStart) {
+			// Too short to have an aligned section
+			while (array != arrayEnd) {
+				*array = constantValue;
+				++array;
+			}
+			return;
+		}
+		while (array < alignedStart) {
+			*array = constantValue;
+			++array;
+		}
+		Batch constantBatch{constantValue};
+		while (array < alignedStart) {
+			constantBatch.store_aligned(array);
+			array += Batch::size;
+		}
+		while (array < arrayEnd) {
+			*array = constantValue;
+			++array;
+		}
+	}
 
 	// Filling with a constant
 	template<class V>
 	void fillExpr(RealPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		float v = expr.value;
-		vDSP_vfill(&v, pointer, 1, size);
+		float constantValue = expr.value;
+		fillConstant<float, xsimd::batch<float>>(pointer, constantValue, size);
 	}
 	template<class V>
 	void fillExpr(RealPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		double v = expr.value;
-		vDSP_vfillD(&v, pointer, 1, size);
+		double constantValue = expr.value;
+		fillConstant<double, xsimd::batch<double>>(pointer, constantValue, size);
 	}
 	template<class V>
 	void fillExpr(ComplexPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		std::complex<float> v = expr.value;
-		auto vSplit = dspSplit(&v);
-		auto pSplit = dspSplit(pointer);
-		vDSP_zvfill(&vSplit, &pSplit, 2, size);
+		std::complex<float> constantValue = expr.value;
+		fillConstant<std::complex<float>, xsimd::batch<std::complex<float>>>(pointer, constantValue, size);
 	}
 	template<class V>
 	void fillExpr(ComplexPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		std::complex<double> v = expr.value;
-		auto vSplit = dspSplit(&v);
-		auto pSplit = dspSplit(pointer);
-		vDSP_zvfillD(&vSplit, &pSplit, 2, size);
+		std::complex<double> constantValue = expr.value;
+		fillConstant<std::complex<double>, xsimd::batch<std::complex<double>>>(pointer, constantValue, size);
 	}
 	template<class V>
 	void fillExpr(SplitPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		std::complex<float> v = expr.value;
 		float vr = v.real(), vi = v.imag();
-		auto vSplit = dspSplit({&vr, &vi});
-		auto pSplit = dspSplit(pointer);
-		vDSP_zvfill(&vSplit, &pSplit, 1, size);
+		fillExpr(pointer.real, expression::ConstantExpr<float>{vr}, size);
+		fillExpr(pointer.imag, expression::ConstantExpr<float>{vi}, size);
 	}
 	template<class V>
 	void fillExpr(SplitPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		std::complex<double> v = expr.value;
 		double vr = v.real(), vi = v.imag();
-		auto vSplit = dspSplit({&vr, &vi});
-		auto pSplit = dspSplit(pointer);
-		vDSP_zvfillD(&vSplit, &pSplit, 1, size);
+		fillExpr(pointer.real, expression::ConstantExpr<double>{vr}, size);
+		fillExpr(pointer.imag, expression::ConstantExpr<double>{vi}, size);
 	}
 
+/*
 // Forwards .fillExpr() to .fillName(), but doesn't define that
 #define SIGNALSMITH_AUDIO_LINEAR_OP1_R(Name) \
 	template<class A> \
@@ -503,7 +529,7 @@ private:
 //	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Div)
 
 protected:
-	CachedResults<LinearImpl> cached;
+	CachedResults<LinearImpl, 32> cached;
 
 	static DSPSplitComplex dspSplit(ConstSplitPointer<float> x) {
 		DSPSplitComplex dsp;
@@ -529,6 +555,7 @@ protected:
 		dsp.imagp = (double *)x + 1;
 		return dsp;
 	}
+*/
 };
 
 }}; // namespace
