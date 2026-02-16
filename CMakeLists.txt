@@ -45,5 +45,27 @@ if(SIGNALSMITH_USE_XSIMD)
 	find_package(xsimd REQUIRED)
 	target_link_libraries(signalsmith-linear INTERFACE xsimd)
 	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_XSIMD)
+
+	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_XSIMD_DISPATCH)
+
+	list(APPEND xsimd_arch_names sse2 sse3 sse4_2 avx avx2 avx512f avx512er)
+	list(APPEND gcc_arch_flags -msse2 -msse3 -msse4.2 -mavx -mavx2 -mavx512f "-mavx512er -mavx512cd")
+	foreach(xsimdName gccFlagList IN ZIP_LISTS xsimd_arch_names gcc_arch_flags) # TODO: use ZIP_LISTS if we need more detail
+		set(xsimdTargetName "signalsmith-linear_xsimd_${xsimdName}")
+		add_library(${xsimdTargetName} STATIC ${CMAKE_CURRENT_SOURCE_DIR}/platform/linear-xsimd-dispatch.cpp)
+		message(STATUS "Signalsmith Linear: creating arch-specific target ${xsimdTargetName}")
+		target_link_libraries(${xsimdTargetName} PUBLIC xsimd)
+		target_compile_definitions(${xsimdTargetName} PRIVATE
+			SIGNALSMITH_USE_XSIMD
+			SIGNALSMITH_USE_XSIMD_DISPATCH
+			SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH=xsimd::${xsimdName}
+		)
+		string(REPLACE " " ";" gccFlagList "${gccFlagList}")
+		foreach(gccFlag IN LISTS gccFlagList)
+			target_compile_options(${xsimdTargetName} PRIVATE ${gccFlag})
+		endforeach()
+		set_target_properties(${xsimdTargetName} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+		target_link_libraries(signalsmith-linear INTERFACE ${xsimdTargetName})
+	endforeach()
 endif()
 	

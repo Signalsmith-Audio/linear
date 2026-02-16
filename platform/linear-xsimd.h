@@ -7,14 +7,82 @@
 
 namespace signalsmith { namespace linear {
 
+namespace _impl_fill {
+	template<typename V, size_t size>
+	XSIMD_INLINE V * getPrevAligned(V *array) {
+		static_assert(sizeof(size_t) == sizeof(uintptr_t), "size_t != uintptr_t, which is valid but weird enough (on modern systems) to be suspicious");
+		static constexpr uintptr_t alignBytes = sizeof(V)*size;
+		static constexpr uintptr_t alignMask = alignBytes - 1;
+		uintptr_t asInt = uintptr_t(array);
+		return reinterpret_cast<V *>(asInt&alignMask);
+	}
+	template<typename V, size_t size>
+	XSIMD_INLINE V * getNextAligned(V *array) {
+		return getPrevAligned<V, size>(array + (size - 1));
+	}
+
+#ifdef SIGNALSMITH_USE_XSIMD_DISPATCH
+#	ifdef SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH
+// Declare a concrete specialisation for one particular architecture
+#		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, vType, ...) \
+			template void fnName<SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH, vType>(__VA_ARGS__, SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH);
+#	else
+// List the arch-specific specialisations which will be defined in other units
+#		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, vType, ...) \
+			extern template void fnName<xsimd::sse2, vType>(__VA_ARGS__, xsimd::sse2); \
+			extern template void fnName<xsimd::sse3, vType>(__VA_ARGS__, xsimd::sse3); \
+			extern template void fnName<xsimd::sse4_2, vType>(__VA_ARGS__, xsimd::sse4_2); \
+			extern template void fnName<xsimd::avx, vType>(__VA_ARGS__, xsimd::avx); \
+			extern template void fnName<xsimd::avx2, vType>(__VA_ARGS__, xsimd::avx2); \
+			extern template void fnName<xsimd::avx512f, vType>(__VA_ARGS__, xsimd::avx512f); \
+			extern template void fnName<xsimd::avx512er, vType>(__VA_ARGS__, xsimd::avx512er);
+#	endif
+#else
+#	define SIGNALSMITH_LINEAR_ARCH_DISPATCH(...)
+#endif
+
+	template<class Arch, class V>
+	void fillConstant(V *array, V constantValue, size_t size, Arch) {
+		using Batch = xsimd::batch<V, Arch>;
+		V *arrayEnd = array + size;
+		V *alignedStart = getNextAligned<V, Batch::size>(array);
+		V *alignedEnd = getPrevAligned<V, Batch::size>(arrayEnd);
+		if (alignedEnd <= alignedStart) {
+			// Too short to have an aligned section
+			while (array != arrayEnd) {
+				*array = constantValue;
+				++array;
+			}
+			return;
+		}
+		while (array < alignedStart) {
+			*array = constantValue;
+			++array;
+		}
+		Batch constantBatch{constantValue};
+		while (array < alignedStart) {
+			constantBatch.store_aligned(array);
+			array += Batch::size;
+		}
+		while (array < arrayEnd) {
+			*array = constantValue;
+			++array;
+		}
+	}
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, float, float *, float, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, double, double *, double, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<float>, std::complex<float> *, std::complex<float>, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<double>, std::complex<double> *, std::complex<double>, size_t)
+}
+#undef SIGNALSMITH_LINEAR_ARCH_DISPATCH
+
 template<>
 struct LinearImpl<true> : public LinearImplBase<true> {
 	using Base = LinearImplBase<true>;
 
 	LinearImpl() : Base(this), cached(*this) {
 		basicFillWarningReset();
-		
-		ChooseArchitecture choose{*this};
+		chooseArchitecture();
 	}
 
 	template<class V>
@@ -46,15 +114,59 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 private:
 	CachedResults<LinearImpl> cached;
 
-	struct ChooseArchitecture {
-		LinearImpl &impl;
-	};
-	// Always use the best architecture guaranteed by our compilation target
+#if SIGNALSMITH_USE_XSIMD_DISPATCH && (defined(__i386__) || defined(__x86_64__))
+	enum class Arch{sse2, sse3, sse4_2, avx, avx2, avx512f, avx512er};
+	Arch bestArch = Arch::sse2;
+
+	void chooseArchitecture() {
+		auto available = xsimd::available_architectures();
+		if (available.has(xsimd::sse3{})) bestArch = Arch::sse3;
+		if (available.has(xsimd::sse4_2{})) bestArch = Arch::sse4_2;
+		if (available.has(xsimd::avx{})) bestArch = Arch::avx;
+		if (available.has(xsimd::avx2{})) bestArch = Arch::avx2;
+		if (available.has(xsimd::avx512f{})) bestArch = Arch::avx512f;
+		if (available.has(xsimd::avx512er{})) bestArch = Arch::avx512er;
+	}
+	
+	template<class Pointer, class Expr>
+	void fillExprDispatch(Pointer pointer, Expr expr, size_t size) {
+		switch(bestArch) {
+			case Arch::sse2: return fillExpr<xsimd::sse2>(pointer, expr, size);
+			case Arch::sse3: return fillExpr<xsimd::sse3>(pointer, expr, size);
+			case Arch::sse4_2: return fillExpr<xsimd::sse4_2>(pointer, expr, size);
+			case Arch::avx: return fillExpr<xsimd::avx>(pointer, expr, size);
+			case Arch::avx2: return fillExpr<xsimd::avx2>(pointer, expr, size);
+			case Arch::avx512f: return fillExpr<xsimd::avx512f>(pointer, expr, size);
+			case Arch::avx512er: return fillExpr<xsimd::avx512er>(pointer, expr, size);
+		}
+	}
+#elif SIGNALSMITH_USE_XSIMD_DISPATCH && defined(__ARM_NEON)
+	enum class Arch{neon, neon64};
+	Arch bestArch = Arch::neon; // TODO: better fallback for non-NEON systems
+
+	void chooseArchitecture() {
+		auto available = xsimd::available_architectures();
+		if (available.has(xsimd::neon64{})) bestArch = Arch::neon64;
+	}
+	
+	template<class Pointer, class Expr>
+	void fillExprDispatch(Pointer pointer, Expr expr, size_t size) {
+		switch(bestArch) {
+			case Arch::neon: return fillExpr<xsimd::neon>(pointer, expr, size);
+			case Arch::neon64: return fillExpr<xsimd::neon64>(pointer, expr, size);
+		}
+	}
+#else
+	void chooseArchitecture() {/*nothing*/}
+
 	template<class Pointer, class Expr>
 	XSIMD_INLINE void fillExprDispatch(Pointer pointer, Expr expr, size_t size) {
 		// Use best guaranteed arch
 		fillExpr<xsimd::best_arch>(pointer, expr, size);
 	}
+#endif
+
+	//---- Everything below this point only gets compiled for targets where Arch is fully supported ----//
 
 	// Most generic fill
 	template<class Arch, class Pointer, class Expr>
@@ -131,85 +243,43 @@ private:
 		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<double>));
 	}
 	
-	template<typename V, size_t size>
-	XSIMD_INLINE V * getPrevAligned(V *array) {
-		static_assert(sizeof(size_t) == sizeof(uintptr_t), "size_t != uintptr_t, which is valid but weird enough (on modern systems) to be suspicious");
-		static constexpr uintptr_t alignBytes = sizeof(V)*size;
-		static constexpr uintptr_t alignMask = alignBytes - 1;
-		uintptr_t asInt = uintptr_t(array);
-		return reinterpret_cast<V *>(asInt&alignMask);
-	}
-	template<typename V, size_t size>
-	XSIMD_INLINE V * getNextAligned(V *array) {
-		return getPrevAligned<V, size>(array + (size - 1));
-	}
-
-	template<class Arch, class V>
-	XSIMD_INLINE void fillConstant(V *array, V constantValue, size_t size) {
-		using Batch = xsimd::batch<V, Arch>;
-		V *arrayEnd = array + size;
-		V *alignedStart = getNextAligned<V, Batch::size>(array);
-		V *alignedEnd = getPrevAligned<V, Batch::size>(arrayEnd);
-		if (alignedEnd <= alignedStart) {
-			// Too short to have an aligned section
-			while (array != arrayEnd) {
-				*array = constantValue;
-				++array;
-			}
-			return;
-		}
-		while (array < alignedStart) {
-			*array = constantValue;
-			++array;
-		}
-		Batch constantBatch{constantValue};
-		while (array < alignedStart) {
-			constantBatch.store_aligned(array);
-			array += Batch::size;
-		}
-		while (array < arrayEnd) {
-			*array = constantValue;
-			++array;
-		}
-	}
-
 	// Filling with a constant
 	template<class Arch, class V>
 	XSIMD_INLINE void fillExpr(RealPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		float constantValue = expr.value;
-		fillConstant<Arch, float>(pointer, constantValue, size);
+		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
 	}
 	template<class Arch, class V>
 	XSIMD_INLINE void fillExpr(RealPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		double constantValue = expr.value;
-		fillConstant<Arch, double>(pointer, constantValue, size);
+		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
 	}
 	template<class Arch, class V>
 	XSIMD_INLINE void fillExpr(ComplexPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		std::complex<float> constantValue = expr.value;
-		fillConstant<Arch, std::complex<float>>(pointer, constantValue, size);
+		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
 	}
 	template<class Arch, class V>
 	XSIMD_INLINE void fillExpr(ComplexPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		std::complex<double> constantValue = expr.value;
-		fillConstant<Arch, std::complex<double>>(pointer, constantValue, size);
+		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
 	}
 	template<class Arch, class V>
 	XSIMD_INLINE void fillExpr(SplitPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		std::complex<float> v = expr.value;
 		float vr = v.real(), vi = v.imag();
-		fillExpr<Arch>(pointer.real, expression::ConstantExpr<float>{vr}, size);
-		fillExpr<Arch>(pointer.imag, expression::ConstantExpr<float>{vi}, size);
+		_impl_fill::fillConstant(pointer.real, vr, size, Arch{});
+		_impl_fill::fillConstant(pointer.imag, vi, size, Arch{});
 	}
 	template<class Arch, class V>
 	XSIMD_INLINE void fillExpr(SplitPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
 		std::complex<double> v = expr.value;
 		double vr = v.real(), vi = v.imag();
-		fillExpr<Arch>(pointer.real, expression::ConstantExpr<double>{vr}, size);
-		fillExpr<Arch>(pointer.imag, expression::ConstantExpr<double>{vi}, size);
+		_impl_fill::fillConstant(pointer.real, vr, size, Arch{});
+		_impl_fill::fillConstant(pointer.imag, vi, size, Arch{});
 	}
 
-// Forwards .fillExpr() to .fillName(), but doesn't define that
+// Forwards .fillExpr() to .fillName(), but only defines generic version of that
 #define SIGNALSMITH_AUDIO_LINEAR_OP1_R(Name) \
 	template<class A> \
 	XSIMD_INLINE void fillExpr(RealPointer<float> pointer, expression::Name<A> expr, size_t size) { \
@@ -581,3 +651,4 @@ protected:
 };
 
 }}; // namespace
+
