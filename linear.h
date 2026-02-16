@@ -46,7 +46,7 @@ struct SplitPointer {
 
 	RealPointer<V> real, imag;
 	SplitPointer(RealPointer<V> real, RealPointer<V> imag) : real(real), imag(imag) {}
-	operator ConstSplitPointer<V>() {
+	operator ConstSplitPointer<V>() const {
 		return {real, imag};
 	}
 
@@ -130,6 +130,7 @@ namespace expression {
 	template<typename V>
 	struct ConstantExpr : public Base {
 		EXPRESSION_NAME(Constant, "V");
+		using Unwrapped = ConstantExpr;
 		V value;
 
 		static_assert(std::is_trivially_copyable<V>::value, "ConstantExpr<V> values must be trivially copyable");
@@ -178,27 +179,12 @@ namespace expression {
 	auto ensureExpr(const Expr &expr) -> decltype(ExprTest<Expr>::wrap(expr)) {
 		return ExprTest<Expr>::wrap(expr);
 	};
-	
-	// Remove `Expression<>` or `WritableExpression<>` layers
-	template<class E>
-	E unwrapped(E e) {
-		return e;
-	}
-	template<class E>
-	E unwrapped(Expression<E> e) {
-		return e;
-	}
-	template<class E>
-	E unwrapped(WritableExpression<E> e) {
-		return e;
-	}
-	template<class E>
-	using Unwrapped = decltype(unwrapped(std::declval<E>()));
 
 	// Expressions that just read from a pointer
 	template<typename V>
 	struct ReadableReal : public Base {
-		EXPRESSION_NAME(ReadableReal, "const V*");
+		EXPRESSION_NAME(ReadableReal, "V*");
+		using Unwrapped = ReadableReal;
 		ConstRealPointer<V> pointer;
 
 		ReadableReal(ConstRealPointer<V> pointer) : pointer(pointer) {}
@@ -209,7 +195,8 @@ namespace expression {
 	};
 	template<typename V>
 	struct ReadableComplex : public Base {
-		EXPRESSION_NAME(ReadableComplex, "const VC*");
+		EXPRESSION_NAME(ReadableComplex, "VC*");
+		using Unwrapped = ReadableComplex;
 		ConstComplexPointer<V> pointer;
 
 		ReadableComplex(ConstComplexPointer<V> pointer) : pointer(pointer) {}
@@ -220,7 +207,8 @@ namespace expression {
 	};
 	template<typename V>
 	struct ReadableSplit : public Base {
-		EXPRESSION_NAME(ReadableSplit, "const VS*");
+		EXPRESSION_NAME(ReadableSplit, "VS*");
+		using Unwrapped = ReadableSplit;
 		ConstSplitPointer<V> pointer;
 
 		ReadableSplit(ConstSplitPointer<V> pointer) : pointer(pointer) {}
@@ -229,6 +217,22 @@ namespace expression {
 			return {pointer.real[i], pointer.imag[i]};
 		}
 	};
+	
+	// Remove `Expression<>` or `WritableExpression<>` layers, and add const to pointers
+	template<class E>
+	typename E::Unwrapped unwrapped(E e) {
+		return e;
+	}
+	template<class E>
+	typename E::Unwrapped unwrapped(Expression<E> e) {
+		return e;
+	}
+	template<class E>
+	typename E::Unwrapped unwrapped(WritableExpression<E> e) {
+		return e;
+	}
+	template<class E>
+	using Unwrapped = decltype(unwrapped(std::declval<E>()));
 }
 	
 // + - * / % ^ & | ~ ! = < > += -= *= /= %= ^= &= |= << >> >>= <<= == != <= >= <=>(since C++20) && || ++ -- , ->* -> ( ) [ ]
@@ -238,6 +242,7 @@ namespace expression { \
 	template<class A> \
 	struct Name : public Base { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + ">"); \
+		using Unwrapped = Name<Unwrapped<A>>; \
 		A a; \
 		Name(const A &a) : a(a) {} \
 		auto get(std::ptrdiff_t i) const -> decltype(OP a.get(i)) const { \
@@ -250,7 +255,7 @@ namespace expression { \
 	} \
 } \
 template<class A> \
-Expression<expression::Name<A>> operator OP(const Expression<A> &a) { \
+Expression<expression::Name<expression::Unwrapped<A>>> operator OP(const Expression<A> &a) { \
 	return {a}; \
 }
 SIGNALSMITH_AUDIO_LINEAR_UNARY_PREFIX(Neg, -)
@@ -266,6 +271,7 @@ namespace expression { \
 	template<class A, class B> \
 	struct Name : public Base { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
+		using Unwrapped = Name<Unwrapped<A>, Unwrapped<B>>; \
 		A a; \
 		B b; \
 		Name(const A &a, const B &b) : a(a), b(b) {} \
@@ -279,15 +285,15 @@ namespace expression { \
 	} \
 } \
 template<class A, class B> \
-const Expression<expression::Name<A, B>> operator OP(const Expression<A> &a, const Expression<B> &b) { \
+const Expression<expression::Name<expression::Unwrapped<A>, expression::Unwrapped<B>>> operator OP(const Expression<A> &a, const Expression<B> &b) { \
 	return {a, b}; \
 } \
 template<class A, class B> \
-const Expression<expression::Name<A, expression::Constant<B>>> operator OP(const Expression<A> &a, const B &b) { \
+const Expression<expression::Name<expression::Unwrapped<A>, expression::Constant<B>>> operator OP(const Expression<A> &a, const B &b) { \
 	return {a, b}; \
 } \
 template<class A, class B> \
-const Expression<expression::Name<expression::Constant<A>, B>> operator OP(const A &a, const Expression<B> &b) { \
+const Expression<expression::Name<expression::Constant<A>, expression::Unwrapped<B>>> operator OP(const A &a, const Expression<B> &b) { \
 	return {a, b}; \
 }
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Add, +)
@@ -307,6 +313,7 @@ namespace expression {
 	template<class A> \
 	struct Name : public Base { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + ">"); \
+		using Unwrapped = Name<Unwrapped<A>>; \
 		A a; \
 		Name(const A &a) : a(a) {} \
 		auto get(std::ptrdiff_t i) const -> decltype(func(a.get(i))) { \
@@ -381,6 +388,7 @@ namespace expression {
 	template<class A, class B> \
 	struct Name : public Base { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
+		using Unwrapped = Name<Unwrapped<A>, Unwrapped<B>>; \
 		A a; \
 		B b; \
 		Name(const A &a, const B &b) : a(a), b(b) {} \
@@ -418,7 +426,7 @@ struct Expression : public BaseExpr {
 	}
 
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(ExprName, methodName) \
-	const Expression<expression::ExprName<BaseExpr>> methodName() const { \
+	const Expression<expression::ExprName<expression::Unwrapped<BaseExpr>>> methodName() const { \
 		return {*this}; \
 	}
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Abs, abs)
@@ -769,7 +777,7 @@ struct LinearImplBase {
 
 	template<typename V>
 	struct WritableReal {
-		EXPRESSION_NAME(WritableReal, "V*");
+		EXPRESSION_NAME(WritableReal, "rw V*");
 		Linear &linear;
 		RealPointer<V> pointer;
 		size_t size;
@@ -777,7 +785,8 @@ struct LinearImplBase {
 			static_assert(std::is_trivially_copyable<WritableReal>::value, "must be trivially copyable");
 		}
 		
-		operator expression::ReadableReal<V>() const {
+		using Unwrapped = expression::ReadableReal<V>;
+		operator Unwrapped() const {
 			return {pointer};
 		}
 		
@@ -794,13 +803,14 @@ struct LinearImplBase {
 	};
 	template<typename V>
 	struct WritableComplex {
-		EXPRESSION_NAME(WritableComplex, "VC*");
+		EXPRESSION_NAME(WritableComplex, "rw VC*");
 		Linear &linear;
 		ComplexPointer<V> pointer;
 		size_t size;
 		WritableComplex(Linear &linear, ComplexPointer<V> pointer, size_t size) : linear(linear), pointer(pointer), size(size) {}
 
-		operator expression::ReadableComplex<V>() const {
+		using Unwrapped = expression::ReadableComplex<V>;
+		operator Unwrapped() const {
 			return {pointer};
 		}
 
@@ -817,13 +827,14 @@ struct LinearImplBase {
 	};
 	template<typename V>
 	struct WritableSplit {
-		EXPRESSION_NAME(WritableSplit, "VS*");
+		EXPRESSION_NAME(WritableSplit, "rw VS*");
 		Linear &linear;
 		SplitPointer<V> pointer;
 		size_t size;
 		WritableSplit(Linear &linear, SplitPointer<V> pointer, size_t size) : linear(linear), pointer(pointer), size(size) {}
 
-		operator expression::ReadableSplit<V>() const {
+		using Unwrapped = expression::ReadableSplit<V>;
+		operator Unwrapped() const {
 			return {pointer};
 		}
 

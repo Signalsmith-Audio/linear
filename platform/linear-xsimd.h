@@ -12,7 +12,7 @@ namespace _impl_fill {
 	XSIMD_INLINE V * getPrevAligned(V *array) {
 		static_assert(sizeof(size_t) == sizeof(uintptr_t), "size_t != uintptr_t, which is valid but weird enough (on modern systems) to be suspicious");
 		static constexpr uintptr_t alignBytes = sizeof(V)*size;
-		static constexpr uintptr_t alignMask = alignBytes - 1;
+		static constexpr uintptr_t alignMask = ~(alignBytes - 1);
 		uintptr_t asInt = uintptr_t(array);
 		return reinterpret_cast<V *>(asInt&alignMask);
 	}
@@ -24,25 +24,25 @@ namespace _impl_fill {
 #ifdef SIGNALSMITH_USE_XSIMD_DISPATCH
 #	ifdef SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH
 // Declare a concrete specialisation for one particular architecture
-#		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, vType, ...) \
-			template void fnName<SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH, vType>(__VA_ARGS__, SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH);
+#		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, ...) \
+			template void fnName<SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH>(__VA_ARGS__, SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH);
 #	else
 // List the arch-specific specialisations which will be defined in other units
-#		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, vType, ...) \
-			extern template void fnName<xsimd::sse2, vType>(__VA_ARGS__, xsimd::sse2); \
-			extern template void fnName<xsimd::sse3, vType>(__VA_ARGS__, xsimd::sse3); \
-			extern template void fnName<xsimd::sse4_2, vType>(__VA_ARGS__, xsimd::sse4_2); \
-			extern template void fnName<xsimd::avx, vType>(__VA_ARGS__, xsimd::avx); \
-			extern template void fnName<xsimd::avx2, vType>(__VA_ARGS__, xsimd::avx2); \
-			extern template void fnName<xsimd::avx512f, vType>(__VA_ARGS__, xsimd::avx512f); \
-			extern template void fnName<xsimd::avx512er, vType>(__VA_ARGS__, xsimd::avx512er);
+#		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, ...) \
+			extern template void fnName<xsimd::sse2>(__VA_ARGS__, xsimd::sse2); \
+			extern template void fnName<xsimd::sse3>(__VA_ARGS__, xsimd::sse3); \
+			extern template void fnName<xsimd::sse4_2>(__VA_ARGS__, xsimd::sse4_2); \
+			extern template void fnName<xsimd::avx>(__VA_ARGS__, xsimd::avx); \
+			extern template void fnName<xsimd::avx2>(__VA_ARGS__, xsimd::avx2); \
+			extern template void fnName<xsimd::avx512f>(__VA_ARGS__, xsimd::avx512f); \
+			extern template void fnName<xsimd::avx512er>(__VA_ARGS__, xsimd::avx512er);
 #	endif
 #else
 #	define SIGNALSMITH_LINEAR_ARCH_DISPATCH(...)
 #endif
 
 	template<class Arch, class V>
-	void fillConstant(V *array, V constantValue, size_t size, Arch) {
+	XSIMD_INLINE void fillConstantTyped(V *array, V constantValue, size_t size) {
 		using Batch = xsimd::batch<V, Arch>;
 		V *arrayEnd = array + size;
 		V *alignedStart = getNextAligned<V, Batch::size>(array);
@@ -69,10 +69,210 @@ namespace _impl_fill {
 			++array;
 		}
 	}
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, float, float *, float, size_t)
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, double, double *, double, size_t)
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<float>, std::complex<float> *, std::complex<float>, size_t)
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<double>, std::complex<double> *, std::complex<double>, size_t)
+	template<class Arch>
+	void fillConstant(float *array, float constantValue, size_t size, Arch) {
+		fillConstantTyped<Arch, float>(array, constantValue, size);
+	}
+	template<class Arch>
+	void fillConstant(double *array, double constantValue, size_t size, Arch) {
+		fillConstantTyped<Arch, double>(array, constantValue, size);
+	}
+	template<class Arch>
+	void fillConstant(std::complex<float> *array, std::complex<float> constantValue, size_t size, Arch) {
+		fillConstantTyped<Arch, std::complex<float>>(array, constantValue, size);
+	}
+	template<class Arch>
+	void fillConstant(std::complex<double> *array, std::complex<double> constantValue, size_t size, Arch) {
+		fillConstantTyped<Arch, std::complex<double>>(array, constantValue, size);
+	}
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, float *, float, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, double *, double, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<float> *, std::complex<float>, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<double> *, std::complex<double>, size_t)
+	
+	template<class Arch, class Pointer, class Expr>
+	XSIMD_INLINE void fillBasic(Pointer pointer, Expr expr, size_t size) {
+		basicFillWarning<Expr>();
+		for (size_t i = 0; i < size; ++i) {
+			pointer[i] = expr.get(i);
+		}
+	}
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillBasic(SplitPointer<V> pointer, Expr expr, size_t size) {
+		basicFillWarning<Expr>();
+		using Complex = typename SplitPointer<V>::Complex;
+		for (size_t i = 0; i < size; ++i) {
+			Complex c = expr.get(i);
+			pointer.real[i] = c.real();
+			pointer.imag[i] = c.imag();
+		}
+	}
+
+	template<class Arch, class Pointer, class Expr>
+	void fill(Pointer pointer, Expr expr, size_t size, Arch) {
+		fillBasic<Arch>(pointer, expr, size);
+	}
+	template<class Arch, class V, class Expr>
+	void fill(SplitPointer<V> pointer, Expr expr, size_t size, Arch) {
+		fillBasic<Arch>(pointer, expr, size);
+	}
+
+	template<class Arch>
+	struct GetBatch {
+		template<class V>
+		XSIMD_INLINE static xsimd::batch<V, Arch> getBatch(const expression::ReadableReal<V> &expr, size_t index) {
+			return xsimd::batch<V, Arch>::load_unaligned(expr.pointer + index);
+		}
+		template<class V>
+		XSIMD_INLINE static xsimd::batch<std::complex<V>, Arch> getBatch(const expression::ReadableComplex<V> &expr, size_t index) {
+			return xsimd::batch<std::complex<V>, Arch>::load_unaligned(expr.pointer + index);
+		}
+		template<class V>
+		XSIMD_INLINE static xsimd::batch<std::complex<V>, Arch> getBatch(const expression::ReadableSplit<V> &expr, size_t index) {
+			return xsimd::batch<std::complex<V>, Arch>::load_unaligned(expr.pointer.real + index, expr.pointer.imag + index);
+		}
+
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Abs<Expr> &expr, size_t index) -> xsimd::batch<decltype(expr.get(0)), Arch> {
+			auto batch = getBatch(expr.a, index);
+			return xsimd::abs(batch);
+		}
+	};
+
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillSpecialisedReal(V *array, Expr expr, size_t size) {
+		using Batch = xsimd::batch<V, Arch>;
+		V *arrayEnd = array + size;
+		V *alignedStart = getNextAligned<V, Batch::size>(array);
+		V *alignedEnd = getPrevAligned<V, Batch::size>(arrayEnd);
+		if (alignedEnd <= alignedStart) {
+			// Too short to have an aligned section
+			size_t i = 0;
+			while (array + i != arrayEnd) {
+				*(array + i) = V(expr.get(i));
+				++i;
+			}
+			return;
+		}
+		size_t i = 0;
+		while (array + i < alignedStart) {
+			*(array + i) = V(expr.get(i));
+			++i;
+		}
+		while (array + i < alignedEnd) {
+			auto batch = GetBatch<Arch>::getBatch(expr, i);
+			xsimd::batch_cast<V>(batch).store_aligned(array + i);
+			i += Batch::size;
+		}
+		while (array + i < arrayEnd) {
+			*(array + i) = V(expr.get(i));
+			++i;
+		}
+	}
+
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillSpecialisedComplex(std::complex<V> *array, Expr expr, size_t size) {
+		using C = std::complex<V>;
+		using Batch = xsimd::batch<C, Arch>;
+		C *arrayEnd = array + size;
+		C *alignedStart = getNextAligned<C, Batch::size>(array);
+		C *alignedEnd = getPrevAligned<C, Batch::size>(arrayEnd);
+		if (alignedEnd <= alignedStart) {
+			// Too short to have an aligned section
+			size_t i = 0;
+			while (array + i != arrayEnd) {
+				*(array + i) = expr.get(i);
+				++i;
+			}
+			return;
+		}
+		size_t i = 0;
+		while (array + i < alignedStart) {
+			*(array + i) = C(expr.get(i));
+			++i;
+		}
+		while (array + i < alignedEnd) {
+			auto batch = GetBatch<Arch>::getBatch(expr, i);
+			xsimd::batch_cast<C>(batch).store_aligned(array + i);
+			i += Batch::size;
+		}
+		while (array + i < arrayEnd) {
+			*(array + i) = C(expr.get(i));
+			++i;
+		}
+	}
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillSpecialisedSplit(SplitPointer<V> array, Expr expr, size_t size) {
+		using C = std::complex<V>;
+		using Batch = xsimd::batch<C, Arch>;
+		V *real = array.real;
+		V *realEnd = real + size;
+		V *realAlignedStart = getNextAligned<V, Batch::size>(real);
+		V *realAlignedEnd = getPrevAligned<V, Batch::size>(realEnd);
+		
+		bool alignmentReal = uintptr_t(array.real)&(Batch::size*sizeof(V) - 1);
+		bool alignmentImag = uintptr_t(array.imag)&(Batch::size*sizeof(V) - 1);
+		if (realAlignedEnd <= realAlignedStart || (alignmentReal != alignmentImag)) {
+			// Either too short to have an aligned section, or the real/imaginary parts have unequal alignment
+			size_t i = 0;
+			while (real + i != realEnd) {
+				array[i] = C(expr.get(i));
+				++i;
+			}
+			return;
+		}
+		size_t i = 0;
+		while (real + i < realAlignedStart) {
+			array[i] = C(expr.get(i));
+			++i;
+		}
+		while (real + i < realAlignedEnd) {
+			auto batch = GetBatch<Arch>::getBatch(expr, i);
+			xsimd::batch_cast<C>(batch).store_aligned(real + i, array.imag + i);
+			i += Batch::size;
+		}
+		while (real + i < realEnd) {
+			array[i] = C(expr.get(i));
+			++i;
+		}
+	}
+	
+	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(V, Expr) \
+	template<class Arch> \
+	void fill(RealPointer<V> pointer, Expr expr, size_t size, Arch) { \
+		fillSpecialisedReal<Arch>(pointer, expr, size); \
+	} \
+	template<class Arch> \
+	void fill(ComplexPointer<V> pointer, Expr expr, size_t size, Arch) { \
+		fillSpecialisedComplex<Arch>(pointer, expr, size); \
+	} \
+	template<class Arch> \
+	void fill(SplitPointer<V> pointer, Expr expr, size_t size, Arch) { \
+		fillSpecialisedReal<Arch>(pointer.real, expr, size); \
+		std::memset(pointer.imag, 0, size*sizeof(V)); \
+	} \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, RealPointer<V>, Expr, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, Expr, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, Expr, size_t)
+	
+	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(V, Expr) \
+	template<class Arch> \
+	void fill(ComplexPointer<V> pointer, Expr expr, size_t size, Arch) { \
+		fillSpecialisedComplex<Arch>(pointer, expr, size); \
+	} \
+	template<class Arch> \
+	void fill(SplitPointer<V> pointer, Expr expr, size_t size, Arch) { \
+		fillSpecialisedSplit<Arch>(pointer, expr, size); \
+	} \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, Expr, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, Expr, size_t)
+
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableReal<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableReal<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableComplex<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableComplex<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableSplit<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableSplit<double>>);
 }
 #undef SIGNALSMITH_LINEAR_ARCH_DISPATCH
 
@@ -171,25 +371,7 @@ private:
 	// Most generic fill
 	template<class Arch, class Pointer, class Expr>
 	XSIMD_INLINE void fillExpr(Pointer pointer, Expr expr, size_t size) {
-		fillBasic<Arch>(pointer, expr, size);
-	}
-
-	template<class Arch, class Pointer, class Expr>
-	XSIMD_INLINE void fillBasic(Pointer pointer, Expr expr, size_t size) {
-		basicFillWarning<Expr>();
-		for (size_t i = 0; i < size; ++i) {
-			pointer[i] = expr.get(i);
-		}
-	}
-	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillBasic(SplitPointer<V> pointer, Expr expr, size_t size) {
-		basicFillWarning<Expr>();
-		using Complex = typename SplitPointer<V>::Complex;
-		for (size_t i = 0; i < size; ++i) {
-			Complex c = expr.get(i);
-			pointer.real[i] = c.real();
-			pointer.imag[i] = c.imag();
-		}
+		_impl_fill::fill<Arch>(pointer, expr, size, Arch{});
 	}
 	
 	template<typename V>
@@ -278,376 +460,6 @@ private:
 		_impl_fill::fillConstant(pointer.real, vr, size, Arch{});
 		_impl_fill::fillConstant(pointer.imag, vi, size, Arch{});
 	}
-
-// Forwards .fillExpr() to .fillName(), but only defines generic version of that
-#define SIGNALSMITH_AUDIO_LINEAR_OP1_R(Name) \
-	template<class A> \
-	XSIMD_INLINE void fillExpr(RealPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class A> \
-	XSIMD_INLINE void fillExpr(RealPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class Expr> \
-	XSIMD_INLINE void fill##Name(RealPointer<float> pointer, Expr expr, size_t size) { \
-		fillBasic(pointer, expr, size); \
-	} \
-	template<class Expr> \
-	XSIMD_INLINE void fill##Name(RealPointer<double> pointer, Expr expr, size_t size) { \
-		fillBasic(pointer, expr, size); \
-	}
-#define SIGNALSMITH_AUDIO_LINEAR_OP1_C(Name) \
-	template<class A> \
-	XSIMD_INLINE void fillExpr(ComplexPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class A> \
-	XSIMD_INLINE void fillExpr(ComplexPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class Expr> \
-	XSIMD_INLINE void fill##Name(ComplexPointer<float> pointer, Expr expr, size_t size) { \
-		fillBasic(pointer, expr, size); \
-	} \
-	template<class Expr> \
-	XSIMD_INLINE void fill##Name(ComplexPointer<double> pointer, Expr expr, size_t size) { \
-		fillBasic(pointer, expr, size); \
-	} \
-	template<class A> \
-	XSIMD_INLINE void fillExpr(SplitPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class A> \
-	XSIMD_INLINE void fillExpr(SplitPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class Expr> \
-	XSIMD_INLINE void fill##Name(SplitPointer<float> pointer, Expr expr, size_t size) { \
-		fillBasic(pointer, expr, size); \
-	} \
-	template<class Expr> \
-	XSIMD_INLINE void fill##Name(SplitPointer<double> pointer, Expr expr, size_t size) { \
-		fillBasic(pointer, expr, size); \
-	}
-/*
-// R -> R operators
-#define SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Name, vDSP_func) \
-	template<class A> \
-	ItemType<A, float, void> fill##Name(RealPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a, size); \
-		vDSP_func(a, 1, pointer, 1, size); \
-	} \
-	template<class A> \
-	ItemType<A, double, void> fill##Name(RealPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a, size); \
-		vDSP_func##D(a, 1, pointer, 1, size); \
-	}
-// C -> R operators
-#define SIGNALSMITH_AUDIO_LINEAR_TREE1_RC(Name, vDSP_func) \
-	template<class A> \
-	ItemType<A, std::complex<float>, void> fill##Name(RealPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto a = dspSplit(floats.split(expr.a, size)); \
-		vDSP_func(&a, 1, pointer, 1, size); \
-	} \
-	template<class A> \
-	ItemType<A, std::complex<double>, void> fill##Name(RealPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto a = dspSplit(doubles.split(expr.a, size)); \
-		vDSP_func##D(&a, 1, pointer, 1, size); \
-	}
-// C -> C operators
-#define SIGNALSMITH_AUDIO_LINEAR_TREE1_CC(Name, vDSP_func) \
-	template<class A> \
-	ItemType<A, std::complex<float>, void> fill##Name(ComplexPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto a = dspSplit(floats.complex(expr.a, size)); \
-		auto p = dspSplit(pointer); \
-		vDSP_func(&a, 2, &p, 2, size); \
-	} \
-	template<class A> \
-	ItemType<A, std::complex<double>, void> fill##Name(ComplexPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto a = dspSplit(doubles.complex(expr.a, size)); \
-		auto p = dspSplit(pointer); \
-		vDSP_func##D(&a, 2, &p, 2, size); \
-	}\
-	template<class A> \
-	ItemType<A, std::complex<float>, void> fill##Name(SplitPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto a = dspSplit(floats.split(expr.a, size)); \
-		auto p = dspSplit(pointer); \
-		vDSP_func(&a, 1, &p, 1, size); \
-	} \
-	template<class A> \
-	ItemType<A, std::complex<double>, void> fill##Name(SplitPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto a = dspSplit(doubles.split(expr.a, size)); \
-		auto p = dspSplit(pointer); \
-		vDSP_func##D(&a, 1, &p, 1, size); \
-	}
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Abs)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RC(Abs, vDSP_zvabs);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Neg)
-	SIGNALSMITH_AUDIO_LINEAR_OP1_C(Neg)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Neg, vDSP_vneg);
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_CC(Neg, vDSP_zvneg);
-#undef SIGNALSMITH_AUDIO_LINEAR_TREE1_RR
-#undef SIGNALSMITH_AUDIO_LINEAR_TREE1_RC
-#undef SIGNALSMITH_AUDIO_LINEAR_TREE1_CC
-
-// vForce stuff
-// R -> R operators
-#define SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Name, vForce_float, vForce_double) \
-	template<class A> \
-	ItemType<A, float, void> fill##Name(RealPointer<float> pointer, expression::Name<A> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a, size, pointer); \
-		int intSize = int(size); \
-		vForce_float(pointer, a, &intSize); \
-	} \
-	template<class A> \
-	ItemType<A, double, void> fill##Name(RealPointer<double> pointer, expression::Name<A> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a, size, pointer); \
-		int intSize = int(size); \
-		vForce_double(pointer, a, &intSize); \
-	}
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Abs, vvfabsf, vvfabs);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Exp)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Exp, vvexpf, vvexp);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Exp2)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Exp2, vvexp2f, vvexp2);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log, vvlogf, vvlog);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log2)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log2, vvlog2f, vvlog2);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log10)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log10, vvlog10f, vvlog10);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Sqrt)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Sqrt, vvsqrtf, vvsqrt);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Ceil)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Ceil, vvceilf, vvceil);
-	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Floor)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Floor, vvfloorf, vvfloor);
-#undef SIGNALSMITH_AUDIO_LINEAR_OP1_R
-
-// Forwards .fillExpr() to .fillName(), but doesn't define that
-#define SIGNALSMITH_AUDIO_LINEAR_OP2_R(Name) \
-public: \
-	template<class A, class B> \
-	XSIMD_INLINE void fillExpr(RealPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class A, class B> \
-	XSIMD_INLINE void fillExpr(RealPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-private:
-// R x R -> R operators where the vDSP function arguments are the other way around for some reason
-#define SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Name, vDSP_func) \
-	template<class A, class B> \
-	XSIMD_INLINE void fill##Name(RealPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a, size, pointer); \
-		auto *b = floats.real(expr.b, size); \
-		vDSP_func(b, 1, a, 1, pointer, 1, size); \
-	} \
-	template<class A, class B> \
-	XSIMD_INLINE void fill##Name(RealPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a, size, pointer); \
-		auto *b = doubles.real(expr.b, size); \
-		vDSP_func##D(b, 1, a, 1, pointer, 1, size); \
-	}
-#define SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Name, vDSP_func) \
-	template<class A, class V> \
-	XSIMD_INLINE void fill##Name(RealPointer<float> pointer, expression::Name<A, expression::ConstantExpr<V>> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a, size, pointer); \
-		float b = expr.b.value; \
-		vDSP_func(a, 1, &b, pointer, 1, size); \
-	} \
-	template<class A, class V> \
-	XSIMD_INLINE void fill##Name(RealPointer<double> pointer, expression::Name<A, expression::ConstantExpr<V>> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a, size, pointer); \
-		double b = expr.b.value; \
-		vDSP_func##D(a, 1, &b, pointer, 1, size); \
-	} \
-	template<class V, class B> \
-	XSIMD_INLINE void fill##Name(RealPointer<float> pointer, expression::Name<expression::ConstantExpr<V>, B> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		float a = expr.a.value; \
-		auto *b = floats.real(expr.b, size, pointer); \
-		vDSP_func(b, 1, &a, pointer, 1, size); \
-	} \
-	template<class V, class B> \
-	XSIMD_INLINE void fill##Name(RealPointer<double> pointer, expression::Name<expression::ConstantExpr<V>, B> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		double a = expr.a.value; \
-		auto *b = doubles.real(expr.b, size, pointer); \
-		vDSP_func##D(b, 1, &a, pointer, 1, size); \
-	}
-	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Add)
-	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Add, vDSP_vadd);
-	SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Add, vDSP_vsadd);
-	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Sub)
-	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Sub, vDSP_vsub);
-	template<class A, class V>
-	XSIMD_INLINE void fillSub(RealPointer<float> pointer, expression::Sub<A, expression::ConstantExpr<V>> expr, size_t size) {
-		expression::ConstantExpr<V> negB{-expr.b.value};
-		fillAdd(pointer, expression::makeAdd(expr.a, negB), size);
-	}
-	template<class A, class V>
-	XSIMD_INLINE void fillSub(RealPointer<double> pointer, expression::Sub<A, expression::ConstantExpr<V>> expr, size_t size) {
-		expression::ConstantExpr<V> negB{-expr.b.value};
-		fillAdd(pointer, expression::makeAdd(expr.a, negB), size);
-	}
-	template<class A, class V>
-	XSIMD_INLINE void fillSub(RealPointer<float> pointer, expression::Sub<expression::ConstantExpr<V>, A> expr, size_t size) {
-		expression::ConstantExpr<V> negA{-expr.a.value};
-		fillNeg(pointer, expression::makeNeg(expression::makeAdd(expr.b, negA)), size);
-	}
-	template<class A, class V>
-	XSIMD_INLINE void fillSub(RealPointer<double> pointer, expression::Sub<expression::ConstantExpr<V>, A> expr, size_t size) {
-		expression::ConstantExpr<V> negA{-expr.a.value};
-		fillNeg(pointer, expression::makeNeg(expression::makeAdd(expr.b, negA)), size);
-	}
-	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Mul)
-	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Mul, vDSP_vmul);
-	SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Mul, vDSP_vsmul);
-	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Div)
-	template<class A, class V>
-	XSIMD_INLINE void fillDiv(RealPointer<float> pointer, expression::Div<A, expression::ConstantExpr<V>> expr, size_t size) {
-		expression::ConstantExpr<V> recipB{1.0f/expr.b.value};
-		fillMul(pointer, expression::makeMul(expr.a, recipB), size);
-	}
-	template<class A, class V>
-	XSIMD_INLINE void fillDiv(RealPointer<double> pointer, expression::Sub<A, expression::ConstantExpr<V>> expr, size_t size) {
-		expression::ConstantExpr<V> recipB{1.0/expr.b.value};
-		fillMul(pointer, expression::makeMul(expr.a, recipB), size);
-	}
-#undef SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR
-#undef SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR
-
-// R x R -> R operators in vForce
-#define SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR(Name, vForce_float, vForce_double) \
-	template<class A, class B> \
-	XSIMD_INLINE void fill##Name(RealPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a, size, pointer); \
-		auto *b = floats.real(expr.b, size); \
-		int intSize = int(size); \
-		vForce_float(pointer, a, b, &intSize); \
-	} \
-	template<class A, class B> \
-	XSIMD_INLINE void fill##Name(RealPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a, size, pointer); \
-		auto *b = doubles.real(expr.b, size); \
-		int intSize = int(size); \
-		vForce_double(pointer, a, b, &intSize); \
-	}
-	SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR(Div, vvdivf, vvdiv);
-#undef SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR
-#undef SIGNALSMITH_AUDIO_LINEAR_OP2_R
-
-// Forwards .fillName() to .fillNameName2(), but doesn't define that
-#define SIGNALSMITH_AUDIO_LINEAR_Op3L_R(Name, NameL) \
-	template<class A, class B, class C> \
-	XSIMD_INLINE void fill##Name(RealPointer<float> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-		fill##Name##NameL(pointer, expr, size); \
-	} \
-	template<class A, class B, class C> \
-	XSIMD_INLINE void fill##Name(RealPointer<double> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-		fill##Name##NameL(pointer, expr, size); \
-	}
-// (A $ B) $ C
-#define SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Name, NameL, vDSP_func) \
-	template<class A, class B, class C> \
-	XSIMD_INLINE void fill##Name##NameL(RealPointer<float> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a.a, size); \
-		auto *b = floats.real(expr.a.b, size); \
-		auto *c = floats.real(expr.b, size, pointer); \
-		vDSP_func(a, 1, b, 1, c, 1, pointer, 1, size); \
-	} \
-	template<class A, class B, class C> \
-	XSIMD_INLINE void fill##Name##NameL(RealPointer<double> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a.a, size); \
-		auto *b = doubles.real(expr.a.b, size); \
-		auto *c = doubles.real(expr.b, size, pointer); \
-		vDSP_func##D(a, 1, b, 1, c, 1, pointer, 1, size); \
-	}
-	SIGNALSMITH_AUDIO_LINEAR_Op3L_R(Mul, Add)
-	SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Mul, Add, vDSP_vam)
-
-#undef SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR
-#undef SIGNALSMITH_AUDIO_LINEAR_Op3L_R
-
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Add, Mul, vDSP_vam, 0)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Mul, Add, vDSP_vma, 1)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Sub, Mul, vDSP_vsbm, 2)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Mul, Sub, vDSP_vmsb, 3)
-
-// Forwards .fillExpr() to .fillName(), but doesn't define that
-#define SIGNALSMITH_AUDIO_LINEAR_OP2_C(Name) \
-public: \
-	template<class A, class B> \
-	XSIMD_INLINE void fillExpr(ComplexPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class A, class B> \
-	XSIMD_INLINE void fillExpr(ComplexPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class A, class B> \
-	XSIMD_INLINE void fillExpr(SplitPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-	template<class A, class B> \
-	XSIMD_INLINE void fillExpr(SplitPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
-		fill##Name(pointer, expr, size); \
-	} \
-private:
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Add)
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Sub)
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Mul)
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Div)
-
-protected:
-	CachedResults<LinearImpl, 32> cached;
-
-	static DSPSplitComplex dspSplit(ConstSplitPointer<float> x) {
-		DSPSplitComplex dsp;
-		dsp.realp = (float *)x.real;
-		dsp.imagp = (float *)x.imag;
-		return dsp;
-	}
-	static DSPSplitComplex dspSplit(ConstComplexPointer<float> x) {
-		DSPSplitComplex dsp;
-		dsp.realp = (float *)x;
-		dsp.imagp = (float *)x + 1;
-		return dsp;
-	}
-	static DSPDoubleSplitComplex dspSplit(ConstSplitPointer<double> x) {
-		DSPDoubleSplitComplex dsp;
-		dsp.realp = (double *)x.real;
-		dsp.imagp = (double *)x.imag;
-		return dsp;
-	}
-	static DSPDoubleSplitComplex dspSplit(ConstComplexPointer<double> x) {
-		DSPDoubleSplitComplex dsp;
-		dsp.realp = (double *)x;
-		dsp.imagp = (double *)x + 1;
-		return dsp;
-	}
-*/
 };
 
 }}; // namespace
