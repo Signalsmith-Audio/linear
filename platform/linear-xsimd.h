@@ -145,17 +145,80 @@ namespace _impl_fill {
 
 		template<class Expr>
 		XSIMD_INLINE static auto getBatch(const expression::Abs<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
-			auto batch = getBatch(expr.a, index);
-			return xsimd::abs(batch);
+			return xsimd::abs(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Norm<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::norm(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Exp<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::exp(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Exp2<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::exp2(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Log<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::log(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Log2<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::log2(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Log10<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::log10(getBatch(expr.a, index));
 		}
 		template<class Expr>
 		XSIMD_INLINE static auto getBatch(const expression::Neg<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
-			auto batch = getBatch(expr.a, index);
-			return -batch;
+			return -getBatch(expr.a, index);
 		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Floor<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::floor(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Ceil<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::ceil(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Conj<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::conj(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Sqrt<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::sqrt(getBatch(expr.a, index));
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Cbrt<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::cbrt(getBatch(expr.a, index));
+		}
+
 		template<class ExprA, class ExprB>
 		XSIMD_INLINE static auto getBatch(const expression::Add<ExprA, ExprB> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
 			return getBatch(expr.a, index) + getBatch(expr.b, index);
+		}
+		template<class ExprA, class ExprB>
+		XSIMD_INLINE static auto getBatch(const expression::Sub<ExprA, ExprB> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return getBatch(expr.a, index) - getBatch(expr.b, index);
+		}
+		template<class ExprA, class ExprB>
+		XSIMD_INLINE static auto getBatch(const expression::Mul<ExprA, ExprB> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return getBatch(expr.a, index) * getBatch(expr.b, index);
+		}
+		template<class ExprA, class ExprB>
+		XSIMD_INLINE static auto getBatch(const expression::Div<ExprA, ExprB> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return getBatch(expr.a, index) / getBatch(expr.b, index);
+		}
+		template<class ExprA, class ExprB>
+		XSIMD_INLINE static auto getBatch(const expression::Max<ExprA, ExprB> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::max(getBatch(expr.a, index), getBatch(expr.b, index));
+		}
+		template<class ExprA, class ExprB>
+		XSIMD_INLINE static auto getBatch(const expression::Min<ExprA, ExprB> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return xsimd::min(getBatch(expr.a, index), getBatch(expr.b, index));
 		}
 	};
 
@@ -257,7 +320,7 @@ namespace _impl_fill {
 		}
 	}
 	
-	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(V, ...) \
+#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(V, ...) \
 	template<class Arch> \
 	void fill(RealPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
 		if constexpr(Arch::supported()) fillSpecialisedReal<Arch>(pointer, expr, size); \
@@ -275,7 +338,7 @@ namespace _impl_fill {
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t) \
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t)
 	
-	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(V, ...) \
+#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(V, ...) \
 	template<class Arch> \
 	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
 		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, size); \
@@ -287,38 +350,68 @@ namespace _impl_fill {
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t) \
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t)
 
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableReal<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableReal<double>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableComplex<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableComplex<double>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableSplit<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableSplit<double>>);
+// Real unary operators
+#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Name) \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Name<expression::ReadableReal<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Name<expression::ReadableReal<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Abs)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Floor)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Ceil)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Neg)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Exp)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Exp2)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Log)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Log2)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Log10)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Sqrt)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Cbrt)
+#undef SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP
 
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Neg<expression::ReadableReal<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Neg<expression::ReadableReal<double>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Neg<expression::ReadableComplex<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Neg<expression::ReadableComplex<double>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Neg<expression::ReadableSplit<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Neg<expression::ReadableSplit<double>>);
+// Complex -> real unary operators
+#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Name) \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Name<expression::ReadableComplex<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Name<expression::ReadableComplex<double>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Name<expression::ReadableSplit<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Name<expression::ReadableSplit<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Abs)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Norm)
+#undef SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP
 
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Add<expression::ReadableReal<float>, expression::ReadableReal<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Add<expression::ReadableReal<double>, expression::ReadableReal<double>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableReal<float>, expression::ReadableComplex<float>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableReal<double>, expression::ReadableComplex<double>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableReal<float>, expression::ReadableSplit<float>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableReal<double>, expression::ReadableSplit<double>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableComplex<float>, expression::ReadableReal<float>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableComplex<double>, expression::ReadableReal<double>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableComplex<float>, expression::ReadableComplex<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableComplex<double>, expression::ReadableComplex<double>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableComplex<float>, expression::ReadableSplit<float>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableComplex<double>, expression::ReadableSplit<double>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableSplit<float>, expression::ReadableReal<float>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableSplit<double>, expression::ReadableReal<double>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableSplit<float>, expression::ReadableComplex<float>>);
-//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableSplit<double>, expression::ReadableComplex<double>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableSplit<float>, expression::ReadableSplit<float>>);
-	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableSplit<double>, expression::ReadableSplit<double>>);
+// Complex unary operators
+#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Name) \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Name<expression::ReadableComplex<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Name<expression::ReadableComplex<double>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Name<expression::ReadableSplit<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Name<expression::ReadableSplit<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Conj)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Neg)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Exp)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Log)
+#undef SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP
+
+// Real binary operators
+#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Name) \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Name<expression::ReadableReal<float>, expression::ReadableReal<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Name<expression::ReadableReal<double>, expression::ReadableReal<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Max)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Min)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Add)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Sub)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Mul)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Div)
+#undef SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP
+
+// Complex binary operators
+#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Name) \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Name<expression::ReadableComplex<float>, expression::ReadableComplex<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Name<expression::ReadableComplex<double>, expression::ReadableComplex<double>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Name<expression::ReadableSplit<float>, expression::ReadableSplit<float>>); \
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Name<expression::ReadableSplit<double>, expression::ReadableSplit<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Add)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Sub)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Mul)
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Div)
+#undef SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP
 
 }
 #undef SIGNALSMITH_LINEAR_ARCH_DISPATCH
