@@ -5,22 +5,53 @@
 #include <type_traits>
 
 #include "./basic-fill-warnings.h"
+#include <iostream>
 
 namespace signalsmith { namespace linear {
 
 namespace _impl_fill {
-	template<typename V, size_t size>
-	XSIMD_INLINE V * getPrevAligned(V *array) {
-		static_assert(sizeof(size_t) == sizeof(uintptr_t), "size_t != uintptr_t, which is valid but weird enough (on modern systems) to be suspicious");
-		static constexpr uintptr_t alignBytes = sizeof(V)*size;
-		static constexpr uintptr_t alignMask = ~(alignBytes - 1);
-		uintptr_t asInt = uintptr_t(array);
-		return reinterpret_cast<V *>(asInt&alignMask);
+	// These are the "aligned fill" functions.  The basic versions don't actually use `Arch` so they're safe to use on any architecture
+
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillBasic(RealPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
+		basicFillWarning<Expr>();
+		for (size_t i = fromIndex; i < toIndex; ++i) {
+			pointer[i] = V(expr.get(i));
+		}
 	}
-	template<typename V, size_t size>
-	XSIMD_INLINE V * getNextAligned(V *array) {
-		return getPrevAligned<V, size>(array + (size - 1));
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillBasic(ComplexPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
+		basicFillWarning<Expr>();
+		using C = std::complex<V>;
+		for (size_t i = fromIndex; i < toIndex; ++i) {
+			pointer[i] = C(expr.get(i));
+		}
 	}
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillBasic(SplitPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
+		basicFillWarning<Expr>();
+		using Complex = std::complex<V>;
+		for (size_t i = fromIndex; i < toIndex; ++i) {
+			Complex c = expr.get(i);
+			pointer.real[i] = c.real();
+			pointer.imag[i] = c.imag();
+		}
+	}
+
+	template<class Arch, class V, class Expr>
+	void fill(RealPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex, Arch) {
+		fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
+	}
+	template<class Arch, class V, class Expr>
+	void fill(ComplexPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex, Arch) {
+		fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
+	}
+	template<class Arch, class V, class Expr>
+	void fill(SplitPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex, Arch) {
+		fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
+	}
+
+	// The following should only be instantiated on systems where `Arch` is a fully usable XSimd architecture
 
 #ifdef SIGNALSMITH_USE_XSIMD_DISPATCH
 #	if defined(__i386__) || defined(__x86_64__)
@@ -51,84 +82,36 @@ namespace _impl_fill {
 #	define SIGNALSMITH_LINEAR_ARCH_DISPATCH(...)
 #endif
 
-	template<class Arch, class V>
-	XSIMD_INLINE void fillConstantTyped(V *array, V constantValue, size_t size) {
+	template<class Arch, class V, class V2, class Expr>
+	void fill(RealPointer<V> pointer, expression::ConstantExpr<V2> expr, size_t fromIndex, size_t toIndex, Arch) {
+std::cout << "filling real constant\n";
 		using Batch = xsimd::batch<V, Arch>;
-		V *arrayEnd = array + size;
-		V *alignedStart = getNextAligned<V, Batch::size>(array);
-		V *alignedEnd = getPrevAligned<V, Batch::size>(arrayEnd);
-		if (alignedEnd <= alignedStart) {
-			// Too short to have an aligned section
-			while (array != arrayEnd) {
-				*array = constantValue;
-				++array;
-			}
-			return;
-		}
-		while (array < alignedStart) {
-			*array = constantValue;
-			++array;
-		}
-		Batch constantBatch{constantValue};
-		while (array < alignedStart) {
-			constantBatch.store_aligned(array);
-			array += Batch::size;
-		}
-		while (array < arrayEnd) {
-			*array = constantValue;
-			++array;
+		Batch batch{V(expr.value)};
+		for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
+			batch.store_aligned(pointer + i);
 		}
 	}
-	template<class Arch>
-	void fillConstant(float *array, float constantValue, size_t size, Arch) {
-		if constexpr(Arch::supported()) fillConstantTyped<Arch, float>(array, constantValue, size);
-	}
-	template<class Arch>
-	void fillConstant(double *array, double constantValue, size_t size, Arch) {
-		if constexpr(Arch::supported()) fillConstantTyped<Arch, double>(array, constantValue, size);
-	}
-	template<class Arch>
-	void fillConstant(std::complex<float> *array, std::complex<float> constantValue, size_t size, Arch) {
-		if constexpr(Arch::supported()) fillConstantTyped<Arch, std::complex<float>>(array, constantValue, size);
-	}
-	template<class Arch>
-	void fillConstant(std::complex<double> *array, std::complex<double> constantValue, size_t size, Arch) {
-		if constexpr(Arch::supported()) fillConstantTyped<Arch, std::complex<double>>(array, constantValue, size);
-	}
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, float *, float, size_t)
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, double *, double, size_t)
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<float> *, std::complex<float>, size_t)
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, std::complex<double> *, std::complex<double>, size_t)
-	
-	template<class Arch, class Pointer, class Expr>
-	XSIMD_INLINE void fillBasic(Pointer pointer, Expr expr, size_t size) {
-		basicFillWarning<Expr>();
-		for (size_t i = 0; i < size; ++i) {
-			pointer[i] = expr.get(i);
+	template<class Arch, class V, class V2, class Expr>
+	void fill(ComplexPointer<V> pointer, expression::ConstantExpr<V2> expr, size_t fromIndex, size_t toIndex, Arch) {
+std::cout << "filling complex constant\n";
+		using C = std::complex<V>;
+		using Batch = xsimd::batch<C, Arch>;
+		Batch batch{C(expr.value)};
+		for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
+			batch.store_aligned(pointer + i);
 		}
 	}
-	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillBasic(SplitPointer<V> pointer, Expr expr, size_t size) {
-		basicFillWarning<Expr>();
-		using Complex = typename SplitPointer<V>::Complex;
-		for (size_t i = 0; i < size; ++i) {
-			Complex c = expr.get(i);
-			pointer.real[i] = c.real();
-			pointer.imag[i] = c.imag();
+	template<class Arch, class V, class V2, class Expr>
+	void fill(SplitPointer<V> pointer, expression::ConstantExpr<V2> expr, size_t fromIndex, size_t toIndex, Arch) {
+std::cout << "filling split constant\n";
+		using C = std::complex<V>;
+		using Batch = xsimd::batch<C, Arch>;
+		C value = C(expr.value);
+		Batch batchReal{value.real()}, batchImag{value.imag()};
+		for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
+			batchReal.store_aligned(pointer.real + i);
+			batchImag.store_aligned(pointer.imag + i);
 		}
-	}
-
-	template<class Arch, class V, class Expr>
-	void fill(RealPointer<V> pointer, Expr expr, size_t size, Arch) {
-		fillBasic<Arch>(pointer, expr, size);
-	}
-	template<class Arch, class V, class Expr>
-	void fill(ComplexPointer<V> pointer, Expr expr, size_t size, Arch) {
-		fillBasic<Arch>(pointer, expr, size);
-	}
-	template<class Arch, class V, class Expr>
-	void fill(SplitPointer<V> pointer, Expr expr, size_t size, Arch) {
-		fillBasic<Arch>(pointer, expr, size);
 	}
 
 	template<class Arch>
@@ -226,127 +209,53 @@ namespace _impl_fill {
 	};
 
 	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillSpecialisedReal(V *array, Expr expr, size_t size) {
+	XSIMD_INLINE void fillSpecialisedReal(RealPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
 		using Batch = xsimd::batch<V, Arch>;
-		V *arrayEnd = array + size;
-		V *alignedStart = getNextAligned<V, Batch::size>(array);
-		V *alignedEnd = getPrevAligned<V, Batch::size>(arrayEnd);
-		if (alignedEnd <= alignedStart) {
-			// Too short to have an aligned section
-			size_t i = 0;
-			while (array + i != arrayEnd) {
-				*(array + i) = V(expr.get(i));
-				++i;
-			}
-			return;
+		for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
+			Batch b = GetBatch<Arch>::getBatch(expr, i);
+			b.store_aligned(pointer + i);
 		}
-		size_t i = 0;
-		while (array + i < alignedStart) {
-			*(array + i) = V(expr.get(i));
-			++i;
+	}
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillSpecialisedComplex(ComplexPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
+		using Batch = xsimd::batch<std::complex<V>, Arch>;
+		for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
+			Batch b = GetBatch<Arch>::getBatch(expr, i);
+			b.store_aligned(pointer + i);
 		}
-		while (array + i < alignedEnd) {
-			auto batch = GetBatch<Arch>::getBatch(expr, i);
-			xsimd::batch_cast<V>(batch).store_aligned(array + i);
-			i += Batch::size;
-		}
-		while (array + i < arrayEnd) {
-			*(array + i) = V(expr.get(i));
-			++i;
+	}
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillSpecialisedSplit(SplitPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
+		using Batch = xsimd::batch<std::complex<V>, Arch>;
+		for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
+			Batch b = GetBatch<Arch>::getBatch(expr, i);
+			b.store_aligned(pointer.real + i, pointer.imag + i);
 		}
 	}
 
-	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillSpecialisedComplex(std::complex<V> *array, Expr expr, size_t size) {
-		using C = std::complex<V>;
-		using Batch = xsimd::batch<C, Arch>;
-		C *arrayEnd = array + size;
-		C *alignedStart = getNextAligned<C, Batch::size>(array);
-		C *alignedEnd = getPrevAligned<C, Batch::size>(arrayEnd);
-		if (alignedEnd <= alignedStart) {
-			// Too short to have an aligned section
-			size_t i = 0;
-			while (array + i != arrayEnd) {
-				*(array + i) = expr.get(i);
-				++i;
-			}
-			return;
-		}
-		size_t i = 0;
-		while (array + i < alignedStart) {
-			*(array + i) = C(expr.get(i));
-			++i;
-		}
-		while (array + i < alignedEnd) {
-			auto batch = GetBatch<Arch>::getBatch(expr, i);
-			xsimd::batch_cast<C>(batch).store_aligned(array + i);
-			i += Batch::size;
-		}
-		while (array + i < arrayEnd) {
-			*(array + i) = C(expr.get(i));
-			++i;
-		}
-	}
-	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillSpecialisedSplit(SplitPointer<V> array, Expr expr, size_t size) {
-		using C = std::complex<V>;
-		using Batch = xsimd::batch<C, Arch>;
-		V *real = array.real;
-		V *realEnd = real + size;
-		V *realAlignedStart = getNextAligned<V, Batch::size>(real);
-		V *realAlignedEnd = getPrevAligned<V, Batch::size>(realEnd);
-		
-		bool alignmentReal = uintptr_t(array.real)&(Batch::size*sizeof(V) - 1);
-		bool alignmentImag = uintptr_t(array.imag)&(Batch::size*sizeof(V) - 1);
-		if (realAlignedEnd <= realAlignedStart || (alignmentReal != alignmentImag)) {
-			// Either too short to have an aligned section, or the real/imaginary parts have unequal alignment
-			size_t i = 0;
-			while (real + i != realEnd) {
-				array[i] = C(expr.get(i));
-				++i;
-			}
-			return;
-		}
-		size_t i = 0;
-		while (real + i < realAlignedStart) {
-			array[i] = C(expr.get(i));
-			++i;
-		}
-		while (real + i < realAlignedEnd) {
-			auto batch = GetBatch<Arch>::getBatch(expr, i);
-			xsimd::batch_cast<C>(batch).store_aligned(real + i, array.imag + i);
-			i += Batch::size;
-		}
-		while (real + i < realEnd) {
-			array[i] = C(expr.get(i));
-			++i;
-		}
-	}
-	
 #define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(V, ...) \
 	template<class Arch> \
-	void fill(RealPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
-		if constexpr(Arch::supported()) fillSpecialisedReal<Arch>(pointer, expr, size); \
+	void fill(RealPointer<V> pointer, __VA_ARGS__ expr, size_t fromIndex, size_t toIndex, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedReal<Arch>(pointer, expr, fromIndex, toIndex); \
 	} \
 	template<class Arch> \
-	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
-		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, size); \
+	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t fromIndex, size_t toIndex, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, fromIndex, toIndex); \
 	} \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, RealPointer<V>, __VA_ARGS__, size_t) \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t) \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, RealPointer<V>, __VA_ARGS__, size_t, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t, size_t) \
 	
 #define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(V, ...) \
 	template<class Arch> \
-	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
-		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, size); \
+	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t fromIndex, size_t toIndex, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, fromIndex, toIndex); \
 	} \
 	template<class Arch> \
-	void fill(SplitPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
-		if constexpr(Arch::supported()) fillSpecialisedSplit<Arch>(pointer, expr, size); \
+	void fill(SplitPointer<V> pointer, __VA_ARGS__ expr, size_t fromIndex, size_t toIndex, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedSplit<Arch>(pointer, expr, fromIndex, toIndex); \
 	} \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t) \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t, size_t)
 
 // Real unary operators
 #define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_OP(Name) \
@@ -494,31 +403,117 @@ private:
 	}
 #endif
 
-	//---- Everything below this point only gets compiled for targets where Arch is fully supported ----//
+	template<typename V, size_t size>
+	XSIMD_INLINE static V * getPrevAligned(V *array) {
+		static_assert(sizeof(size_t) == sizeof(uintptr_t), "size_t != uintptr_t, which is valid but weird enough (on modern systems) to be suspicious");
+		static constexpr uintptr_t alignBytes = sizeof(V)*size;
+		static constexpr uintptr_t alignMask = alignBytes - 1;
+		uintptr_t asInt = uintptr_t(array);
+		return reinterpret_cast<V *>(asInt&alignMask);
+	}
+	template<typename V, size_t size>
+	XSIMD_INLINE static V * getNextAligned(V *array) {
+		return getPrevAligned<V, size>(array + (size - 1));
+	}
 
 	// Generic fill
 	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillExpr(RealPointer<V> pointer, Expr expr, size_t size) {
-		_impl_fill::fill<Arch>(pointer, expr, size, Arch{});
+	XSIMD_INLINE void fillExpr(RealPointer<V> array, Expr expr, size_t size) {
+		using Batch = xsimd::batch<V, Arch>;
+		V *arrayEnd = array + size;
+		V *alignedStart = getNextAligned<V, Batch::size>(array);
+		V *alignedEnd = getPrevAligned<V, Batch::size>(arrayEnd);
+		if (alignedEnd <= alignedStart) { // Too short to have an aligned section
+			for (size_t i = 0; i < size; ++i) {
+				array[i] = V(expr.get(i));
+			}
+			return;
+		}
+		// Unaligned starting block
+		size_t i = 0;
+		while (array + i < alignedStart) {
+			*(array + i) = V(expr.get(i));
+			++i;
+		}
+
+		// SIMD fill
+		size_t alignedEndI = size_t(alignedEnd - array);
+		_impl_fill::fill<Arch>(array, expr, i, alignedEndI, Arch{});
+		
+		// Unaligned ending block
+		for (size_t i = alignedEndI; i < size; ++i) {
+			array[i] = V(expr.get(i));
+		}
 	}
 	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillExpr(ComplexPointer<V> pointer, Expr expr, size_t size) {
-		_impl_fill::fill<Arch>(pointer, expr, size, Arch{});
+	XSIMD_INLINE void fillExpr(ComplexPointer<V> array, Expr expr, size_t size) {
+		using C = std::complex<V>;
+		using Batch = xsimd::batch<C, Arch>;
+		C *arrayEnd = array + size;
+		C *alignedStart = getNextAligned<C, Batch::size>(array);
+		C *alignedEnd = getPrevAligned<C, Batch::size>(arrayEnd);
+		if (alignedEnd <= alignedStart) { // Too short to have an aligned section
+			for (size_t i = 0; i < size; ++i) {
+				array[i] = C(expr.get(i));
+			}
+			return;
+		}
+		size_t i = 0;
+		while (array + i < alignedStart) {
+			*(array + i) = C(expr.get(i));
+			++i;
+		}
+
+		// SIMD fill
+		size_t alignedEndI = size_t(alignedEnd - array);
+		_impl_fill::fill<Arch>(array, expr, i, alignedEndI, Arch{});
+
+		for (size_t i = alignedEndI; i < size; ++i) {
+			array[i] = C(expr.get(i));
+		}
 	}
 	template<class Arch, class V, class Expr>
-	XSIMD_INLINE void fillExpr(SplitPointer<V> pointer, Expr expr, size_t size) {
-		_impl_fill::fill<Arch>(pointer, expr, size, Arch{});
+	XSIMD_INLINE void fillExpr(SplitPointer<V> array, Expr expr, size_t size) {
+		using C = std::complex<V>;
+		using Batch = xsimd::batch<C, Arch>;
+		V *real = array.real;
+		V *realEnd = real + size;
+		V *realAlignedStart = getNextAligned<V, Batch::size>(real);
+		V *realAlignedEnd = getPrevAligned<V, Batch::size>(realEnd);
+		
+		bool alignmentReal = uintptr_t(array.real)&(Batch::size*sizeof(V) - 1);
+		bool alignmentImag = uintptr_t(array.imag)&(Batch::size*sizeof(V) - 1);
+		if (realAlignedEnd <= realAlignedStart || (alignmentReal != alignmentImag)) {
+			// Either too short to have an aligned section, or the real/imaginary parts have unequal alignment
+			for (size_t i = 0; i < size; ++i) {
+				array[i] = C(expr.get(i));
+			}
+			return;
+		}
+		size_t i = 0;
+		while (real + i < realAlignedStart) {
+			array[i] = C(expr.get(i));
+			++i;
+		}
+
+		// SIMD fill
+		size_t alignedEndI = size_t(realAlignedEnd - real);
+		_impl_fill::fill<Arch>(array, expr, i, alignedEndI, Arch{});
+
+		for (size_t i = alignedEndI; i < size; ++i) {
+			array[i] = C(expr.get(i));
+		}
 	}
 	// Filling a split-complex vector with real values won't hit the specialisations below, so we handle it here
 	template<class Arch, class Expr>
 	XSIMD_INLINE ItemType<Expr, float, void> fillExpr(SplitPointer<float> pointer, Expr expr, size_t size) {
-		_impl_fill::fill<Arch>(pointer.real, expr, size, Arch{});
-		_impl_fill::fillConstant(pointer.imag, 0.0f, size, Arch{});
+		fillExpr<Arch>(pointer.real, expr, size);
+		fillExpr<Arch>(pointer.imag, expression::ConstantExpr<float>(0), size);
 	}
 	template<class Arch, class Expr>
 	XSIMD_INLINE ItemType<Expr, double, void> fillExpr(SplitPointer<double> pointer, Expr expr, size_t size) {
-		_impl_fill::fill<Arch>(pointer.real, expr, size, Arch{});
-		_impl_fill::fillConstant(pointer.imag, 0.0, size, Arch{});
+		fillExpr<Arch>(pointer.real, expr, size);
+		fillExpr<Arch>(pointer.imag, expression::ConstantExpr<double>(0), size);
 	}
 	
 	// Copying from existing pointer
@@ -554,43 +549,6 @@ private:
 	XSIMD_INLINE void fillExpr(ComplexPointer<double> pointer, WritableComplex<double> expr, size_t size) {
 		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<double>));
 	}
-	
-	// Filling with a constant
-	template<class Arch, class V>
-	XSIMD_INLINE void fillExpr(RealPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		float constantValue = expr.value;
-		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
-	}
-	template<class Arch, class V>
-	XSIMD_INLINE void fillExpr(RealPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		double constantValue = expr.value;
-		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
-	}
-	template<class Arch, class V>
-	XSIMD_INLINE void fillExpr(ComplexPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		std::complex<float> constantValue = expr.value;
-		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
-	}
-	template<class Arch, class V>
-	XSIMD_INLINE void fillExpr(ComplexPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		std::complex<double> constantValue = expr.value;
-		_impl_fill::fillConstant(pointer, constantValue, size, Arch{});
-	}
-	template<class Arch, class V>
-	XSIMD_INLINE void fillExpr(SplitPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		std::complex<float> v = expr.value;
-		float vr = v.real(), vi = v.imag();
-		_impl_fill::fillConstant(pointer.real, vr, size, Arch{});
-		_impl_fill::fillConstant(pointer.imag, vi, size, Arch{});
-	}
-	template<class Arch, class V>
-	XSIMD_INLINE void fillExpr(SplitPointer<double> pointer, expression::ConstantExpr<V> expr, size_t size) {
-		std::complex<double> v = expr.value;
-		double vr = v.real(), vi = v.imag();
-		_impl_fill::fillConstant(pointer.real, vr, size, Arch{});
-		_impl_fill::fillConstant(pointer.imag, vi, size, Arch{});
-	}
 };
 
 }}; // namespace
-

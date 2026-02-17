@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 project(linear-tests VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 17)
+add_compile_definitions(SIGNALSMITH_LOG_WARNINGS)
 
 # MSVC needs an extra flag to handle this many templates
 if (MSVC)
@@ -33,4 +34,3 @@ add_subdirectory(".." ${CMAKE_CURRENT_BINARY_DIR}/signalsmith-linear)
 
 add_executable(tests ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
 target_link_libraries(tests PRIVATE signalsmith-linear signalsmith-plot)
-target_compile_definitions(tests PUBLIC SIGNALSMITH_LOG_WARNINGS=)
