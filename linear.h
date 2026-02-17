@@ -17,6 +17,10 @@
 #include <type_traits>
 #include <functional>
 
+#ifdef SIGNALSMITH_LOG_WARNINGS
+#	include <iostream>
+#endif
+
 namespace signalsmith { namespace linear {
 
 template<typename V>
@@ -126,6 +130,9 @@ namespace expression {
 	// All base Exprs inherit from this, so we can SFINAE-test for them
 	struct Base {};
 	inline void mustBeExpr(const Base &) {}
+
+	struct BaseUnary : public Base {};
+	struct BaseBinary : public Base {};
 
 	template<typename V>
 	struct ConstantExpr : public Base {
@@ -240,7 +247,7 @@ namespace expression {
 #define SIGNALSMITH_AUDIO_LINEAR_UNARY_PREFIX(Name, OP) \
 namespace expression { \
 	template<class A> \
-	struct Name : public Base { \
+	struct Name : public BaseUnary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + ">"); \
 		using Unwrapped = Name<Unwrapped<A>>; \
 		A a; \
@@ -269,7 +276,7 @@ Expression<A> operator-(const Expression<expression::Neg<A>> &expr) { \
 #define SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Name, OP) \
 namespace expression { \
 	template<class A, class B> \
-	struct Name : public Base { \
+	struct Name : public BaseBinary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
 		using Unwrapped = Name<Unwrapped<A>, Unwrapped<B>>; \
 		A a; \
@@ -311,7 +318,7 @@ namespace expression {
 		return {a}; \
 	} \
 	template<class A> \
-	struct Name : public Base { \
+	struct Name : public BaseUnary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + ">"); \
 		using Unwrapped = Name<Unwrapped<A>>; \
 		A a; \
@@ -386,7 +393,7 @@ namespace expression {
 		return func((decltype(a + b))a, (decltype(a + b))b); \
 	} \
 	template<class A, class B> \
-	struct Name : public Base { \
+	struct Name : public BaseBinary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
 		using Unwrapped = Name<Unwrapped<A>, Unwrapped<B>>; \
 		A a; \
@@ -503,10 +510,8 @@ struct WritableExpression : public Expression<BaseExpr> {
 };
 
 /// Helper class for temporary storage
-template<typename V, size_t alignBytes=sizeof(V)>
+template<typename V, bool allowAllocation, size_t alignBytes>
 struct Temporary {
-	// This is called if we don't have enough reserved space and end up allocating
-	std::function<void(size_t)> allocationWarning;
 	
 	void reserve(size_t size) {
 		if (buffer) delete[] buffer;
@@ -563,21 +568,24 @@ private:
 		V *result = start;
 		V *newStart = start + size;
 		if (newStart > end) {
+#ifdef SIGNALSMITH_LOG_WARNINGS
+		std::cerr << "Signalsmith Linear: insufficient temporary storage (" << (newStart > buffer) << "\n";
+#endif
+			if (!allowAllocation) return nullptr;
 			// OK, actually we ran out of temporary space, so allocate
 			fallbacks.emplace_back(size + extraAlignmentItems);
 			result = nextAligned(fallbacks.back().data());
 			// but we're not happy about it. >:(
-			if (allocationWarning) allocationWarning(newStart - buffer);
 		}
 		start = nextAligned(newStart);
 		return result;
 	}
 };
 
-template<class Linear, size_t alignBytes=64>
+template<class Linear, bool allowAllocation=true, size_t alignBytes=64>
 struct CachedResults {
-	using TemporaryFloats = Temporary<float, alignBytes>;
-	using TemporaryDoubles = Temporary<double, alignBytes>;
+	using TemporaryFloats = Temporary<float, allowAllocation, alignBytes>;
+	using TemporaryDoubles = Temporary<double, allowAllocation, alignBytes>;
 
 	template<typename V>
 	using WritableReal = typename Linear::template WritableReal<V>;
@@ -1072,7 +1080,7 @@ struct LinearImpl : public LinearImplBase<useLinear> {
 		cached.reserveDoubles(size);
 	}
 private:
-	CachedResults<LinearImpl, 16> cached;
+	CachedResults<LinearImpl, true, 16> cached;
 };
 
 }}; // namespace
@@ -1081,8 +1089,8 @@ private:
 #	include "./platform/linear-accelerate.h"
 #elif defined(SIGNALSMITH_USE_XSIMD)
 #	include "./platform/linear-xsimd.h"
-#elif 0//defined(SIGNALSMITH_USE_IPP)
-#	include "./platform/linear-ipp.h"
+//#elif defined(SIGNALSMITH_USE_IPP)
+//#	include "./platform/linear-ipp.h"
 #endif
 
 #endif // include guard

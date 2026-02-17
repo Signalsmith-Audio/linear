@@ -41,8 +41,7 @@ namespace _impl_fill {
 			extern template void fnName<xsimd::sse4_2>(__VA_ARGS__, xsimd::sse4_2); \
 			extern template void fnName<xsimd::avx>(__VA_ARGS__, xsimd::avx); \
 			extern template void fnName<xsimd::avx2>(__VA_ARGS__, xsimd::avx2); \
-			extern template void fnName<xsimd::avx512f>(__VA_ARGS__, xsimd::avx512f); \
-			extern template void fnName<xsimd::avx512er>(__VA_ARGS__, xsimd::avx512er);
+			extern template void fnName<xsimd::avx512f>(__VA_ARGS__, xsimd::avx512f);
 #	elif defined(SIGNALSMITH_USE_XSIMD_DISPATCH_ARM)
 #		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, ...) \
 			extern template void fnName<xsimd::neon>(__VA_ARGS__, xsimd::neon); \
@@ -119,8 +118,12 @@ namespace _impl_fill {
 		}
 	}
 
-	template<class Arch, class Pointer, class Expr>
-	void fill(Pointer pointer, Expr expr, size_t size, Arch) {
+	template<class Arch, class V, class Expr>
+	void fill(RealPointer<V> pointer, Expr expr, size_t size, Arch) {
+		fillBasic<Arch>(pointer, expr, size);
+	}
+	template<class Arch, class V, class Expr>
+	void fill(ComplexPointer<V> pointer, Expr expr, size_t size, Arch) {
 		fillBasic<Arch>(pointer, expr, size);
 	}
 	template<class Arch, class V, class Expr>
@@ -329,11 +332,6 @@ namespace _impl_fill {
 	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
 		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, size); \
 	} \
-	template<class Arch> \
-	void fill(SplitPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
-		if constexpr(Arch::supported()) fillSpecialisedReal<Arch>(pointer.real, expr, size); \
-		std::memset(pointer.imag, 0, size*sizeof(V)); \
-	} \
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, RealPointer<V>, __VA_ARGS__, size_t) \
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t) \
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t)
@@ -420,22 +418,13 @@ template<>
 struct LinearImpl<true> : public LinearImplBase<true> {
 	using Base = LinearImplBase<true>;
 
-	LinearImpl() : Base(this), cached(*this) {
+	LinearImpl() : Base(this) {
 		basicFillWarningReset();
 		chooseArchitecture();
 	}
 
 	template<class V>
 	void reserve(size_t) {}
-	
-	template<>
-	void reserve<float>(size_t size) {
-		cached.reserveFloats(size*4);
-	}
-	template<>
-	void reserve<double>(size_t size) {
-		cached.reserveDoubles(size*4);
-	}
 
 	template<class Pointer, class Expr>
 	void fill(Pointer pointer, Expr expr, size_t size) {
@@ -452,7 +441,6 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 	};
 
 private:
-	CachedResults<LinearImpl> cached;
 
 #ifdef SIGNALSMITH_USE_XSIMD_DISPATCH_X86
 	enum class Arch{sse2, sse3, sse4_2, avx, avx2, avx512f, avx512er};
@@ -508,32 +496,34 @@ private:
 
 	//---- Everything below this point only gets compiled for targets where Arch is fully supported ----//
 
-	// Most generic fill
-	template<class Arch, class Pointer, class Expr>
-	XSIMD_INLINE void fillExpr(Pointer pointer, Expr expr, size_t size) {
+	// Generic fill
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillExpr(RealPointer<V> pointer, Expr expr, size_t size) {
 		_impl_fill::fill<Arch>(pointer, expr, size, Arch{});
 	}
-	
-	template<typename V>
-	void clear(V *v, size_t size) {
-		// TODO: memset?
-		for (size_t i = 0; i < size; ++i) v[i] = 0;
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillExpr(ComplexPointer<V> pointer, Expr expr, size_t size) {
+		_impl_fill::fill<Arch>(pointer, expr, size, Arch{});
+	}
+	template<class Arch, class V, class Expr>
+	XSIMD_INLINE void fillExpr(SplitPointer<V> pointer, Expr expr, size_t size) {
+		_impl_fill::fill<Arch>(pointer, expr, size, Arch{});
 	}
 	// Filling a split-complex vector with real values won't hit the specialisations below, so we handle it here
 	template<class Arch, class Expr>
-	XSIMD_INLINE ItemType<Expr, float, void> fillBasic(SplitPointer<float> pointer, Expr expr, size_t size) {
-		fillExpr<Arch>(pointer.real, expr, size);
-		clear(pointer.imag, size);
+	XSIMD_INLINE ItemType<Expr, float, void> fillExpr(SplitPointer<float> pointer, Expr expr, size_t size) {
+		_impl_fill::fill<Arch>(pointer.real, expr, size, Arch{});
+		_impl_fill::fillConstant(pointer.imag, 0.0f, size, Arch{});
 	}
 	template<class Arch, class Expr>
-	XSIMD_INLINE ItemType<Expr, double, void> fillBasic(SplitPointer<double> pointer, Expr expr, size_t size) {
-		fillExpr<Arch>(pointer.real, expr, size);
-		clear(pointer.imag, size);
+	XSIMD_INLINE ItemType<Expr, double, void> fillExpr(SplitPointer<double> pointer, Expr expr, size_t size) {
+		_impl_fill::fill<Arch>(pointer.real, expr, size, Arch{});
+		_impl_fill::fillConstant(pointer.imag, 0.0, size, Arch{});
 	}
 	
 	// Copying from existing pointer
 	template<class Arch>
-	XSIMD_INLINE void fillExpr(RealPointer<float> pointer, expression::ReadableReal<float> expr, size_t size, Arch) {
+	XSIMD_INLINE void fillExpr(RealPointer<float> pointer, expression::ReadableReal<float> expr, size_t size) {
 		std::memcpy(pointer, expr.pointer, size*sizeof(float));
 	}
 	template<class Arch>

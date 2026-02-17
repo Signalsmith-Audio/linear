@@ -48,8 +48,8 @@ if(SIGNALSMITH_USE_XSIMD)
 
 	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_XSIMD_DISPATCH)
 
-	list(APPEND xsimd_arch_names sse2 sse3 sse4_2 avx avx2 avx512f avx512er neon neon64)
-	list(APPEND gcc_arch_flags -msse2 -msse3 -msse4.2 -mavx -mavx2 -mavx512f "-mavx512er -mavx512cd" -mfpu=neon -mfpu=neon-vfpv4)
+	list(APPEND xsimd_arch_names sse2 sse3 sse4_2 avx avx2 avx512f neon neon64)
+	list(APPEND gcc_arch_flags -msse2 -msse3 -msse4.2 -mavx -mavx2 -mavx512f -mfpu=neon -mfpu=neon-vfpv4)
 	foreach(xsimdName gccFlagList IN ZIP_LISTS xsimd_arch_names gcc_arch_flags) # TODO: use ZIP_LISTS if we need more detail
 		set(xsimdTargetName "signalsmith-linear_xsimd_${xsimdName}")
 		add_library(${xsimdTargetName} STATIC ${CMAKE_CURRENT_SOURCE_DIR}/platform/linear-xsimd-dispatch.cpp)
