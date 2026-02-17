@@ -2,6 +2,7 @@
 
 #include <cstring> // std::memcpy
 #include <cstdint> // uintptr_t
+#include <type_traits>
 
 #include "./basic-fill-warnings.h"
 
@@ -22,11 +23,17 @@ namespace _impl_fill {
 	}
 
 #ifdef SIGNALSMITH_USE_XSIMD_DISPATCH
+#	if defined(__i386__) || defined(__x86_64__)
+#		define SIGNALSMITH_USE_XSIMD_DISPATCH_X86
+#	elif defined(__ARM_NEON)
+#		define SIGNALSMITH_USE_XSIMD_DISPATCH_ARM
+#	endif
+
 #	ifdef SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH
 // Declare a concrete specialisation for one particular architecture
 #		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, ...) \
 			template void fnName<SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH>(__VA_ARGS__, SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH);
-#	else
+#	elif defined(SIGNALSMITH_USE_XSIMD_DISPATCH_X86)
 // List the arch-specific specialisations which will be defined in other units
 #		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, ...) \
 			extern template void fnName<xsimd::sse2>(__VA_ARGS__, xsimd::sse2); \
@@ -36,6 +43,10 @@ namespace _impl_fill {
 			extern template void fnName<xsimd::avx2>(__VA_ARGS__, xsimd::avx2); \
 			extern template void fnName<xsimd::avx512f>(__VA_ARGS__, xsimd::avx512f); \
 			extern template void fnName<xsimd::avx512er>(__VA_ARGS__, xsimd::avx512er);
+#	elif defined(SIGNALSMITH_USE_XSIMD_DISPATCH_ARM)
+#		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, ...) \
+			extern template void fnName<xsimd::neon>(__VA_ARGS__, xsimd::neon); \
+			extern template void fnName<xsimd::neon64>(__VA_ARGS__, xsimd::neon64);
 #	endif
 #else
 #	define SIGNALSMITH_LINEAR_ARCH_DISPATCH(...)
@@ -71,19 +82,19 @@ namespace _impl_fill {
 	}
 	template<class Arch>
 	void fillConstant(float *array, float constantValue, size_t size, Arch) {
-		fillConstantTyped<Arch, float>(array, constantValue, size);
+		if constexpr(Arch::supported()) fillConstantTyped<Arch, float>(array, constantValue, size);
 	}
 	template<class Arch>
 	void fillConstant(double *array, double constantValue, size_t size, Arch) {
-		fillConstantTyped<Arch, double>(array, constantValue, size);
+		if constexpr(Arch::supported()) fillConstantTyped<Arch, double>(array, constantValue, size);
 	}
 	template<class Arch>
 	void fillConstant(std::complex<float> *array, std::complex<float> constantValue, size_t size, Arch) {
-		fillConstantTyped<Arch, std::complex<float>>(array, constantValue, size);
+		if constexpr(Arch::supported()) fillConstantTyped<Arch, std::complex<float>>(array, constantValue, size);
 	}
 	template<class Arch>
 	void fillConstant(std::complex<double> *array, std::complex<double> constantValue, size_t size, Arch) {
-		fillConstantTyped<Arch, std::complex<double>>(array, constantValue, size);
+		if constexpr(Arch::supported()) fillConstantTyped<Arch, std::complex<double>>(array, constantValue, size);
 	}
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, float *, float, size_t)
 	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fillConstant, double *, double, size_t)
@@ -133,9 +144,18 @@ namespace _impl_fill {
 		}
 
 		template<class Expr>
-		XSIMD_INLINE static auto getBatch(const expression::Abs<Expr> &expr, size_t index) -> xsimd::batch<decltype(expr.get(0)), Arch> {
+		XSIMD_INLINE static auto getBatch(const expression::Abs<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
 			auto batch = getBatch(expr.a, index);
 			return xsimd::abs(batch);
+		}
+		template<class Expr>
+		XSIMD_INLINE static auto getBatch(const expression::Neg<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			auto batch = getBatch(expr.a, index);
+			return -batch;
+		}
+		template<class ExprA, class ExprB>
+		XSIMD_INLINE static auto getBatch(const expression::Add<ExprA, ExprB> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+			return getBatch(expr.a, index) + getBatch(expr.b, index);
 		}
 	};
 
@@ -237,35 +257,35 @@ namespace _impl_fill {
 		}
 	}
 	
-	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(V, Expr) \
+	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(V, ...) \
 	template<class Arch> \
-	void fill(RealPointer<V> pointer, Expr expr, size_t size, Arch) { \
-		fillSpecialisedReal<Arch>(pointer, expr, size); \
+	void fill(RealPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedReal<Arch>(pointer, expr, size); \
 	} \
 	template<class Arch> \
-	void fill(ComplexPointer<V> pointer, Expr expr, size_t size, Arch) { \
-		fillSpecialisedComplex<Arch>(pointer, expr, size); \
+	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, size); \
 	} \
 	template<class Arch> \
-	void fill(SplitPointer<V> pointer, Expr expr, size_t size, Arch) { \
-		fillSpecialisedReal<Arch>(pointer.real, expr, size); \
+	void fill(SplitPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedReal<Arch>(pointer.real, expr, size); \
 		std::memset(pointer.imag, 0, size*sizeof(V)); \
 	} \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, RealPointer<V>, Expr, size_t) \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, Expr, size_t) \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, Expr, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, RealPointer<V>, __VA_ARGS__, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t)
 	
-	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(V, Expr) \
+	#define SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(V, ...) \
 	template<class Arch> \
-	void fill(ComplexPointer<V> pointer, Expr expr, size_t size, Arch) { \
-		fillSpecialisedComplex<Arch>(pointer, expr, size); \
+	void fill(ComplexPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedComplex<Arch>(pointer, expr, size); \
 	} \
 	template<class Arch> \
-	void fill(SplitPointer<V> pointer, Expr expr, size_t size, Arch) { \
-		fillSpecialisedSplit<Arch>(pointer, expr, size); \
+	void fill(SplitPointer<V> pointer, __VA_ARGS__ expr, size_t size, Arch) { \
+		if constexpr(Arch::supported()) fillSpecialisedSplit<Arch>(pointer, expr, size); \
 	} \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, Expr, size_t) \
-	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, Expr, size_t)
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, ComplexPointer<V>, __VA_ARGS__, size_t) \
+	SIGNALSMITH_LINEAR_ARCH_DISPATCH(fill, SplitPointer<V>, __VA_ARGS__, size_t)
 
 	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableReal<float>>);
 	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableReal<double>>);
@@ -273,6 +293,33 @@ namespace _impl_fill {
 	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableComplex<double>>);
 	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Abs<expression::ReadableSplit<float>>);
 	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Abs<expression::ReadableSplit<double>>);
+
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Neg<expression::ReadableReal<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Neg<expression::ReadableReal<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Neg<expression::ReadableComplex<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Neg<expression::ReadableComplex<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Neg<expression::ReadableSplit<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Neg<expression::ReadableSplit<double>>);
+
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(float, expression::Add<expression::ReadableReal<float>, expression::ReadableReal<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_REAL(double, expression::Add<expression::ReadableReal<double>, expression::ReadableReal<double>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableReal<float>, expression::ReadableComplex<float>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableReal<double>, expression::ReadableComplex<double>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableReal<float>, expression::ReadableSplit<float>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableReal<double>, expression::ReadableSplit<double>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableComplex<float>, expression::ReadableReal<float>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableComplex<double>, expression::ReadableReal<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableComplex<float>, expression::ReadableComplex<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableComplex<double>, expression::ReadableComplex<double>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableComplex<float>, expression::ReadableSplit<float>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableComplex<double>, expression::ReadableSplit<double>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableSplit<float>, expression::ReadableReal<float>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableSplit<double>, expression::ReadableReal<double>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableSplit<float>, expression::ReadableComplex<float>>);
+//	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableSplit<double>, expression::ReadableComplex<double>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(float, expression::Add<expression::ReadableSplit<float>, expression::ReadableSplit<float>>);
+	SIGNALSMITH_LINEAR_ARCH_SPECIALISE_COMPLEX(double, expression::Add<expression::ReadableSplit<double>, expression::ReadableSplit<double>>);
+
 }
 #undef SIGNALSMITH_LINEAR_ARCH_DISPATCH
 
@@ -314,7 +361,7 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 private:
 	CachedResults<LinearImpl> cached;
 
-#if SIGNALSMITH_USE_XSIMD_DISPATCH && (defined(__i386__) || defined(__x86_64__))
+#ifdef SIGNALSMITH_USE_XSIMD_DISPATCH_X86
 	enum class Arch{sse2, sse3, sse4_2, avx, avx2, avx512f, avx512er};
 	Arch bestArch = Arch::sse2;
 
@@ -340,7 +387,7 @@ private:
 			case Arch::avx512er: return fillExpr<xsimd::avx512er>(pointer, expr, size);
 		}
 	}
-#elif SIGNALSMITH_USE_XSIMD_DISPATCH && defined(__ARM_NEON)
+#elif defined(SIGNALSMITH_USE_XSIMD_DISPATCH_ARM)
 	enum class Arch{neon, neon64};
 	Arch bestArch = Arch::neon; // TODO: better fallback for non-NEON systems
 
