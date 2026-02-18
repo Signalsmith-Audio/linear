@@ -133,6 +133,7 @@ namespace expression {
 
 	struct BaseUnary : public Base {};
 	struct BaseBinary : public Base {};
+	struct BasePointer : public Base {};
 
 	template<typename V>
 	struct ConstantExpr : public Base {
@@ -189,7 +190,7 @@ namespace expression {
 
 	// Expressions that just read from a pointer
 	template<typename V>
-	struct ReadableReal : public Base {
+	struct ReadableReal : public BasePointer {
 		EXPRESSION_NAME(ReadableReal, "V*");
 		using Unwrapped = ReadableReal;
 		ConstRealPointer<V> pointer;
@@ -201,7 +202,7 @@ namespace expression {
 		}
 	};
 	template<typename V>
-	struct ReadableComplex : public Base {
+	struct ReadableComplex : public BasePointer {
 		EXPRESSION_NAME(ReadableComplex, "VC*");
 		using Unwrapped = ReadableComplex;
 		ConstComplexPointer<V> pointer;
@@ -213,7 +214,7 @@ namespace expression {
 		}
 	};
 	template<typename V>
-	struct ReadableSplit : public Base {
+	struct ReadableSplit : public BasePointer {
 		EXPRESSION_NAME(ReadableSplit, "VS*");
 		using Unwrapped = ReadableSplit;
 		ConstSplitPointer<V> pointer;
@@ -240,6 +241,14 @@ namespace expression {
 	}
 	template<class E>
 	using Unwrapped = decltype(unwrapped(std::declval<E>()));
+
+	template<class Expr>
+	using ElementType = typename std::decay<decltype(std::declval<Expr>().get(0))>::type;
+	
+	template<class T>
+	static constexpr bool isSplittable() {
+		return std::is_same<T, std::complex<float>>::value || std::is_same<T, std::complex<double>>::value;
+	}
 }
 	
 // + - * / % ^ & | ~ ! = < > += -= *= /= %= ^= &= |= << >> >>= <<= == != <= >= <=>(since C++20) && || ++ -- , ->* -> ( ) [ ]
@@ -255,6 +264,8 @@ namespace expression { \
 		auto get(std::ptrdiff_t i) const -> decltype(OP a.get(i)) const { \
 			return OP a.get(i); \
 		} \
+		template<class T> \
+		using ReplaceWith = Name<T>;\
 	}; \
 	template<class A> \
 	Name<Unwrapped<A>> make##Name(A a) { \
@@ -285,6 +296,8 @@ namespace expression { \
 		auto get(std::ptrdiff_t i) const -> decltype(a.get(i) OP b.get(i)) const { \
 			return a.get(i) OP b.get(i); \
 		} \
+		template<class T1, class T2> \
+		using ReplaceWith = Name<T1, T2>;\
 	}; \
 	template<class A, class B> \
 	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \
@@ -326,6 +339,8 @@ namespace expression {
 		auto get(std::ptrdiff_t i) const -> decltype(func(a.get(i))) { \
 			return func(a.get(i)); \
 		} \
+		template<class T> \
+		using ReplaceWith = Name<T>;\
 	};
 
 	template<class A>
@@ -402,6 +417,8 @@ namespace expression {
 		auto get(std::ptrdiff_t i) const -> decltype(common##Name(a.get(i), b.get(i))) const { \
 			return common##Name(a.get(i), b.get(i)); \
 		} \
+		template<class T1, class T2> \
+		using ReplaceWith = Name<T1, T2>;\
 	}; \
 	template<class A, class B> \
 	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \
@@ -1040,10 +1057,7 @@ e.g.
 */
 template<class InputExpr, typename Item, class OutputExpr>
 using ItemType = typename std::enable_if<
-	std::is_same<
-		typename std::decay<decltype(std::declval<InputExpr>().get(0))>::type,
-		Item
-	>::value,
+	std::is_same<expression::ElementType<InputExpr>, Item>::value,
 	OutputExpr
 >::type;
 

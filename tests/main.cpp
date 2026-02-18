@@ -1,5 +1,5 @@
 #include <iostream>
-#define LOG_EXPR(expr) std::cout << #expr << " = " << (expr) << std::endl;
+#define LOG_EXPR(...) std::cout << #__VA_ARGS__ " = " << (__VA_ARGS__) << std::endl;
 
 #include "./test-linear.h"
 #include "./test-ffts.h"
