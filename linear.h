@@ -5,6 +5,13 @@
 #	error Apple Clang 16.0.0 generates incorrect SIMD for ARM. If you HAVE to use this version of Clang, turn off -ffast-math.
 #endif
 
+#if defined(_MSC_VER)
+// MSVC can misreport is_trivially_copyable for CRTP bases; approximate intent.
+#	define SIGNALSMITH_IS_TRIVIALLY_COPYABLE(T) (std::is_trivially_copy_constructible<T>::value && std::is_trivially_destructible<T>::value)
+#else
+#	define SIGNALSMITH_IS_TRIVIALLY_COPYABLE(T) std::is_trivially_copyable<T>::value
+#endif
+
 #ifndef M_PI
 #	define M_PI 3.14159265358979323846
 #endif
@@ -132,7 +139,7 @@ namespace expression {
 		EXPRESSION_NAME(Constant, "V");
 		V value;
 
-		static_assert(std::is_trivially_copyable<V>::value, "ConstantExpr<V> values must be trivially copyable");
+		static_assert(SIGNALSMITH_IS_TRIVIALLY_COPYABLE(V), "ConstantExpr<V> values must be trivially copyable");
 
 		ConstantExpr(V value) : value(value) {}
 		
@@ -158,7 +165,7 @@ namespace expression {
 	struct ExprTest {
 		using Constant = ConstantExpr<Arithmetic<V>>;
 
-		static_assert(std::is_trivially_copyable<Constant>::value, "ConstantExpr<V> must be trivially copyable");
+		static_assert(SIGNALSMITH_IS_TRIVIALLY_COPYABLE(Constant), "ConstantExpr<V> must be trivially copyable");
 
 		static Constant wrap(const V &v) {
 			return {v};
@@ -409,8 +416,8 @@ template<class BaseExpr>
 struct Expression : public BaseExpr {
 	template<class ...Args>
 	Expression(Args &&...args) : BaseExpr(std::forward<Args>(args)...) {
-		static_assert(std::is_trivially_copyable<BaseExpr>::value, "BaseExpr must be trivially copyable");
-		static_assert(std::is_trivially_copyable<Expression>::value, "Expression<> must be trivially copyable");
+		static_assert(SIGNALSMITH_IS_TRIVIALLY_COPYABLE(BaseExpr), "BaseExpr must be trivially copyable");
+		static_assert(SIGNALSMITH_IS_TRIVIALLY_COPYABLE(Expression), "Expression<> must be trivially copyable");
 	}
 
 	auto operator[](std::ptrdiff_t i) -> decltype(BaseExpr::get(i)) const {
@@ -774,7 +781,7 @@ struct LinearImplBase {
 		RealPointer<V> pointer;
 		size_t size;
 		WritableReal(Linear &linear, RealPointer<V> pointer, size_t size) : linear(linear), pointer(pointer), size(size) {
-			static_assert(std::is_trivially_copyable<WritableReal>::value, "must be trivially copyable");
+			static_assert(SIGNALSMITH_IS_TRIVIALLY_COPYABLE(WritableReal), "must be trivially copyable");
 		}
 		
 		operator expression::ReadableReal<V>() const {
@@ -1071,5 +1078,7 @@ private:
 #elif 0//defined(SIGNALSMITH_USE_IPP)
 #	include "./platform/linear-ipp.h"
 #endif
+
+#undef SIGNALSMITH_IS_TRIVIALLY_COPYABLE
 
 #endif // include guard
