@@ -82,11 +82,10 @@ struct SplitPointer {
 		}
 
 #define LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(OP) \
-		template<class Other> \
-		Value & operator OP(Other &&v) { \
-			std::complex<V>::operator OP(std::forward<Other>(v)); \
-			_real = v.real(); \
-			_imag = v.imag(); \
+		Value & operator OP(const std::complex<V> &other) { \
+			std::complex<V>::operator OP(other); \
+			_real = Complex::real(); \
+			_imag = Complex::imag(); \
 			return *this; \
 		}
 		LINEAR_SPLIT_POINTER_ASSIGNMENT_OP(=);
