@@ -161,6 +161,49 @@ private:
 		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<double>));
 	}
 
+	// Real part of a split pointer
+	void fillExpr(RealPointer<float> pointer, expression::Real<expression::ReadableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Real<expression::ReadableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(double));
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Real<WritableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Real<WritableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(double));
+	}
+	// Imaginary part
+	void fillExpr(RealPointer<float> pointer, expression::Imag<expression::ReadableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Imag<expression::ReadableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(double));
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Imag<WritableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Imag<WritableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(double));
+	}
+
+	// Complex norm of a split pointer - rephrased as (r*r + i*i)
+	template<class V>
+	void fillExpr(RealPointer<V> pointer, expression::Norm<expression::ReadableSplit<V>> expr, size_t size) {
+		auto real = expression::ReadableReal<V>(expr.a.pointer.real);
+		auto imag = expression::ReadableReal<V>(expr.a.pointer.imag);
+		auto newExpr = expression::makeAdd(expression::makeMul(real, real), expression::makeMul(imag, imag));
+		return fillExpr(pointer, newExpr, size);
+	}
+	template<class V>
+	void fillExpr(RealPointer<V> pointer, expression::Norm<WritableSplit<V>> expr, size_t size) {
+		auto real = expression::ReadableReal<V>(expr.a.pointer.real);
+		auto imag = expression::ReadableReal<V>(expr.a.pointer.imag);
+		auto newExpr = expression::makeAdd(expression::makeMul(real, real), expression::makeMul(imag, imag));
+		return fillExpr(pointer, newExpr, size);
+	}
+	
 	// Filling with a constant
 	template<class V>
 	void fillExpr(RealPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
