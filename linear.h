@@ -134,9 +134,10 @@ namespace expression {
 	struct BaseUnary : public Base {};
 	struct BaseBinary : public Base {};
 	struct BasePointer : public Base {};
+	struct BaseConstant : public Base {};
 
 	template<typename V>
-	struct ConstantExpr : public Base {
+	struct ConstantExpr : public BaseConstant {
 		EXPRESSION_NAME(Constant, "V");
 		using Unwrapped = ConstantExpr;
 		V value;
@@ -298,6 +299,10 @@ namespace expression { \
 		} \
 		template<class T1, class T2> \
 		using ReplaceWith = Name<T1, T2>;\
+		template<class T> \
+		using ReplaceWithL = Name<T, B>;\
+		template<class T> \
+		using ReplaceWithR = Name<A, T>;\
 	}; \
 	template<class A, class B> \
 	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \
@@ -419,6 +424,10 @@ namespace expression {
 		} \
 		template<class T1, class T2> \
 		using ReplaceWith = Name<T1, T2>;\
+		template<class T> \
+		using ReplaceWithL = Name<T, B>;\
+		template<class T> \
+		using ReplaceWithR = Name<A, T>;\
 	}; \
 	template<class A, class B> \
 	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \

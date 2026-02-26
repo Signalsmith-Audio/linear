@@ -12,6 +12,13 @@
 
 namespace signalsmith { namespace linear {
 
+#if defined(__FAST_MATH__) && XSIMD_WITH_AVX2
+#	if defined(__clang__) && __clang_major__ < 18
+// https://github.com/xtensor-stack/xsimd/issues/1264#issuecomment-3967518377
+#		error There's a bug in Clang v17 and below, which means you need to turn off `-ffast-math` when using AVX2+
+#	endif
+#endif
+
 namespace _impl_fill {
 	static constexpr size_t maxAlignmentBytes = 64; // 512 bits
 
@@ -53,6 +60,10 @@ namespace _impl_fill {
 	// Predeclare the chunking helpers
 	template<class Arch, class Pointer, class Expr>
 	XSIMD_INLINE void fillChunksUnary(Pointer pointer, Expr expr, size_t fromIndex, size_t toIndex);
+	template<class Arch, class Pointer, class Expr>
+	XSIMD_INLINE void fillChunksBinaryL(Pointer pointer, Expr expr, size_t fromIndex, size_t toIndex);
+	template<class Arch, class Pointer, class Expr>
+	XSIMD_INLINE void fillChunksBinaryR(Pointer pointer, Expr expr, size_t fromIndex, size_t toIndex);
 
 	template<class Arch, class Pointer, class Expr>
 	void fillAligned(Pointer pointer, Expr expr, size_t fromIndex, size_t toIndex, Arch) {
@@ -65,9 +76,13 @@ namespace _impl_fill {
 			}
 		} else if constexpr (std::is_base_of_v<expression::BaseBinary, Expr>) {
 			if constexpr (std::is_base_of_v<expression::BasePointer, decltype(expr.a)> && std::is_base_of_v<expression::BasePointer, decltype(expr.b)>) {
+				// It's already as basic as it gets - although somehow not specialised, which is odd
 				fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
+			} else if constexpr (std::is_base_of_v<expression::BasePointer, decltype(expr.a)>) {
+				fillChunksBinaryR<Arch>(pointer, expr, fromIndex, toIndex);
 			} else {
-				fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
+				// The right side might be a pointer, or not - but let the recursion handle that.  The overhead of trying to chunk an already-chunked range worth the slightly simpler code
+				fillChunksBinaryL<Arch>(pointer, expr, fromIndex, toIndex);
 			}
 		} else {
 			fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
@@ -116,7 +131,6 @@ namespace _impl_fill {
 // List the arch-specific specialisations which will be defined in other units
 #		define SIGNALSMITH_LINEAR_ARCH_DISPATCH(fnName, ...) \
 			extern template void fnName<xsimd::sse2>(__VA_ARGS__, xsimd::sse2); \
-			extern template void fnName<xsimd::sse3>(__VA_ARGS__, xsimd::sse3); \
 			extern template void fnName<xsimd::sse4_2>(__VA_ARGS__, xsimd::sse4_2); \
 			extern template void fnName<xsimd::avx>(__VA_ARGS__, xsimd::avx); \
 			extern template void fnName<xsimd::avx2>(__VA_ARGS__, xsimd::avx2); \
@@ -285,6 +299,7 @@ std::cout << "filling split constant\n";
 		}
 		template<class Expr>
 		XSIMD_INLINE static auto getBatch(const expression::Log<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
+std::cout << "Clang: " << __clang_major__ << "\n";
 			return xsimd::log(getBatch(expr.a, index));
 		}
 		template<class Expr>
@@ -475,7 +490,7 @@ std::cout << "filling split constant\n";
 	// This goes last so that it can see all the specialisations above
 
 #ifndef SIGNALSMITH_LINEAR_STACK_BLOCK_BYTES
-#	define SIGNALSMITH_LINEAR_STACK_BLOCK_BYTES 256
+#	define SIGNALSMITH_LINEAR_STACK_BLOCK_BYTES 4096
 #endif
 	template<class Arch, class V>
 	struct StackBlockReal {
@@ -515,6 +530,75 @@ std::cout << "filling split constant\n";
 			fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
 		}
 	}
+
+	template<class Arch, class Pointer, class Expr>
+	XSIMD_INLINE void fillChunksBinaryL(Pointer pointer, Expr expr, size_t fromIndex, size_t toIndex) {
+		using E = expression::ElementType<decltype(expr.a)>;
+		if constexpr (!expression::isSplittable<E>()) {
+			using ReplacementExpr = typename Expr::template ReplaceWithL<expression::ReadableReal<E>>;
+			StackBlockReal<Arch, E> stackBlock;
+
+//std::cout << "<Chunking LHS: " << expr.a.name() << " in " << expr.name() << ">\n";
+//size_t blockCount = 0;
+			// Fill blockwise with values from `expr.a`
+			size_t blockEnd = fromIndex + stackBlock.length;
+			while (blockEnd < toIndex) {
+//++blockCount;
+				auto stackPointer = stackBlock.aligned - fromIndex;
+				fillAligned<Arch>(stackPointer, expr.a, fromIndex, blockEnd, Arch{});
+				fillAligned<Arch>(pointer, ReplacementExpr{stackPointer, expr.b}, fromIndex, blockEnd, Arch{});
+				// move to next block
+				fromIndex = blockEnd;
+				blockEnd = fromIndex + stackBlock.length;
+			}
+
+			if (fromIndex < toIndex) { // Final block
+//++blockCount;
+				auto stackPointer = stackBlock.aligned - fromIndex;
+				fillAligned<Arch>(stackPointer, expr.a, fromIndex, toIndex, Arch{});
+				fillAligned<Arch>(pointer, ReplacementExpr{stackPointer, expr.b}, fromIndex, toIndex, Arch{});
+			}
+//LOG_EXPR(blockCount);
+//std::cout << "\tdone chunking LHS " << expr.a.name() << "\n";
+
+		} else {
+			fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
+		}
+	}
+
+	template<class Arch, class Pointer, class Expr>
+	XSIMD_INLINE void fillChunksBinaryR(Pointer pointer, Expr expr, size_t fromIndex, size_t toIndex) {
+		using E = expression::ElementType<decltype(expr.b)>;
+		if constexpr (!expression::isSplittable<E>()) {
+			using ReplacementExpr = typename Expr::template ReplaceWithR<expression::ReadableReal<E>>;
+			StackBlockReal<Arch, E> stackBlock;
+
+//std::cout << "<Chunking RHS: " << expr.b.name() << " in " << expr.name() << ">\n";
+//size_t blockCount = 0;
+			// Fill blockwise with values from `expr.a`
+			size_t blockEnd = fromIndex + stackBlock.length;
+			while (blockEnd < toIndex) {
+//++blockCount;
+				auto stackPointer = stackBlock.aligned - fromIndex;
+				fillAligned<Arch>(stackPointer, expr.b, fromIndex, blockEnd, Arch{});
+				fillAligned<Arch>(pointer, ReplacementExpr{expr.a, stackPointer}, fromIndex, blockEnd, Arch{});
+				// move to next block
+				fromIndex = blockEnd;
+				blockEnd = fromIndex + stackBlock.length;
+			}
+
+			if (fromIndex < toIndex) { // Final block
+//++blockCount;
+				auto stackPointer = stackBlock.aligned - fromIndex;
+				fillAligned<Arch>(stackPointer, expr.b, fromIndex, toIndex, Arch{});
+				fillAligned<Arch>(pointer, ReplacementExpr{expr.a, stackPointer}, fromIndex, toIndex, Arch{});
+			}
+//LOG_EXPR(blockCount);
+//std::cout << "\tdone chunking RHS " << expr.b.name() << "\n";
+		} else {
+			fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
+		}
+	}
 }
 #undef SIGNALSMITH_LINEAR_ARCH_DISPATCH
 
@@ -547,29 +631,25 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 private:
 
 #ifdef SIGNALSMITH_USE_XSIMD_DISPATCH_X86
-	enum class Arch{sse2, sse3, sse4_2, avx, avx2, avx512f, avx512er};
+	enum class Arch{sse2, sse4_2, avx, avx2, avx512f};
 	Arch bestArch = Arch::sse2;
 
 	void chooseArchitecture() {
 		auto available = xsimd::available_architectures();
-		if (available.has(xsimd::sse3{})) bestArch = Arch::sse3;
 		if (available.has(xsimd::sse4_2{})) bestArch = Arch::sse4_2;
 		if (available.has(xsimd::avx{})) bestArch = Arch::avx;
 		if (available.has(xsimd::avx2{})) bestArch = Arch::avx2;
 		if (available.has(xsimd::avx512f{})) bestArch = Arch::avx512f;
-		if (available.has(xsimd::avx512er{})) bestArch = Arch::avx512er;
 	}
 	
 	template<class Pointer, class Expr>
 	void fillExprDispatch(Pointer pointer, Expr expr, size_t size) {
 		switch(bestArch) {
 			case Arch::sse2: return fillExpr<xsimd::sse2>(pointer, expr, size);
-			case Arch::sse3: return fillExpr<xsimd::sse3>(pointer, expr, size);
 			case Arch::sse4_2: return fillExpr<xsimd::sse4_2>(pointer, expr, size);
 			case Arch::avx: return fillExpr<xsimd::avx>(pointer, expr, size);
 			case Arch::avx2: return fillExpr<xsimd::avx2>(pointer, expr, size);
 			case Arch::avx512f: return fillExpr<xsimd::avx512f>(pointer, expr, size);
-			case Arch::avx512er: return fillExpr<xsimd::avx512er>(pointer, expr, size);
 		}
 	}
 #elif defined(SIGNALSMITH_USE_XSIMD_DISPATCH_ARM)

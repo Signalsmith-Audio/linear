@@ -13,6 +13,8 @@ option(SIGNALSMITH_USE_ACCELERATE "use the Accelerate framework for Apple target
 option(SIGNALSMITH_USE_IPP "use IPP (Intel Performance Primitives)" OFF)
 option(SIGNALSMITH_USE_PFFFT "use PFFFT (Pretty Fast FFT)" OFF)
 option(SIGNALSMITH_USE_PFFFT_DOUBLE "use PFFFT with double" OFF)
+option(SIGNALSMITH_USE_XSIMD "use XSimd (version 8+)" OFF)
+option(SIGNALSMITH_USE_XSIMD_DISPATCH "compile multiple architectures (x86/x86/ARM only) and choose at runtime" OFF)
 
 if(APPLE AND SIGNALSMITH_USE_ACCELERATE)
 	message(STATUS "Signalsmith Linear: using Accelerate")
@@ -50,26 +52,37 @@ if(SIGNALSMITH_USE_XSIMD)
 	)
 
 	# This setting is trickier (and optional)
-	# It compiles some of core functions for several different architectures, links them statically, and then selects the best one at runtime
+	# It compiles some of core functions for several different architectures
+	# Then links them statically, and selects the best one at runtime
 	if (SIGNALSMITH_USE_XSIMD_DISPATCH)
 		target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_XSIMD_DISPATCH)
 
 		list(APPEND xsimd_arch_names
-			sse2 sse3 sse4_2 avx avx2 avx512f neon neon64)
+			sse2 sse4_2 avx avx2 avx512f neon neon64)
 		list(APPEND gcc_arch_flags
-			-msse2 -msse3 -msse4.2 -mavx -mavx2 -mavx512f -mfpu=neon -mfpu=neon-vfpv4)
-		foreach(xsimdName gccFlag IN ZIP_LISTS xsimd_arch_names gcc_arch_flags)
+			-msse2 -msse4.2 -mavx -mavx2 -mavx512f -mfpu=neon -mfpu=neon-vfpv4)
+		# Pretty sure some of these don't exist, but we'll burn that bridge when we come to it
+		list(APPEND msvc_arch_flags
+			/arch:SSE2 /arch:SSE4.2 /arch:AVX /arch:AVX2 /arch:AVX512 /arch:NEON /arch:NEON64)
+
+		foreach(xsimdName gccFlag msvcFlag IN ZIP_LISTS xsimd_arch_names gcc_arch_flags msvc_arch_flags)
 			set(xsimdTargetName "signalsmith-linear_xsimd_${xsimdName}")
 			add_library(${xsimdTargetName} STATIC ${CMAKE_CURRENT_SOURCE_DIR}/platform/linear-xsimd-dispatch.cpp)
 			message(STATUS "Signalsmith Linear: creating arch-specific target ${xsimdTargetName}")
 			target_link_libraries(${xsimdTargetName} PUBLIC xsimd)
 			target_compile_definitions(${xsimdTargetName} PRIVATE
+				SIGNALSMITH_USE_XSIMD
 				SIGNALSMITH_USE_XSIMD_DISPATCH
 				SIGNALSMITH_LINEAR_XSIMD_DISPATCH_ARCH=xsimd::${xsimdName}
 			)
 
-			# GCC / Clang flags
-			target_compile_options(${xsimdTargetName} PRIVATE ${gccFlag})
+			if (MSVC)
+				target_compile_options(${xsimdTargetName} PRIVATE ${msvcFlag} /O2) # /fp:fast)
+			elseif ((CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang") OR (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"))
+				target_compile_options(${xsimdTargetName} PRIVATE ${gccFlag} -O3 -ffast-math)
+			else()
+				message(FATAL_ERROR "SIGNALSMITH_USE_XSIMD_DISPATCH : unknown compiler (not MSVC, GCC or [Apple]Clang) : ${CMAKE_CXX_COMPILER_ID}")
+			endif()
 
 			set_target_properties(${xsimdTargetName} PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 			target_link_libraries(signalsmith-linear INTERFACE ${xsimdTargetName})

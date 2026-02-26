@@ -286,10 +286,14 @@ struct TestLinear {
 
 		auto &tinyPlot = tinyFigure(tinyPlotIndex%tinyPlotColumns, tinyPlotIndex/tinyPlotColumns).plot(tinyPlotWidth, tinyPlotHeight);
 		tinyPlot.title(plotName, 0.5, -1);
+		signalsmith::plot::Legend *tinyPlotLegend = nullptr;
 		if (!firstTinyPlot) {
 			tinyPlot.x.blank();
 			tinyPlot.y.blank().major(0, "");
 			firstTinyPlot = &tinyPlot;
+			
+			auto &legend = tinyPlot.legend(0, 2); // above the first line
+			tinyPlotLegend = &legend;
 		} else {
 			tinyPlot.x.linkFrom(firstTinyPlot->x);
 			tinyPlot.y.linkFrom(firstTinyPlot->y);
@@ -318,7 +322,9 @@ struct TestLinear {
 			opLegend.add(opPlotLine, config.name);
 			auto &mainLine = config.plot.line();
 			auto &tinyLine = tinyPlot.line();
+			if (tinyPlotLegend) tinyPlotLegend->add(tinyLine, config.name);
 			opLines.push_back(OpLine{mainLine, opPlotLine, tinyLine});
+			
 		}
 		legend->add(opLines[0].main, opName);
 		
