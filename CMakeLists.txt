@@ -59,13 +59,15 @@ if(SIGNALSMITH_USE_XSIMD)
 
 		list(APPEND xsimd_arch_names
 			sse2 sse4_2 avx avx2 avx512f neon neon64)
+		list(APPEND arch_is_arm
+			FALSE FALSE FALSE FALSE FALSE TRUE TRUE)
 		list(APPEND gcc_arch_flags
 			-msse2 -msse4.2 -mavx -mavx2 -mavx512f -mfpu=neon -mfpu=neon-vfpv4)
 		# Pretty sure some of these don't exist, but we'll burn that bridge when we come to it
 		list(APPEND msvc_arch_flags
 			/arch:SSE2 /arch:SSE4.2 /arch:AVX /arch:AVX2 /arch:AVX512 /arch:NEON /arch:NEON64)
 
-		foreach(xsimdName gccFlag msvcFlag IN ZIP_LISTS xsimd_arch_names gcc_arch_flags msvc_arch_flags)
+		foreach(xsimdName isArm gccFlag msvcFlag IN ZIP_LISTS xsimd_arch_names arch_is_arm gcc_arch_flags msvc_arch_flags)
 			set(xsimdTargetName "signalsmith-linear_xsimd_${xsimdName}")
 			add_library(${xsimdTargetName} STATIC ${CMAKE_CURRENT_SOURCE_DIR}/platform/linear-xsimd-dispatch.cpp)
 			message(STATUS "Signalsmith Linear: creating arch-specific target ${xsimdTargetName}")
@@ -78,8 +80,15 @@ if(SIGNALSMITH_USE_XSIMD)
 
 			if (MSVC)
 				target_compile_options(${xsimdTargetName} PRIVATE ${msvcFlag} /O2) # /fp:fast)
-			elseif ((CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang") OR (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"))
+			elseif ((CMAKE_CXX_COMPILER_ID STREQUAL "GNU") OR (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
 				target_compile_options(${xsimdTargetName} PRIVATE ${gccFlag} -O3 -ffast-math)
+			elseif (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+				# Dual-architecture builds are a pain for this
+				if (isArm)
+					target_compile_options(${xsimdTargetName} PRIVATE -Xarch_aarch64 ${gccFlag} -O3 -ffast-math)
+				else()
+					target_compile_options(${xsimdTargetName} PRIVATE -Xarch_x86_64 ${gccFlag} -O3)
+				endif()
 			else()
 				message(FATAL_ERROR "SIGNALSMITH_USE_XSIMD_DISPATCH : unknown compiler (not MSVC, GCC or [Apple]Clang) : ${CMAKE_CXX_COMPILER_ID}")
 			endif()

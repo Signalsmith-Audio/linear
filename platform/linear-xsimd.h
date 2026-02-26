@@ -299,7 +299,6 @@ std::cout << "filling split constant\n";
 		}
 		template<class Expr>
 		XSIMD_INLINE static auto getBatch(const expression::Log<Expr> &expr, size_t index) -> xsimd::batch<std::remove_cv_t<decltype(expr.get(0))>, Arch> {
-std::cout << "Clang: " << __clang_major__ << "\n";
 			return xsimd::log(getBatch(expr.a, index));
 		}
 		template<class Expr>
@@ -364,7 +363,7 @@ std::cout << "Clang: " << __clang_major__ << "\n";
 	template<class Arch, class V, class Expr>
 	XSIMD_INLINE void fillSpecialisedReal(RealPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
 		if constexpr (notSupported<Arch, V>()) {
-			fillBasic(pointer, expr, fromIndex, toIndex);
+			fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
 		} else {
 			using Batch = xsimd::batch<V, Arch>;
 			for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
@@ -376,7 +375,7 @@ std::cout << "Clang: " << __clang_major__ << "\n";
 	template<class Arch, class V, class Expr>
 	XSIMD_INLINE void fillSpecialisedComplex(ComplexPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
 		if constexpr (notSupported<Arch, std::complex<V>>()) {
-			fillBasic(pointer, expr, fromIndex, toIndex);
+			fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
 		} else {
 			using Batch = xsimd::batch<std::complex<V>, Arch>;
 			for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
@@ -388,7 +387,7 @@ std::cout << "Clang: " << __clang_major__ << "\n";
 	template<class Arch, class V, class Expr>
 	XSIMD_INLINE void fillSpecialisedSplit(SplitPointer<V> pointer, Expr expr, size_t fromIndex, size_t toIndex) {
 		if constexpr (notSupported<Arch, std::complex<V>>()) {
-			fillBasic(pointer, expr, fromIndex, toIndex);
+			fillBasic<Arch>(pointer, expr, fromIndex, toIndex);
 		} else {
 			using Batch = xsimd::batch<std::complex<V>, Arch>;
 			for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
