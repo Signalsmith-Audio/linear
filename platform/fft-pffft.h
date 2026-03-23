@@ -84,13 +84,13 @@ private:
 		// 16-byte alignment
 		if (size_t(input)&0x0F) {
 			// `tmpAligned` is always aligned, so copy into that
-			std::memcpy(tmpAligned, input, sizeof(Complex)*_size);
+			std::memcpy(static_cast<void *>(tmpAligned), static_cast<void *>(input), sizeof(Complex)*_size);
 			input = (const Complex *)tmpAligned;
 		}
 		if (size_t(output)&0x0F) {
 			// Output to `tmpAligned` - might be in-place if input is unaligned, but that's fine
 			pffft_transform_ordered(fftSetup, (const float *)input, tmpAligned, work, direction);
-			std::memcpy(output, tmpAligned, sizeof(Complex)*_size);
+			std::memcpy(static_cast<void *>(output), static_cast<void *>(tmpAligned), sizeof(Complex)*_size);
 		} else {
 			pffft_transform_ordered(fftSetup, (const float *)input, (float *)output, work, direction);
 		}

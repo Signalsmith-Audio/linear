@@ -118,13 +118,6 @@ struct WritableExpression;
 		return nameExpr; \
 	}
 
-//#undef EXPRESSION_NAME
-//#include <typeinfo>
-//#define EXPRESSION_NAME(Class, nameExpr) \
-//	static std::string name() { \
-//		return typeid(Class).name(); \
-//	}
-
 // Expression templates, which always hold const pointers
 namespace expression {
 	// All base Exprs inherit from this, so we can SFINAE-test for them
@@ -229,19 +222,19 @@ namespace expression {
 	
 	// Remove `Expression<>` or `WritableExpression<>` layers, and add const to pointers
 	template<class E>
-	typename E::Unwrapped unwrapped(E e) {
+	typename E::Unwrapped unwrap(E e) {
 		return e;
 	}
 	template<class E>
-	typename E::Unwrapped unwrapped(Expression<E> e) {
+	typename E::Unwrapped unwrap(Expression<E> e) {
 		return e;
 	}
 	template<class E>
-	typename E::Unwrapped unwrapped(WritableExpression<E> e) {
+	typename E::Unwrapped unwrap(WritableExpression<E> e) {
 		return e;
 	}
 	template<class E>
-	using Unwrapped = decltype(unwrapped(std::declval<E>()));
+	using Unwrap = decltype(unwrap(std::declval<E>()));
 
 	template<class Expr>
 	using ElementType = typename std::decay<decltype(std::declval<Expr>().get(0))>::type;
@@ -259,7 +252,7 @@ namespace expression { \
 	template<class A> \
 	struct Name : public BaseUnary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + ">"); \
-		using Unwrapped = Name<Unwrapped<A>>; \
+		using Unwrapped = Name<Unwrap<A>>; \
 		A a; \
 		Name(const A &a) : a(a) {} \
 		auto get(std::ptrdiff_t i) const -> decltype(OP a.get(i)) const { \
@@ -269,12 +262,12 @@ namespace expression { \
 		using ReplaceWith = Name<T>;\
 	}; \
 	template<class A> \
-	Name<Unwrapped<A>> make##Name(A a) { \
+	Name<Unwrap<A>> make##Name(A a) { \
 		return {a}; \
 	} \
 } \
 template<class A> \
-Expression<expression::Name<expression::Unwrapped<A>>> operator OP(const Expression<A> &a) { \
+Expression<expression::Name<expression::Unwrap<A>>> operator OP(const Expression<A> &a) { \
 	return {a}; \
 }
 SIGNALSMITH_AUDIO_LINEAR_UNARY_PREFIX(Neg, -)
@@ -290,7 +283,7 @@ namespace expression { \
 	template<class A, class B> \
 	struct Name : public BaseBinary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
-		using Unwrapped = Name<Unwrapped<A>, Unwrapped<B>>; \
+		using Unwrapped = Name<Unwrap<A>, Unwrap<B>>; \
 		A a; \
 		B b; \
 		Name(const A &a, const B &b) : a(a), b(b) {} \
@@ -305,20 +298,20 @@ namespace expression { \
 		using ReplaceWithR = Name<A, T>;\
 	}; \
 	template<class A, class B> \
-	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \
+	Name<Unwrap<A>, Unwrap<B>> make##Name(A a, B b) { \
 		return {a, b}; \
 	} \
 } \
 template<class A, class B> \
-const Expression<expression::Name<expression::Unwrapped<A>, expression::Unwrapped<B>>> operator OP(const Expression<A> &a, const Expression<B> &b) { \
+const Expression<expression::Name<expression::Unwrap<A>, expression::Unwrap<B>>> operator OP(const Expression<A> &a, const Expression<B> &b) { \
 	return {a, b}; \
 } \
 template<class A, class B> \
-const Expression<expression::Name<expression::Unwrapped<A>, expression::Constant<B>>> operator OP(const Expression<A> &a, const B &b) { \
+const Expression<expression::Name<expression::Unwrap<A>, expression::Constant<B>>> operator OP(const Expression<A> &a, const B &b) { \
 	return {a, b}; \
 } \
 template<class A, class B> \
-const Expression<expression::Name<expression::Constant<A>, expression::Unwrapped<B>>> operator OP(const A &a, const Expression<B> &b) { \
+const Expression<expression::Name<expression::Constant<A>, expression::Unwrap<B>>> operator OP(const A &a, const Expression<B> &b) { \
 	return {a, b}; \
 }
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Add, +)
@@ -332,13 +325,13 @@ namespace expression {
 	template<class A> \
 	struct Name; \
 	template<class A> \
-	Name<Unwrapped<A>> make##Name(A a) { \
+	Name<Unwrap<A>> make##Name(A a) { \
 		return {a}; \
 	} \
 	template<class A> \
 	struct Name : public BaseUnary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + ">"); \
-		using Unwrapped = Name<Unwrapped<A>>; \
+		using Unwrapped = Name<Unwrap<A>>; \
 		A a; \
 		Name(const A &a) : a(a) {} \
 		auto get(std::ptrdiff_t i) const -> decltype(func(a.get(i))) { \
@@ -415,7 +408,7 @@ namespace expression {
 	template<class A, class B> \
 	struct Name : public BaseBinary { \
 		EXPRESSION_NAME(Name, (#Name "<") + A::name() + "," + B::name() + ">"); \
-		using Unwrapped = Name<Unwrapped<A>, Unwrapped<B>>; \
+		using Unwrapped = Name<Unwrap<A>, Unwrap<B>>; \
 		A a; \
 		B b; \
 		Name(const A &a, const B &b) : a(a), b(b) {} \
@@ -430,7 +423,7 @@ namespace expression {
 		using ReplaceWithR = Name<A, T>;\
 	}; \
 	template<class A, class B> \
-	Name<Unwrapped<A>, Unwrapped<B>> make##Name(A a, B b) { \
+	Name<Unwrap<A>, Unwrap<B>> make##Name(A a, B b) { \
 		return {a, b}; \
 	}
 	// Min, Max, Dim, Pow, Atan2, Hypot, Copysign, Polar
@@ -459,7 +452,7 @@ struct Expression : public BaseExpr {
 	}
 
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(ExprName, methodName) \
-	const Expression<expression::ExprName<expression::Unwrapped<BaseExpr>>> methodName() const { \
+	const Expression<expression::ExprName<expression::Unwrap<BaseExpr>>> methodName() const { \
 		return {*this}; \
 	}
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Abs, abs)
