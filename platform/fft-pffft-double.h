@@ -84,13 +84,13 @@ private:
 		// 32-byte alignment
 		if (size_t(input)&0x1F) {
 			// `tmpAligned` is always aligned, so copy into that
-			std::memcpy(tmpAligned, input, sizeof(Complex)*_size);
+			std::memcpy(static_cast<void *>(tmpAligned), static_cast<const void *>(input), sizeof(Complex)*_size);
 			input = (const Complex *)tmpAligned;
 		}
 		if (size_t(output)&0x1F) {
 			// Output to `tmpAligned` - might be in-place if input is unaligned, but that's fine
 			pffftd_transform_ordered(fftSetup, (const double *)input, tmpAligned, work, direction);
-			std::memcpy(output, tmpAligned, sizeof(Complex)*_size);
+			std::memcpy(static_cast<void *>(output), static_cast<const void *>(tmpAligned), sizeof(Complex)*_size);
 		} else {
 			pffftd_transform_ordered(fftSetup, (const double *)input, (double *)output, work, direction);
 		}
@@ -198,13 +198,13 @@ private:
 		// 32-byte alignment
 		if (size_t(input)&0x1F) {
 			// `tmpAligned` is always aligned, so copy into that
-			std::memcpy(tmpAligned, input, sizeof(double)*_size);
+			std::memcpy(static_cast<void *>(tmpAligned), static_cast<const void *>(input), sizeof(double)*_size);
 			input = tmpAligned;
 		}
 		if (size_t(output)&0x1F) {
 			// Output to `tmpAligned` - might be in-place if input is unaligned, but that's fine
 			pffftd_transform_ordered(fftSetup, input, tmpAligned, work, direction);
-			std::memcpy(output, tmpAligned, sizeof(double)*_size);
+			std::memcpy(static_cast<void *>(output), static_cast<const void *>(tmpAligned), sizeof(double)*_size);
 		} else {
 			pffftd_transform_ordered(fftSetup, input, output, work, direction);
 		}

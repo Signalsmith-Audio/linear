@@ -1085,15 +1085,13 @@ struct LinearImpl : public LinearImplBase<useLinear> {
 	}
 	
 	template<typename V>
-	void reserve(size_t) {}
-	// Makes sure we don't allocate
-	template<>
-	void reserve<float>(size_t size) {
-		cached.reserveFloats(size);
-	}
-	template<>
-	void reserve<double>(size_t size) {
-		cached.reserveDoubles(size);
+	void reserve(size_t size) {
+		// Assume it's either float or double
+		if (sizeof(V) == sizeof(double)) {
+			cached.reserveDoubles(size);
+		} else if (sizeof(V) == sizeof(float)) {
+			cached.reserveFloats(size);
+		}
 	}
 private:
 	CachedResults<LinearImpl, true, 16> cached;

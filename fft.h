@@ -1071,7 +1071,7 @@ struct RealFFT {
 						};
 					}
 				} else if (!canUseTime) {
-					std::memcpy(tmpTime.data(), time, sizeof(Complex)*hSize);
+					std::memcpy(static_cast<void *>(tmpTime.data()), static_cast<const void *>(time), sizeof(Complex)*hSize);
 				}
 			} else if (step < complexFft.steps()) {
 				complexFft.fft(step, canUseTime ? (const Complex *)time : tmpTime.data(), tmpFreq.data());
@@ -1281,7 +1281,7 @@ struct RealFFT {
 						time[2*i + 1] = t.imag()*twist.real() - t.real()*twist.imag();
 					}
 				} else if (!canUseTime) {
-					std::memcpy(time, tmpTime.data(), sizeof(Complex)*hSize);
+					std::memcpy(static_cast<void *>(time), static_cast<const void *>(tmpTime.data()), sizeof(Complex)*hSize);
 				}
 			}
 		}
