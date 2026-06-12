@@ -23,6 +23,10 @@ struct DynamicSTFT {
 	enum class WindowShape {ignore, acg, kaiser};
 	static constexpr WindowShape acg = WindowShape::acg;
 	static constexpr WindowShape kaiser = WindowShape::kaiser;
+	enum class Normalisation {none, synthesis, roundTrip};
+	static constexpr Normalisation normNone = Normalisation::none;
+	static constexpr Normalisation normSynthesis = Normalisation::synthesis;
+	static constexpr Normalisation normRoundTrip = Normalisation::roundTrip;
 
 	void configure(size_t inChannels, size_t outChannels, size_t blockSamples, size_t extraInputHistory=0, size_t intervalSamples=0, Sample asymmetry=0) {
 		_analysisChannels = inChannels;
@@ -83,8 +87,10 @@ struct DynamicSTFT {
 		for (auto &v : spectrumBuffer) v = 0;
 		for (auto &v : output.windowProducts) v = 0;
 		addWindowProduct();
-		for (int i = int(_blockSamples) - int(_defaultInterval) - 1; i >= 0; --i) {
-			output.windowProducts[i] += output.windowProducts[i + _defaultInterval];
+		if (norm != normNone) {
+			for (int i = int(_blockSamples) - int(_defaultInterval) - 1; i >= 0; --i) {
+				output.windowProducts[i] += output.windowProducts[i + _defaultInterval];
+			}
 		}
 		for (auto &v : output.windowProducts) v = v*productWeight + almostZero;
 		moveOutput(_defaultInterval); // ready for first block immediately
@@ -308,6 +314,9 @@ struct DynamicSTFT {
 			if (_synthesisWindow[i] > _synthesisWindow[_synthesisOffset]) _synthesisOffset = i;
 		}
 	}
+	void setNormalisation(Normalisation mode) {
+		norm = mode;
+	}
 	
 	void analyse(size_t samplesInPast=0) {
 		for (size_t s = 0; s < analyseSteps(); ++s) {
@@ -507,6 +516,7 @@ private:
 
 	size_t _samplesSinceSynthesis = 0, _samplesSinceAnalysis = 0;
 	
+	Normalisation norm = normRoundTrip;
 	void addWindowProduct() {
 		_samplesSinceSynthesis = 0;
 
@@ -517,17 +527,39 @@ private:
 		Sample *windowProduct = output.windowProducts.data();
 		size_t outputWrapIndex = _blockSamples - output.pos;
 		size_t chunk1 = std::min<size_t>(wMax, std::max<size_t>(wMin, outputWrapIndex));
-		for (size_t i = wMin; i < chunk1; ++i) {
-			Sample wa = _analysisWindow[i - windowShift];
-			Sample ws = _synthesisWindow[i];
-			size_t bi = output.pos + i;
-			windowProduct[bi] += wa*ws*_fftSamples;
-		}
-		for (size_t i = chunk1; i < wMax; ++i) {
-			Sample wa = _analysisWindow[i - windowShift];
-			Sample ws = _synthesisWindow[i];
-			size_t bi = i + output.pos - _blockSamples;
-			windowProduct[bi] += wa*ws*_fftSamples;
+		if (norm == normRoundTrip) {
+			for (size_t i = wMin; i < chunk1; ++i) {
+				Sample wa = _analysisWindow[i - windowShift];
+				Sample ws = _synthesisWindow[i];
+				size_t bi = output.pos + i;
+				windowProduct[bi] += wa*ws*_fftSamples;
+			}
+			for (size_t i = chunk1; i < wMax; ++i) {
+				Sample wa = _analysisWindow[i - windowShift];
+				Sample ws = _synthesisWindow[i];
+				size_t bi = i + output.pos - _blockSamples;
+				windowProduct[bi] += wa*ws*_fftSamples;
+			}
+		} else if (norm == normSynthesis) {
+			for (size_t i = wMin; i < chunk1; ++i) {
+				Sample ws = _synthesisWindow[i];
+				size_t bi = output.pos + i;
+				windowProduct[bi] += ws*_fftSamples;
+			}
+			for (size_t i = chunk1; i < wMax; ++i) {
+				Sample ws = _synthesisWindow[i];
+				size_t bi = i + output.pos - _blockSamples;
+				windowProduct[bi] += ws*_fftSamples;
+			}
+		} else {
+			for (size_t i = wMin; i < chunk1; ++i) {
+				size_t bi = output.pos + i;
+				windowProduct[bi] += _fftSamples;
+			}
+			for (size_t i = chunk1; i < wMax; ++i) {
+				size_t bi = i + output.pos - _blockSamples;
+				windowProduct[bi] += _fftSamples;
+			}
 		}
 	}
 	
