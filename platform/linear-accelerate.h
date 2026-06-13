@@ -14,7 +14,7 @@ namespace signalsmith { namespace linear {
 
 template<class T>
 static std::string typeName() {
-	return typeid(T).name();
+	return "?";
 }
 template<>
 std::string typeName<float>() {
