@@ -120,13 +120,6 @@ struct WritableExpression;
 		return nameExpr; \
 	}
 
-//#undef EXPRESSION_NAME
-//#include <typeinfo>
-//#define EXPRESSION_NAME(Class, nameExpr) \
-//	static std::string name() { \
-//		return typeid(Class).name(); \
-//	}
-
 // Expression templates, which always hold const pointers
 namespace expression {
 	// All base Exprs inherit from this, so we can SFINAE-test for them
@@ -1018,6 +1011,7 @@ protected:
 		return *(Linear *)this;
 	}
 };
+#undef EXPRESSION_NAME
 
 /* SFINAE template for checking that an expression naturally returns a particular item type
 
@@ -1056,15 +1050,12 @@ struct LinearImpl : public LinearImplBase<useLinear> {
 	}
 	
 	template<typename V>
-	void reserve(size_t) {}
-	// Makes sure we don't allocate
-	template<>
-	void reserve<float>(size_t size) {
-		cached.reserveFloats(size);
-	}
-	template<>
-	void reserve<double>(size_t size) {
-		cached.reserveDoubles(size);
+	void reserve(size_t size) {
+		if (sizeof(V) == sizeof(double)) {
+			cached.reserveDoubles(size);
+		} else if (sizeof(V) == sizeof(float)) {
+			cached.reserveFloats(size);
+		}
 	}
 private:
 	CachedResults<LinearImpl, 32> cached;
