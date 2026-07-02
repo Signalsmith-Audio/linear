@@ -15,7 +15,7 @@ namespace signalsmith { namespace linear {
 #if defined(__FAST_MATH__) && XSIMD_WITH_AVX2
 #	if defined(__clang__) && __clang_major__ < 18
 // https://github.com/xtensor-stack/xsimd/issues/1264#issuecomment-3967518377
-#		error There's a bug in Clang v17 and below, which means you need to turn off `-ffast-math` when using AVX2+
+#		error There is a bug in Clang v17 and below, which means you need to turn off `-ffast-math` when using AVX2+
 #	endif
 #endif
 
@@ -156,12 +156,10 @@ namespace _impl_fill {
 	template<class Arch, class V>
 	void fillConstantTyped(RealPointer<V> pointer, V value, size_t fromIndex, size_t toIndex, Arch) {
 		if constexpr (notSupported<Arch, V>()) {
-std::cout << "filling real constant (too small to vectorise)\n";
 			for (size_t i = fromIndex; i < toIndex; ++i) {
 				pointer[i] = value;
 			}
 		} else {
-std::cout << "filling real constant\n";
 			using Batch = xsimd::batch<V, Arch>;
 			Batch batch{value};
 			for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
@@ -174,12 +172,10 @@ std::cout << "filling real constant\n";
 	void fillConstantTyped(ComplexPointer<V> pointer, std::complex<V> value, size_t fromIndex, size_t toIndex, Arch) {
 		using C = std::complex<V>;
 		if constexpr (notSupported<Arch, C>()) {
-std::cout << "filling complex constant (too small to vectorise)\n";
 			for (size_t i = fromIndex; i < toIndex; ++i) {
 				pointer[i] = value;
 			}
 		} else {
-std::cout << "filling complex constant\n";
 			using Batch = xsimd::batch<C, Arch>;
 			Batch batch{value};
 			for (size_t i = fromIndex; i < toIndex; i += Batch::size) {
@@ -191,13 +187,11 @@ std::cout << "filling complex constant\n";
 	void fillConstantTyped(SplitPointer<V> pointer, std::complex<V> value, size_t fromIndex, size_t toIndex, Arch) {
 		using C = std::complex<V>;
 		if constexpr (notSupported<Arch, C>()) {
-std::cout << "filling split constant (too small to vectorise)\n";
 			for (size_t i = fromIndex; i < toIndex; ++i) {
 				pointer.real[i] = value.real();
 				pointer.imag[i] = value.imag();
 			}
 		} else {
-std::cout << "filling split constant\n";
 			using Batch = xsimd::batch<V, Arch>;
 			Batch batchReal{value.real()}, batchImag{value.imag()};
 			for (size_t i = fromIndex; i < toIndex; i += Batch::size) {

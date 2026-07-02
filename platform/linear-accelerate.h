@@ -13,6 +13,48 @@
 
 namespace signalsmith { namespace linear {
 
+template<class T>
+static std::string typeName() {
+	return "?";
+}
+template<>
+std::string typeName<float>() {
+	return "float";
+}
+template<>
+std::string typeName<double>() {
+	return "double";
+}
+template<>
+std::string typeName<std::complex<float>>() {
+	return "complex<float>";
+}
+template<>
+std::string typeName<std::complex<double>>() {
+	return "complex<double>";
+}
+template<>
+std::string typeName<const std::complex<float>>() {
+	return "const complex<float>";
+}
+template<>
+std::string typeName<const std::complex<double>>() {
+	return "const complex<double>";
+}
+static size_t _basicFillWarningCounter = 1;
+static void basicFillWarningReset() {
+	// All warnings will print again
+	++_basicFillWarningCounter;
+}
+template<class Expr>
+static void basicFillWarning() {
+	static size_t counter = 0;
+	if (counter != _basicFillWarningCounter) {
+		counter = _basicFillWarningCounter;
+		std::cerr << "used basic .fill() for " << Expr::name() << " -> " << typeName<decltype(std::declval<Expr>().get(0))>() << "\n";
+	}
+}
+
 template<>
 struct LinearImpl<true> : public LinearImplBase<true> {
 	using Base = LinearImplBase<true>;
@@ -120,6 +162,49 @@ private:
 		std::memcpy(pointer, expr.pointer, size*sizeof(std::complex<double>));
 	}
 
+	// Real part of a split pointer
+	void fillExpr(RealPointer<float> pointer, expression::Real<expression::ReadableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Real<expression::ReadableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(double));
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Real<WritableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Real<WritableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.real, size*sizeof(double));
+	}
+	// Imaginary part
+	void fillExpr(RealPointer<float> pointer, expression::Imag<expression::ReadableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Imag<expression::ReadableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(double));
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Imag<WritableSplit<float>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(float));
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Imag<WritableSplit<double>> expr, size_t size) {
+		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(double));
+	}
+
+	// Complex norm of a split pointer - rephrased as (r*r + i*i)
+	template<class V>
+	void fillExpr(RealPointer<V> pointer, expression::Norm<expression::ReadableSplit<V>> expr, size_t size) {
+		auto real = expression::ReadableReal<V>(expr.a.pointer.real);
+		auto imag = expression::ReadableReal<V>(expr.a.pointer.imag);
+		auto newExpr = expression::makeAdd(expression::makeMul(real, real), expression::makeMul(imag, imag));
+		return fillExpr(pointer, newExpr, size);
+	}
+	template<class V>
+	void fillExpr(RealPointer<V> pointer, expression::Norm<WritableSplit<V>> expr, size_t size) {
+		auto real = expression::ReadableReal<V>(expr.a.pointer.real);
+		auto imag = expression::ReadableReal<V>(expr.a.pointer.imag);
+		auto newExpr = expression::makeAdd(expression::makeMul(real, real), expression::makeMul(imag, imag));
+		return fillExpr(pointer, newExpr, size);
+	}
+	
 	// Filling with a constant
 	template<class V>
 	void fillExpr(RealPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
