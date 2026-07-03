@@ -378,15 +378,15 @@ private:
 	template<class A, class B> \
 	void fill##Name(RealPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a, size, pointer); \
-		auto *b = floats.real(expr.b, size); \
+		auto *a = floats.real(expr.a, size); \
+		auto *b = floats.real(expr.b, size, pointer); \
 		vDSP_func(b, 1, a, 1, pointer, 1, size); \
 	} \
 	template<class A, class B> \
 	void fill##Name(RealPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a, size, pointer); \
-		auto *b = doubles.real(expr.b, size); \
+		auto *a = doubles.real(expr.a, size); \
+		auto *b = doubles.real(expr.b, size, pointer); \
 		vDSP_func##D(b, 1, a, 1, pointer, 1, size); \
 	}
 #define SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Name, vDSP_func) \
