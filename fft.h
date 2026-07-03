@@ -1376,6 +1376,8 @@ using ModifiedRealFFT = RealFFT<Sample, splitComputation, true>;
 #	include "./platform/fft-accelerate.h"
 #elif defined(SIGNALSMITH_USE_IPP)
 #	include "./platform/fft-ipp.h"
+#elif defined(SIGNALSMITH_USE_CMSISDSP)
+#	include "./platform/fft-cmsisdsp.h"
 #elif defined(SIGNALSMITH_USE_XSIMD)
 //	This is the same as the basic one
 #	include "./platform/fft-linear.h"

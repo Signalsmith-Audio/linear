@@ -35,6 +35,22 @@ if(SIGNALSMITH_USE_PFFFT_DOUBLE)
 	message(STATUS "Signalsmith Linear: using PFFFT with double support")
 	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_PFFFT_DOUBLE)
 endif()
+if(SIGNALSMITH_USE_CMSIS_DSP)
+	message(STATUS "Signalsmith Linear: using CMSIS-DSP")
+	FetchContent_Declare(
+		CMSISDSP
+		GIT_REPOSITORY https://github.com/ARM-software/CMSIS-DSP.git
+		GIT_TAG v1.17.0
+		GIT_SHALLOW ON
+		OVERRIDE_FIND_PACKAGE # Use this if the package isn't found locally
+	)
+	find_package(CMSISDSP REQUIRED)
+
+	target_link_libraries(signalsmith-linear INTERFACE CMSISDSP)
+	target_compile_definitions(signalsmith-linear INTERFACE
+		SIGNALSMITH_USE_CMSISDSP
+	)
+endif()
 if(SIGNALSMITH_USE_XSIMD)
 	message(STATUS "Signalsmith Linear: using XSimd")
 	FetchContent_Declare(

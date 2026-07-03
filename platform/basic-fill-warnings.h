@@ -6,7 +6,7 @@ namespace signalsmith { namespace linear {
 #	include <iostream>
 template<class T>
 static std::string typeName() {
-	return typeid(T).name();
+	return "?";
 }
 template<>
 std::string typeName<float>() {

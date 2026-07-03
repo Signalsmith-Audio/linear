@@ -23,6 +23,7 @@
 #include <vector>
 #include <type_traits>
 #include <functional>
+#include <random>
 
 #ifdef SIGNALSMITH_LOG_WARNINGS
 #	include <iostream>
@@ -651,7 +652,7 @@ struct CachedResults {
 		ConstComplexPointer<float> complex(Expr expr, size_t size) {
 			auto chunk = (*this)(size*2);
 			linear.fill((ComplexPointer<float>)chunk, expr, size);
-			return chunk;
+			return reinterpret_cast<const std::complex<float> *>(chunk);
 		}
 		ConstComplexPointer<float> complex(expression::ReadableComplex<float> expr, size_t) {
 			return expr.pointer;
@@ -738,7 +739,7 @@ struct CachedResults {
 		ConstComplexPointer<double> complex(Expr expr, size_t size) {
 			auto chunk = (*this)(size*2);
 			linear.fill((ComplexPointer<double>)chunk, expr, size);
-			return chunk;
+			return reinterpret_cast<const std::complex<double> *>(chunk);
 		}
 		ConstComplexPointer<double> complex(expression::ReadableComplex<double> expr, size_t) {
 			return expr.pointer;
@@ -1033,7 +1034,7 @@ struct LinearImplBase {
 #undef SIGNALSMITH_AUDIO_LINEAR_FUNC1
 
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC2(ExprName, methodName) \
-	1template<class A, class B> \
+	template<class A, class B> \
 	auto methodName(A a, B b) -> Expression<decltype(expression::make##ExprName(wrap(a), wrap(b)))> { \
 		return expression::make##ExprName(wrap(a), wrap(b)); \
 	}
@@ -1110,6 +1111,8 @@ private:
 #	include "./platform/linear-accelerate.h"
 #elif defined(SIGNALSMITH_USE_XSIMD)
 #	include "./platform/linear-xsimd.h"
+#elif defined(SIGNALSMITH_USE_CMSISDSP)
+#	include "./platform/linear-cmsisdsp.h"
 //#elif defined(SIGNALSMITH_USE_IPP)
 //#	include "./platform/linear-ipp.h"
 #endif
