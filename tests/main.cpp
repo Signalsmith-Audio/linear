@@ -37,6 +37,11 @@ int main(int argc, char *argv[]) {
 #else
 	std::cout << u8"❌ SIGNALSMITH_USE_XSIMD\n";
 #endif
+#ifdef SIGNALSMITH_USE_CMSISDSP
+	std::cout << u8"✅ SIGNALSMITH_USE_CMSISDSP\n";
+#else
+	std::cout << u8"❌ SIGNALSMITH_USE_CMSISDSP\n";
+#endif
 #ifdef __FAST_MATH__
 	std::cout << u8"✅ __FAST_MATH__\n";
 #else

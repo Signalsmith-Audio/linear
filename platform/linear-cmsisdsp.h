@@ -596,7 +596,6 @@ private:
 	}
 	template<class A, class B>
 	void fillMul(SplitPointer<float> pointer, expression::Mul<A, B> expr, size_t size) {
-fillBasic(pointer, expr, size);return;
 		auto floats = cached.floatScope();
 		auto a = floats.split(expr.a, size);
 		auto b = floats.split(expr.b, size);
@@ -610,7 +609,6 @@ fillBasic(pointer, expr, size);return;
 	}
 	template<class A, class B>
 	void fillMul(SplitPointer<double> pointer, expression::Mul<A, B> expr, size_t size) {
-//fillBasic(pointer, expr, size);return;
 		auto doubles = cached.doubleScope();
 		auto a = doubles.split(expr.a, size);
 		auto b = doubles.split(expr.b, size);
