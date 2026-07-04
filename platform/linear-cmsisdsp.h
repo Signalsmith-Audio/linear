@@ -145,7 +145,6 @@ private:
 	void fillExpr(RealPointer<double> pointer, expression::Imag<WritableSplit<double>> expr, size_t size) {
 		arm_copy_f64(expr.a.pointer.imag, pointer, uint32_t(size));
 	}
-	
 	// Filling with a constant
 	template<class V>
 	void fillExpr(RealPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
@@ -434,17 +433,36 @@ private:
 		arm_scale_f32(pointer, 0.43429448190325176f, pointer, uint32_t(size));
 	}
 
-//	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Exp)
-//	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Exp2)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Exp2, vvexp2f, vvexp2);
-//	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log, vvlogf, vvlog);
-//	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log2)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log2, vvlog2f, vvlog2);
-//	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log10)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log10, vvlog10f, vvlog10);
-//	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Sqrt)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Sqrt, vvsqrtf, vvsqrt);
+	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Sqrt)
+	template<class A>
+	ItemType<A, float, void> fillSqrt(RealPointer<float> pointer, expression::Sqrt<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto *a = floats.real(expr.a, size, pointer);
+		// Use their fast-sqrt function
+		for (size_t i = 0; i < size; ++i) {
+			arm_sqrt_f32(a[i], &pointer[i]);
+		}
+	}
+	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Sin)
+	template<class A>
+	ItemType<A, float, void> fillSin(RealPointer<float> pointer, expression::Sin<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto *a = floats.real(expr.a, size, pointer);
+		// Use their fast-sqrt function
+		for (size_t i = 0; i < size; ++i) {
+			pointer[i] = arm_sin_f32(a[i]);
+		}
+	}
+	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Cos)
+	template<class A>
+	ItemType<A, float, void> fillSin(RealPointer<float> pointer, expression::Cos<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto *a = floats.real(expr.a, size, pointer);
+		// Use their fast-sqrt function
+		for (size_t i = 0; i < size; ++i) {
+			pointer[i] = arm_cos_f32(a[i]);
+		}
+	}
 //	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Ceil)
 //	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Ceil, vvceilf, vvceil);
 //	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Floor)
@@ -491,45 +509,45 @@ private:
 	void fill##Name(RealPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto floats = cached.floatScope(); \
 		auto *a = floats.real(expr.a, size); \
-		auto *b = floats.real(expr.b, size, pointer); \
+		auto *b = floats.real(expr.b, size); \
 		cmsis_prefix##_f32(a, b, pointer, uint32_t(size)); \
 	} \
 	template<class A, class B> \
 	ItemType<A, double, void> fill##Name(RealPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto doubles = cached.doubleScope(); \
 		auto *a = doubles.real(expr.a, size); \
-		auto *b = doubles.real(expr.b, size, pointer); \
+		auto *b = doubles.real(expr.b, size); \
 		cmsis_prefix##_f64(a, b, pointer, uint32_t(size)); \
 	}
 // C x C -> C where it's elementwise
 #define SIGNALSMITH_AUDIO_LINEAR_TREE2_CCCe(Name, cmsis_prefix) \
 	template<class A, class B> \
-	ItemType<A, std::complex<float>, void> fill##Name(ComplexPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
+	void fill##Name(ComplexPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto floats = cached.floatScope(); \
 		auto *a = floats.complex(expr.a, size); \
-		auto *b = floats.complex(expr.b, size, pointer); \
+		auto *b = floats.complex(expr.b, size); \
 		cmsis_prefix##_f32(reinterpret_cast<const float *>(a), reinterpret_cast<const float *>(b), reinterpret_cast<float *>(pointer), size*2); \
 	} \
 	template<class A, class B> \
-	ItemType<A, std::complex<double>, void> fill##Name(ComplexPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
+	void fill##Name(ComplexPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto doubles = cached.doubleScope(); \
 		auto *a = doubles.complex(expr.a, size); \
-		auto *b = doubles.complex(expr.b, size, pointer); \
+		auto *b = doubles.complex(expr.b, size); \
 		cmsis_prefix##_f64(reinterpret_cast<const double *>(a), reinterpret_cast<const double *>(b), reinterpret_cast<double *>(pointer), size*2); \
 	}\
 	template<class A, class B> \
-	ItemType<A, std::complex<float>, void> fill##Name(SplitPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
+	void fill##Name(SplitPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto floats = cached.floatScope(); \
 		auto a = floats.split(expr.a, size); \
-		auto b = floats.split(expr.a, size, pointer); \
+		auto b = floats.split(expr.b, size); \
 		cmsis_prefix##_f32(a.real, b.real, pointer.real, size); \
 		cmsis_prefix##_f32(a.imag, b.imag, pointer.imag, size); \
 	} \
 	template<class A, class B> \
-	ItemType<A, std::complex<double>, void> fill##Name(SplitPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
+	void fill##Name(SplitPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto doubles = cached.doubleScope(); \
 		auto a = doubles.split(expr.a, size); \
-		auto b = doubles.split(expr.a, size, pointer); \
+		auto b = doubles.split(expr.b, size); \
 		cmsis_prefix##_f64(a.real, b.real, pointer.real, size); \
 		cmsis_prefix##_f64(a.imag, b.imag, pointer.imag, size); \
 	}
@@ -564,10 +582,12 @@ private:
 	}
 	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Add)
 	SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR(Add, arm_add);
-	SIGNALSMITH_AUDIO_LINEAR_TREE2_CCCe(Add, arm_add);
 	SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Add, arm_offset);
+	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Add)
+	SIGNALSMITH_AUDIO_LINEAR_TREE2_CCCe(Add, arm_add);
 	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Sub)
 	SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR(Sub, arm_sub);
+	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Sub)
 	SIGNALSMITH_AUDIO_LINEAR_TREE2_CCCe(Sub, arm_sub);
 	// Flip a constant subtraction around into adding a negative constant, or negation + adding
 	template<class A, class V>
@@ -598,14 +618,14 @@ private:
 	void fillMul(ComplexPointer<float> pointer, expression::Mul<A, B> expr, size_t size) {
 		auto floats = cached.floatScope();
 		auto *a = floats.complex(expr.a, size);
-		auto *b = floats.complex(expr.b, size, pointer);
+		auto *b = floats.complex(expr.b, size);
 		arm_cmplx_mult_cmplx_f32(reinterpret_cast<const float *>(a), reinterpret_cast<const float *>(b), reinterpret_cast<float *>(pointer), size);
 	}
 	template<class A, class B>
 	void fillMul(ComplexPointer<double> pointer, expression::Mul<A, B> expr, size_t size) {
 		auto doubles = cached.doubleScope();
 		auto *a = doubles.complex(expr.a, size);
-		auto *b = doubles.complex(expr.b, size, pointer);
+		auto *b = doubles.complex(expr.b, size);
 		arm_cmplx_mult_cmplx_f64(reinterpret_cast<const double *>(a), reinterpret_cast<const double *>(b), reinterpret_cast<double *>(pointer), size);
 	}
 	template<class A, class B>
@@ -656,7 +676,7 @@ private:
 //	void fillDiv(RealPointer<float> pointer, expression::Div<A, B> expr, size_t size) {
 //		auto floats = cached.floatScope();
 //		auto *a = floats.real(expr.a, size);
-//		auto *b = floats.real(expr.b, size, pointer);
+//		auto *b = floats.real(expr.b, size);
 //		for (size_t i = 0; i < size; ++i) {
 //			pointer[i] = a[i]/b[i];
 //		}
@@ -665,7 +685,7 @@ private:
 //	void fillDiv(RealPointer<double> pointer, expression::Div<A, B> expr, size_t size) {
 //		auto doubles = cached.doubleScope();
 //		auto *a = doubles.real(expr.a, size);
-//		auto *b = doubles.real(expr.b, size, pointer);
+//		auto *b = doubles.real(expr.b, size);
 //		for (size_t i = 0; i < size; ++i) {
 //			pointer[i] = a[i]/b[i];
 //		}
@@ -675,6 +695,9 @@ private:
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE2_CCCe
 #undef SIGNALSMITH_AUDIO_LINEAR_OP2_R
 #undef SIGNALSMITH_AUDIO_LINEAR_OP2_C
+
+/*=========== move this down the file to gradually add overrides, and see which one makes it fail
+//*/
 
 protected:
 	CachedResults<LinearImpl> cached;

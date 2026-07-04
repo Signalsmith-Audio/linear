@@ -377,14 +377,14 @@ private:
 	void fill##Name(RealPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto floats = cached.floatScope(); \
 		auto *a = floats.real(expr.a, size); \
-		auto *b = floats.real(expr.b, size, pointer); \
+		auto *b = floats.real(expr.b, size); \
 		vDSP_func(b, 1, a, 1, pointer, 1, size); \
 	} \
 	template<class A, class B> \
 	void fill##Name(RealPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto doubles = cached.doubleScope(); \
 		auto *a = doubles.real(expr.a, size); \
-		auto *b = doubles.real(expr.b, size, pointer); \
+		auto *b = doubles.real(expr.b, size); \
 		vDSP_func##D(b, 1, a, 1, pointer, 1, size); \
 	}
 #define SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Name, vDSP_func) \
@@ -463,7 +463,7 @@ private:
 	template<class A, class B> \
 	void fill##Name(RealPointer<float> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto floats = cached.floatScope(); \
-		auto *a = floats.real(expr.a, size, pointer); \
+		auto *a = floats.real(expr.a, size); \
 		auto *b = floats.real(expr.b, size); \
 		int intSize = int(size); \
 		vForce_float(pointer, a, b, &intSize); \
@@ -471,7 +471,7 @@ private:
 	template<class A, class B> \
 	void fill##Name(RealPointer<double> pointer, expression::Name<A, B> expr, size_t size) { \
 		auto doubles = cached.doubleScope(); \
-		auto *a = doubles.real(expr.a, size, pointer); \
+		auto *a = doubles.real(expr.a, size); \
 		auto *b = doubles.real(expr.b, size); \
 		int intSize = int(size); \
 		vForce_double(pointer, a, b, &intSize); \
@@ -497,7 +497,7 @@ private:
 		auto floats = cached.floatScope(); \
 		auto *a = floats.real(expr.a.a, size); \
 		auto *b = floats.real(expr.a.b, size); \
-		auto *c = floats.real(expr.b, size, pointer); \
+		auto *c = floats.real(expr.b, size); \
 		vDSP_func(a, 1, b, 1, c, 1, pointer, 1, size); \
 	} \
 	template<class A, class B, class C> \
@@ -505,7 +505,7 @@ private:
 		auto doubles = cached.doubleScope(); \
 		auto *a = doubles.real(expr.a.a, size); \
 		auto *b = doubles.real(expr.a.b, size); \
-		auto *c = doubles.real(expr.b, size, pointer); \
+		auto *c = doubles.real(expr.b, size); \
 		vDSP_func##D(a, 1, b, 1, c, 1, pointer, 1, size); \
 	}
 	SIGNALSMITH_AUDIO_LINEAR_Op3L_R(Mul, Add)
