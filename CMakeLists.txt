@@ -35,7 +35,7 @@ if(SIGNALSMITH_USE_PFFFT_DOUBLE)
 	message(STATUS "Signalsmith Linear: using PFFFT with double support")
 	target_compile_definitions(signalsmith-linear INTERFACE SIGNALSMITH_USE_PFFFT_DOUBLE)
 endif()
-if(SIGNALSMITH_USE_CMSIS_DSP)
+if(SIGNALSMITH_USE_CMSISDSP)
 	message(STATUS "Signalsmith Linear: using CMSIS-DSP")
 	FetchContent_Declare(
 		CMSISDSP
