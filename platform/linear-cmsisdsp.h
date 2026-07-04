@@ -9,15 +9,13 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 	LinearImpl() : Base(this), cached(*this) {}
 
 	template<class V>
-	void reserve(size_t) {}
-	
-	template<>
-	void reserve<float>(size_t size) {
-		cached.reserveFloats(size*4);
-	}
-	template<>
-	void reserve<double>(size_t size) {
-		cached.reserveDoubles(size*4);
+	void reserve(size_t size) {
+		// assume float/doubles if the right size
+		if (sizeof(V) == sizeof(float)) {
+			cached.reserveFloats(size*4);
+		} else if (sizeof(V) == sizeof(double)) {
+			cached.reserveDoubles(size*4);
+		}
 	}
 
 	template<class Pointer, class Expr>
@@ -65,7 +63,7 @@ private:
 		arm_fill_f32(0.0f, v, uint32_t(size));
 	}
 	void clear(double *v, size_t size) {
-		arm_fill_f64(0.0, v, uint32_t(size));
+		for (size_t i = 0; i < size; ++i) v[i] = 0;
 	}
 	// Filling a split-complex vector with real values won't hit the specialisations below, so we handle it here
 	template<class Expr>
@@ -103,6 +101,22 @@ private:
 	}
 	void fillExpr(ComplexPointer<double> pointer, WritableComplex<double> expr, size_t size) {
 		arm_copy_f64(reinterpret_cast<const double *>(expr.pointer), reinterpret_cast<double *>(pointer), uint32_t(size*2));
+	}
+	void fillExpr(SplitPointer<float> pointer, expression::ReadableSplit<float> expr, size_t size) {
+		arm_copy_f32(expr.pointer.real, pointer.real, uint32_t(size));
+		arm_copy_f32(expr.pointer.imag, pointer.imag, uint32_t(size));
+	}
+	void fillExpr(SplitPointer<float> pointer, WritableSplit<float> expr, size_t size) {
+		arm_copy_f32(expr.pointer.real, pointer.real, uint32_t(size));
+		arm_copy_f32(expr.pointer.imag, pointer.imag, uint32_t(size));
+	}
+	void fillExpr(SplitPointer<double> pointer, expression::ReadableSplit<double> expr, size_t size) {
+		arm_copy_f64(expr.pointer.real, pointer.real, uint32_t(size));
+		arm_copy_f64(expr.pointer.imag, pointer.imag, uint32_t(size));
+	}
+	void fillExpr(SplitPointer<double> pointer, WritableSplit<double> expr, size_t size) {
+		arm_copy_f64(expr.pointer.real, pointer.real, uint32_t(size));
+		arm_copy_f64(expr.pointer.imag, pointer.imag, uint32_t(size));
 	}
 
 	// Real part of a split pointer
@@ -661,50 +675,6 @@ private:
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE2_CCCe
 #undef SIGNALSMITH_AUDIO_LINEAR_OP2_R
 #undef SIGNALSMITH_AUDIO_LINEAR_OP2_C
-
-//// Forwards .fillName() to .fillNameName2(), but doesn't define that
-//#define SIGNALSMITH_AUDIO_LINEAR_Op3L_R(Name, NameL) \
-//	template<class A, class B, class C> \
-//	void fill##Name(RealPointer<float> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-//		fill##Name##NameL(pointer, expr, size); \
-//	} \
-//	template<class A, class B, class C> \
-//	void fill##Name(RealPointer<double> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-//		fill##Name##NameL(pointer, expr, size); \
-//	}
-//// (A $ B) $ C
-//#define SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Name, NameL, vDSP_func) \
-//	template<class A, class B, class C> \
-//	void fill##Name##NameL(RealPointer<float> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-//		auto floats = cached.floatScope(); \
-//		auto *a = floats.real(expr.a.a, size); \
-//		auto *b = floats.real(expr.a.b, size); \
-//		auto *c = floats.real(expr.b, size, pointer); \
-//		vDSP_func(a, 1, b, 1, c, 1, pointer, 1, size); \
-//	} \
-//	template<class A, class B, class C> \
-//	void fill##Name##NameL(RealPointer<double> pointer, expression::Name<expression::NameL<A, B>, C> expr, size_t size) { \
-//		auto doubles = cached.doubleScope(); \
-//		auto *a = doubles.real(expr.a.a, size); \
-//		auto *b = doubles.real(expr.a.b, size); \
-//		auto *c = doubles.real(expr.b, size, pointer); \
-//		vDSP_func##D(a, 1, b, 1, c, 1, pointer, 1, size); \
-//	}
-//	SIGNALSMITH_AUDIO_LINEAR_Op3L_R(Mul, Add)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Mul, Add, vDSP_vam)
-//
-//#undef SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR
-//#undef SIGNALSMITH_AUDIO_LINEAR_Op3L_R
-
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Add, Mul, vDSP_vam, 0)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Mul, Add, vDSP_vma, 1)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3COMMUTATIVE_RRR(Sub, Mul, vDSP_vsbm, 2)
-//	SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Mul, Sub, vDSP_vmsb, 3)
-
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Add)
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Sub)
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Mul)
-//	SIGNALSMITH_AUDIO_LINEAR_OP2_C(Div)
 
 protected:
 	CachedResults<LinearImpl> cached;

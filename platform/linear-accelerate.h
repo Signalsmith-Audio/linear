@@ -22,15 +22,13 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 	}
 
 	template<class V>
-	void reserve(size_t) {}
-	
-	template<>
-	void reserve<float>(size_t size) {
-		cached.reserveFloats(size*4);
-	}
-	template<>
-	void reserve<double>(size_t size) {
-		cached.reserveDoubles(size*4);
+	void reserve(size_t size) {
+		// assume float/doubles if the right size
+		if (sizeof(V) == sizeof(float)) {
+			cached.reserveFloats(size*4);
+		} else if (sizeof(V) == sizeof(double)) {
+			cached.reserveDoubles(size*4);
+		}
 	}
 
 	template<class Pointer, class Expr>
