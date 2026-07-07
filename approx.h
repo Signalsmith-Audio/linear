@@ -38,7 +38,7 @@ struct Approx {
 		if (norm < Sample(1e-30)) {
 			v = newAbs;
 		} else {
-			v *= newAbs/std::sqrt(norm);
+			v *= newAbs*invSqrt(norm);
 		}
 	}
 	void setAbs(std::complex<Sample> *v, const Sample *newAbs, size_t count) {
@@ -58,9 +58,9 @@ struct Approx {
 	void setNorm(std::complex<Sample> &v, Sample newNorm=1) {
 		Sample norm = v.real()*v.real() + v.imag()*v.imag();
 		if (norm < Sample(1e-30)) {
-			v = std::sqrt(newNorm);
+			v = sqrt(newNorm);
 		} else {
-			v *= std::sqrt(newNorm/norm);
+			v *= sqrt(newNorm/norm);
 		}
 	}
 	void setNorm(std::complex<Sample> *v, const Sample *newNorm, size_t count) {
@@ -100,14 +100,7 @@ struct Approx {
 		}
 	}
 
-protected:
-	static constexpr Sample inv16 = 1/Sample(65536);
-	static constexpr Sample inv32 = 1/Sample(4294967296);
 	struct Pcg32 {
-		uint64_t state;
-		static constexpr uint64_t multiply = 6364136223846793005ULL;
-		uint64_t add;
-
 		uint32_t operator()() {
 			uint64_t prevState = state;
 			state = prevState*multiply + add;
@@ -126,7 +119,15 @@ protected:
 				bits += sizeof(r1);
 			}
 		}
+	private:
+		uint64_t state;
+		static constexpr uint64_t multiply = 6364136223846793005ULL;
+		uint64_t add;
 	} pcg32;
+
+protected:
+	static constexpr Sample inv16 = 1/Sample(65536);
+	static constexpr Sample inv32 = 1/Sample(4294967296);
 };
 
 // Base double implementation is casting to/from float
@@ -144,10 +145,10 @@ struct Approx<double, 0> {
 		return double(floats.cos(float(v)));
 	}
 	double atan2(double x, double y) {
-		return double(floats.sin(float(x), float(y)));
+		return double(floats.atan2(float(x), float(y)));
 	}
 	double arg(std::complex<double> v) {
-		return double(floats.arg({float(v.real()), float(v.imag())));
+		return double(floats.arg({float(v.real()), float(v.imag())}));
 	}
 	double sqrt(double v) {
 		return double(floats.sqrt(float(v)));
@@ -162,24 +163,26 @@ struct Approx<double, 0> {
 	void fillRandom32(double *array, size_t count, bool allow1=false) {
 		const double scale = 1/double(allow1 ? 4294967295 : 4294967296);
 		for (size_t i = 0; i < count; ++i) {
-			array[i] = pcg32()*scale;
+			array[i] = floats.pcg32()*scale;
 		}
 	}
 	void fillRandom16(double *array, size_t count, bool allow1=true) {
 		const double scale = 1/double(allow1 ? 65535 : 65536);
 		for (size_t i = 0; i < count/2; ++i) {
-			auto r32 = pcg32();
+			auto r32 = floats.pcg32();
 			// Little-endian way around
 			array[2*i] = (r32&0xFFFF)*scale;
 			array[2*i + 1] = (r32>>16)*scale;
 		}
 		if (count&1) {
-			array[count^1] = (pcg32()&0xFFFF)*scale;
+			array[count^1] = (floats.pcg32()&0xFFFF)*scale;
 		}
 	}
 private:
 	Approx<float, 0> floats;
 };
+
+}} // namespace
 
 #if defined(SIGNALSMITH_USE_CMSISDSP)
 #	include "./platform/fft-cmsisdsp.h"

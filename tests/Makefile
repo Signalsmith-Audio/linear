@@ -21,7 +21,7 @@ out/tests: *.cpp *.h ../*.h ../platform/*.h
 
 out-cmake/tests: CMakeLists.txt *.cpp *.h ../*.h ../platform/*.h
 #	cmake -B build -G Xcode -DSIGNALSMITH_USE_ACCELERATE=NO -DSIGNALSMITH_USE_XSIMD=YES -DSIGNALSMITH_USE_XSIMD_DISPATCH=YES
-	cmake -B build -G Xcode -DSIGNALSMITH_USE_ACCELERATE=NO -DSIGNALSMITH_USE_CMSISDSP=YES
+	cmake -B build -G Xcode -DSIGNALSMITH_USE_ACCELERATE=YES # -DSIGNALSMITH_USE_CMSISDSP=NO
 	cmake --build build --config Release
 	mkdir -p out-cmake
 	cp build/Release/tests out-cmake
