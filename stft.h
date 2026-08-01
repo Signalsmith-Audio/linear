@@ -366,6 +366,7 @@ struct DynamicSTFT {
 			for (size_t i = _blockSamples - _analysisOffset; i < _fftSamples - _analysisOffset; ++i) {
 				timeBuffer[i] = 0;
 			}
+			if (hookTimeInput) hookTimeInput(hookContext, channel, timeBuffer.data(), _fftSamples - _analysisOffset, _fftSamples, _blockSamples - _analysisOffset);
 			if (splitComputation) return;
 		}
 		auto *spectrumPtr = spectrum(channel);
@@ -422,7 +423,9 @@ struct DynamicSTFT {
 		size_t outputWrapIndex = _blockSamples - output.pos;
 		size_t chunk1 = std::min(_synthesisOffset, outputWrapIndex);
 		size_t chunk2 = std::min(_blockSamples, std::max(_synthesisOffset, outputWrapIndex));
-		
+
+		if (hookTimeOutput) hookTimeOutput(hookContext, channel, timeBuffer.data(), _fftSamples - _synthesisOffset, _fftSamples, _blockSamples - _synthesisOffset);
+
 		for (size_t i = 0; i < chunk1; ++i) {
 			Sample w = modified ? -_synthesisWindow[i] : _synthesisWindow[i];
 			size_t ti = i + (_fftSamples - _synthesisOffset);
@@ -501,6 +504,13 @@ struct DynamicSTFT {
 		std::vector<Sample> windowProducts;
 	};
 	Output output;
+
+protected:
+	void *hookContext;
+	
+	typedef void (*TimeHook)(void *, size_t channel, Sample *timeBuffer, size_t preStart, size_t preEnd, size_t postEnd);
+	TimeHook hookTimeInput = nullptr;
+	TimeHook hookTimeOutput = nullptr;
 
 private:
 	static constexpr Sample almostZero = 1e-30;
