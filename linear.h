@@ -166,11 +166,11 @@ namespace expression {
 
 	template<class V, typename=void>
 	struct ExprTest {
-		using Constant = ConstantExpr<Arithmetic<V>>;
+		using ConstantE = ConstantExpr<Arithmetic<V>>;
 
-		static_assert(SIGNALSMITH_IS_TRIVIALLY_COPYABLE(Constant), "ConstantExpr<V> must be trivially copyable");
+		static_assert(SIGNALSMITH_IS_TRIVIALLY_COPYABLE(ConstantE), "ConstantExpr<V> must be trivially copyable");
 
-		static Constant wrap(const V &v) {
+		static ConstantE wrap(const V &v) {
 			return {v};
 		}
 	};
@@ -182,7 +182,7 @@ namespace expression {
 	};
 	// Constant class, only defined for non-Expr types
 	template<class Expr>
-	using Constant = typename ExprTest<Expr>::Constant;
+	using Constant = typename ExprTest<Expr>::ConstantE;
 	
 	template<class Expr>
 	auto ensureExpr(const Expr &expr) -> decltype(ExprTest<Expr>::wrap(expr)) {
@@ -931,31 +931,32 @@ struct LinearImplBase {
 		return {self(), SplitPointer<V>{real, imag}, size};
 	}
 
-	template<typename V>
-	WritableExpression<WritableReal<V>> wrap(std::vector<V> &vector) {
+	// Wrap vectors (writable)
+	template<typename V, class A>
+	WritableExpression<WritableReal<V>> wrap(std::vector<V, A> &vector) {
 		return {self(), vector.data(), vector.size()};
 	}
-	template<typename V>
-	WritableExpression<WritableComplex<V>> wrap(std::vector<std::complex<V>> &vector) {
+	template<typename V, class A>
+	WritableExpression<WritableComplex<V>> wrap(std::vector<std::complex<V>, A> &vector) {
 		return {self(), vector.data(), vector.size()};
 	}
-	template<typename V>
-	WritableExpression<WritableSplit<V>> wrap(std::vector<V> &real, std::vector<V> &imag) {
+	template<typename V, class A1, class A2>
+	WritableExpression<WritableSplit<V>> wrap(std::vector<V, A1> &real, std::vector<V, A2> &imag) {
 		SplitPointer<V> pointer{real.data(), imag.data()};
 		size_t size = std::min<size_t>(real.size(), imag.size());
 		return {self(), pointer, size};
 	}
-
-	template<typename V>
-	Expression<expression::ReadableReal<V>> wrap(const std::vector<V> &vector) {
+	// and read-only
+	template<typename V, class A>
+	Expression<expression::ReadableReal<V>> wrap(const std::vector<V, A> &vector) {
 		return {vector.data()};
 	}
-	template<typename V>
-	Expression<expression::ReadableComplex<V>> wrap(const std::vector<std::complex<V>> &vector) {
+	template<typename V, class A>
+	Expression<expression::ReadableComplex<V>> wrap(const std::vector<std::complex<V>, A> &vector) {
 		return {vector.data()};
 	}
-	template<typename V>
-	Expression<expression::ReadableSplit<V>> wrap(const std::vector<V> &real, const std::vector<V> &imag) {
+	template<typename V, class A1, class A2>
+	Expression<expression::ReadableSplit<V>> wrap(const std::vector<V, A1> &real, const std::vector<V, A2> &imag) {
 		ConstSplitPointer<V> pointer{real.data(), imag.data()};
 		return {pointer};
 	}
