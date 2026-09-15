@@ -992,10 +992,9 @@ struct LinearImplBase {
 		return self().fill(pointer, (Expr &)expr, size);
 	};
 
-
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(ExprName, methodName) \
 	template<class A> \
-	auto methodName(A a) -> Expression<decltype(expression::make##ExprName(wrap(a)))> { \
+	auto methodName(A &&a) -> Expression<decltype(expression::make##ExprName(wrap(a)))> { \
 		return expression::make##ExprName(wrap(a)); \
 	}
 	SIGNALSMITH_AUDIO_LINEAR_FUNC1(Abs, abs)
