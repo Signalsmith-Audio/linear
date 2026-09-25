@@ -519,7 +519,7 @@ struct DynamicSTFT {
 	Output output;
 
 protected:
-	void *hookContext;
+	void *hookContext = nullptr;
 	
 	/* 0 .... postEnd, ____, preStart .... preEnd  */
 	typedef void (*TimeHook)(void *, size_t channel, Sample *timeBuffer, size_t preStart, size_t preEnd, size_t postEnd);
