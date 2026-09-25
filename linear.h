@@ -538,6 +538,13 @@ struct WritableExpression : public Expression<BaseExpr> {
 /// Helper class for temporary storage
 template<typename V, bool allowAllocation, size_t alignBytes>
 struct Temporary {
+
+	Temporary() {}
+	Temporary(const Temporary &other) = delete;
+	Temporary & operator=(const Temporary &other) = delete;
+	~Temporary() {
+		if (buffer) delete[] buffer;
+	}
 	
 	void reserve(size_t size) {
 		if (buffer) delete[] buffer;
