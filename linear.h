@@ -876,7 +876,7 @@ struct LinearImplBase {
 
 		using Unwrapped = expression::ReadableSplit<V>;
 		operator Unwrapped() const {
-			return {pointer};
+			return ConstSplitPointer<V>{pointer.real, pointer.imag};
 		}
 
 		std::complex<V> get(std::ptrdiff_t i) const {
