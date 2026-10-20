@@ -418,7 +418,7 @@ struct Pow2RealFFT<float> {
 private:
       std::unique_ptr<State<float, false>> m_state{ nullptr };
       std::complex<float>* tmp = nullptr;
-      std::vector<std::complex<float>> tmpVector;
+      SIGNALSMITH_VECTOR(std::complex<float>) tmpVector;
       size_t hSize;
 };
 
@@ -523,7 +523,7 @@ struct Pow2RealFFT<double> {
 private:
       std::unique_ptr<State<double, false>> m_state{ nullptr };
       std::complex<double>* tmp = nullptr;
-      std::vector<std::complex<double>> tmpVector;
+      SIGNALSMITH_VECTOR(std::complex<double>) tmpVector;
       size_t hSize;
 };
 

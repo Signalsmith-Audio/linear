@@ -2,12 +2,16 @@
 #define SIGNALSMITH_AUDIO_LINEAR_FFT_H
 
 #include <complex>
-#include <vector>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #if defined(__FAST_MATH__) && (__apple_build_version__ >= 16000000) && (__apple_build_version__ <= 16000099) && !defined(SIGNALSMITH_IGNORE_BROKEN_APPLECLANG)
 #	error Apple Clang 16.0.0 generates incorrect SIMD for ARM. If you HAVE to use this version of Clang, turn off -ffast-math.
+#endif
+
+#ifndef SIGNALSMITH_VECTOR
+#	define SIGNALSMITH_VECTOR(T) std::vector<T>
 #endif
 
 #ifndef M_PI
@@ -157,8 +161,8 @@ struct SimpleFFT {
 		fftPass<true>(size, 1, inR, inI, outR, outI, workingR, workingI);
 	}
 private:
-	std::vector<Complex> twiddles;
-	std::vector<Complex> working;
+	SIGNALSMITH_VECTOR(Complex) twiddles;
+	SIGNALSMITH_VECTOR(Complex) working;
 	
 	template<bool conjB>
 	static Complex mul(const Complex &a, const Complex &b) {
@@ -317,7 +321,7 @@ struct Pow2FFT {
 	}
 
 private:
-	std::vector<Complex> tmp;
+	SIGNALSMITH_VECTOR(Complex) tmp;
 	SimpleFFT<Sample> simpleFFT;
 };
 
@@ -460,10 +464,10 @@ private:
 	InnerFFT innerFFT;
 
 	size_t innerSize, outerSize;
-	std::vector<Complex> tmpFreq;
-	std::vector<Complex> outerTwiddles;
-	std::vector<Sample> outerTwiddlesR, outerTwiddlesI;
-	std::vector<Complex> dftTwists, dftTmp;
+	SIGNALSMITH_VECTOR(Complex) tmpFreq;
+	SIGNALSMITH_VECTOR(Complex) outerTwiddles;
+	SIGNALSMITH_VECTOR(Sample) outerTwiddlesR, outerTwiddlesI;
+	SIGNALSMITH_VECTOR(Complex) dftTwists, dftTmp;
 
 	enum class StepType {
 		passthrough,
@@ -476,7 +480,7 @@ private:
 		StepType type;
 		size_t offset;
 	};
-	std::vector<Step> plan;
+	SIGNALSMITH_VECTOR(Step) plan;
 	
 	template<bool inverse>
 	void fftStep(Step step, const Complex *time, Complex *freq) {
@@ -937,7 +941,7 @@ struct SimpleRealFFT {
 
 private:
 	ComplexFFT complexFft;
-	std::vector<Complex> tmpTime, tmpFreq;
+	SIGNALSMITH_VECTOR(Complex) tmpTime, tmpFreq;
 };
 
 /// A default power-of-2 FFT, specialised with platform-specific fast implementations where available
@@ -1355,8 +1359,8 @@ private:
 	ComplexFFT complexFft;
 
 	static constexpr bool complexPrefersSplit = ComplexFFT::prefersSplit;
-	std::vector<Complex> tmpFreq, tmpTime;
-	std::vector<Complex> twiddles, halfBinTwists;
+	SIGNALSMITH_VECTOR(Complex) tmpFreq, tmpTime;
+	SIGNALSMITH_VECTOR(Complex) twiddles, halfBinTwists;
 };
 
 template<typename Sample, bool splitComputation=false>

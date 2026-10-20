@@ -93,7 +93,7 @@ private:
 	static constexpr size_t maxSize = 4096;
 	arm_cfft_instance_f32 instance;
 	SimpleFFT<float> *simpleFFT = nullptr;
-	std::vector<Complex> tmp;
+	SIGNALSMITH_VECTOR(Complex) tmp;
 };
 
 template<>
@@ -169,8 +169,8 @@ private:
 	static constexpr size_t maxSize = 4096;
 	arm_rfft_fast_instance_f32 instance;
 	SimpleRealFFT<float> *simpleFFT = nullptr;
-	std::vector<float> tmpTime;
-	std::vector<Complex> tmpFreq;
+	SIGNALSMITH_VECTOR(float) tmpTime;
+	SIGNALSMITH_VECTOR(Complex) tmpFreq;
 };
 
 /*
@@ -232,7 +232,7 @@ private:
 	bool hasSetup = false;
 	FFTSetupD fftSetup;
 	int log2 = 0;
-	std::vector<double> splitReal, splitImag;
+	SIGNALSMITH_VECTOR(double) splitReal, splitImag;
 };
 
 template<>
@@ -300,7 +300,7 @@ private:
 	bool hasSetup = false;
 	FFTSetupD fftSetup;
 	int log2 = 0;
-	std::vector<double> splitReal, splitImag;
+	SIGNALSMITH_VECTOR(double) splitReal, splitImag;
 };
 */
 

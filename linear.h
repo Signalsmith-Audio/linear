@@ -25,6 +25,10 @@
 #include <functional>
 #include <random>
 
+#ifndef SIGNALSMITH_VECTOR
+#	define SIGNALSMITH_VECTOR(T) std::vector<T>
+#endif
+
 #ifdef SIGNALSMITH_LOG_WARNINGS
 #	include <iostream>
 #endif
@@ -594,7 +598,7 @@ private:
 	V *start = nullptr, *end = nullptr;
 	V *buffer = nullptr, *alignedBuffer = nullptr;
 
-	std::vector<std::vector<V>> fallbacks;
+	SIGNALSMITH_VECTOR(SIGNALSMITH_VECTOR(V)) fallbacks;
 
 	/// Valid until the next call to .clear() or .reserve()
 	V * getChunk(size_t size) {
@@ -953,6 +957,20 @@ struct LinearImplBase {
 		size_t size = std::min<size_t>(real.size(), imag.size());
 		return {self(), pointer, size};
 	}
+	template<typename V>
+	WritableExpression<WritableReal<V>> wrap(SIGNALSMITH_VECTOR(V) &vector) {
+		return {self(), vector.data(), vector.size()};
+	}
+	template<typename V>
+	WritableExpression<WritableComplex<V>> wrap(SIGNALSMITH_VECTOR(std::complex<V>) &vector) {
+		return {self(), vector.data(), vector.size()};
+	}
+	template<typename V>
+	WritableExpression<WritableSplit<V>> wrap(SIGNALSMITH_VECTOR(V) &real, SIGNALSMITH_VECTOR(V) &imag) {
+		SplitPointer<V> pointer{real.data(), imag.data()};
+		size_t size = std::min<size_t>(real.size(), imag.size());
+		return {self(), pointer, size};
+	}
 	// and read-only
 	template<typename V, class A>
 	Expression<expression::ReadableReal<V>> wrap(const std::vector<V, A> &vector) {
@@ -964,6 +982,19 @@ struct LinearImplBase {
 	}
 	template<typename V, class A1, class A2>
 	Expression<expression::ReadableSplit<V>> wrap(const std::vector<V, A1> &real, const std::vector<V, A2> &imag) {
+		ConstSplitPointer<V> pointer{real.data(), imag.data()};
+		return {pointer};
+	}
+	template<typename V>
+	Expression<expression::ReadableReal<V>> wrap(const SIGNALSMITH_VECTOR(V) &vector) {
+		return {vector.data()};
+	}
+	template<typename V>
+	Expression<expression::ReadableComplex<V>> wrap(const SIGNALSMITH_VECTOR(std::complex<V>) &vector) {
+		return {vector.data()};
+	}
+	template<typename V>
+	Expression<expression::ReadableSplit<V>> wrap(const SIGNALSMITH_VECTOR(V) &real, const SIGNALSMITH_VECTOR(V) &imag) {
 		ConstSplitPointer<V> pointer{real.data(), imag.data()};
 		return {pointer};
 	}

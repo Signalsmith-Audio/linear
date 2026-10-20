@@ -492,7 +492,7 @@ struct DynamicSTFT {
 	private:
 		friend struct DynamicSTFT;
 		size_t pos = 0;
-		std::vector<Sample> buffer;
+		SIGNALSMITH_VECTOR(Sample) buffer;
 	};
 	Input input;
 	
@@ -513,8 +513,8 @@ struct DynamicSTFT {
 	private:
 		friend struct DynamicSTFT;
 		size_t pos = 0;
-		std::vector<Sample> buffer;
-		std::vector<Sample> windowProducts;
+		SIGNALSMITH_VECTOR(Sample) buffer;
+		SIGNALSMITH_VECTOR(Sample) windowProducts;
 	};
 	Output output;
 
@@ -532,11 +532,11 @@ private:
 	size_t _analysisChannels, _synthesisChannels, _inputLengthSamples, _blockSamples, _fftSamples, _fftBins;
 	size_t _defaultInterval = 0;
 
-	std::vector<Sample> _analysisWindow, _synthesisWindow;
+	SIGNALSMITH_VECTOR(Sample) _analysisWindow, _synthesisWindow;
 	size_t _analysisOffset = 0, _synthesisOffset = 0;
 
-	std::vector<Complex> spectrumBuffer;
-	std::vector<Sample> timeBuffer;
+	SIGNALSMITH_VECTOR(Complex) spectrumBuffer;
+	SIGNALSMITH_VECTOR(Sample) timeBuffer;
 
 	size_t _samplesSinceSynthesis = 0, _samplesSinceAnalysis = 0;
 	

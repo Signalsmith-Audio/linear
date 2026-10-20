@@ -66,8 +66,8 @@ struct LinearFFT {
 		fftPass<true>(size, 1, inR, inI, outR, outI, workingR, workingI);
 	}
 private:
-	std::vector<Complex> twiddles;
-	std::vector<Complex> working;
+	SIGNALSMITH_VECTOR(Complex) twiddles;
+	SIGNALSMITH_VECTOR(Complex) working;
 	
 	template<bool conjB>
 	static Complex mul(const Complex &a, const Complex &b) {

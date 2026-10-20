@@ -131,7 +131,7 @@ private:
 	bool hasSetup = false;
 	FFTSetup fftSetup;
 	int log2 = 0;
-	std::vector<float> splitReal, splitImag;
+	SIGNALSMITH_VECTOR(float) splitReal, splitImag;
 };
 
 template<>
@@ -205,7 +205,7 @@ private:
 	bool hasSetup = false;
 	FFTSetup fftSetup;
 	int log2 = 0;
-	std::vector<float> splitReal, splitImag;
+	SIGNALSMITH_VECTOR(float) splitReal, splitImag;
 };
 
 template<>
@@ -266,7 +266,7 @@ private:
 	bool hasSetup = false;
 	FFTSetupD fftSetup;
 	int log2 = 0;
-	std::vector<double> splitReal, splitImag;
+	SIGNALSMITH_VECTOR(double) splitReal, splitImag;
 };
 
 template<>
@@ -334,7 +334,7 @@ private:
 	bool hasSetup = false;
 	FFTSetupD fftSetup;
 	int log2 = 0;
-	std::vector<double> splitReal, splitImag;
+	SIGNALSMITH_VECTOR(double) splitReal, splitImag;
 };
 
 }} // namespace
