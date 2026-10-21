@@ -262,7 +262,7 @@ struct State<double, false> {
 
 namespace _impl {
       template<>
-      void complexMul<float>(std::complex<float> *a, const std::complex<float> *b, const std::complex<float> *c, size_t size) {
+      inline void complexMul<float>(std::complex<float> *a, const std::complex<float> *b, const std::complex<float> *c, size_t size) {
             auto status = ippsMul_32fc((const Ipp32fc*)b, (const Ipp32fc*)c, (Ipp32fc*)a, int(size));
             checkStatus(status);
       }
@@ -290,7 +290,7 @@ namespace _impl {
 
       // doubles
       template<>
-      void complexMul<double>(std::complex<double> *a, const std::complex<double> *b, const std::complex<double> *c, size_t size) {
+      inline void complexMul<double>(std::complex<double> *a, const std::complex<double> *b, const std::complex<double> *c, size_t size) {
             auto status = ippsMul_64fc((const Ipp64fc*)b, (const Ipp64fc*)c, (Ipp64fc*)a, int(size));
             checkStatus(status);
       }
