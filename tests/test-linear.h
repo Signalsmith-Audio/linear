@@ -650,6 +650,20 @@ TEST_EXPR4(ClampMaxMin, a = std::max(std::min(b, c), d), a = linear.max(linear.m
 TEST_EXPR3(PowMul, a = std::pow(b, c*c), a = linear.pow(b, c*c));
 TEST_EXPR4(HypotMul, a = std::hypot(b*c, d), a = linear.hypot(b*c, d));
 
+// Constants on the left of commutative ops
+TEST_EXPR3(KMulAdd, a = decltype(b)(0.5)*b + c, a = 0.5*b + c);
+TEST_EXPR3(AddMulK, a = b + c*decltype(b)(0.5), a = b + c*0.5);
+TEST_EXPR3(AddKMul, a = b + decltype(b)(0.5)*c, a = b + 0.5*c);
+TEST_EXPR3(KAddMul, a = decltype(b)(0.5) + b*c, a = 0.5 + b*c);
+TEST_EXPR3(SubKMul, a = b - decltype(b)(0.5)*c, a = b - 0.5*c);
+TEST_EXPR2(KMulAddK, a = decltype(b)(0.5)*b + decltype(b)(0.25), a = 0.5*b + 0.25);
+TEST_EXPR2(KSubMulK, a = decltype(b)(0.25) - b*decltype(b)(0.5), a = 0.25 - b*0.5);
+TEST_EXPR3(KMulAddSum, a = decltype(b)(0.5)*(b + c), a = 0.5*(b + c));
+TEST_EXPR3(KMulSubSum, a = decltype(b)(0.5)*(b - c), a = 0.5*(b - c));
+TEST_EXPR3(KMulKMulAdd, a = decltype(b)(0.5)*b + decltype(b)(0.25)*c, a = 0.5*b + 0.25*c);
+TEST_EXPR2(KClamp, a = std::min(decltype(b)(0.5), std::max(decltype(b)(-0.5), b)), a = linear.min(0.5, linear.max(-0.5, b)));
+TEST_EXPR2(KClamp2, a = std::max(decltype(b)(-0.5), std::min(decltype(b)(0.5), b)), a = linear.max(-0.5, linear.min(0.5, b)));
+
 // Compound expressions which read from the output
 TEST_EXPR3(InPlaceMulAdd, a = toVal(a)*b + c, a = a*b + c);
 TEST_EXPR3(InPlaceAddMul, a = (toVal(a) + b)*c, a = (a + b)*c);
@@ -814,6 +828,10 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidABC<Div, 2, 0, 2>>("DivCRC");
 		test.addOp<OpVoidABC<Div, 3, 3, 0>>("DivSSR");
 		test.addOp<OpVoidABC<Sub, 3, 0, 3>>("SubSRS");
+		test.addOp<OpVoidABkC<Add, 2, 2, 0>>("AddCkR");
+		test.addOp<OpVoidABCk<Add, 3, 0, 2>>("AddSRk");
+		test.addOp<OpVoidABkC<Mul, 3, 2, 0>>("MulSkR");
+		test.addOp<OpVoidABCk<Mul, 2, 0, 2>>("MulCRk");
 		test.addOp<OpVoidABC<Polar, 2, 1, 0>>("PolarCRR");
 		test.addOp<OpVoidABC<Polar, 3, 1, 0>>("PolarSRR");
 		test.addOp<OpVoidAB<Assign, 3, 2>>("AssignSC");
@@ -892,6 +910,19 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidABCD<ClampMaxMin, 0, 0, 0, 0>>("ClampMaxMin");
 		test.addOp<OpVoidABC<PowMul, 0, 1, 0>>("PowMul");
 		test.addOp<OpVoidABCD<HypotMul, 0, 0, 0, 0>>("HypotMul");
+
+		test.addOp<OpVoidABC<KMulAdd, 0, 0, 0>>("KMulAdd");
+		test.addOp<OpVoidABC<AddMulK, 0, 0, 0>>("AddMulK");
+		test.addOp<OpVoidABC<AddKMul, 0, 0, 0>>("AddKMul");
+		test.addOp<OpVoidABC<KAddMul, 0, 0, 0>>("KAddMul");
+		test.addOp<OpVoidABC<SubKMul, 0, 0, 0>>("SubKMul");
+		test.addOp<OpVoidAB<KMulAddK, 0, 0>>("KMulAddK");
+		test.addOp<OpVoidAB<KSubMulK, 0, 0>>("KSubMulK");
+		test.addOp<OpVoidABC<KMulAddSum, 0, 0, 0>>("KMulAddSum");
+		test.addOp<OpVoidABC<KMulSubSum, 0, 0, 0>>("KMulSubSum");
+		test.addOp<OpVoidABC<KMulKMulAdd, 0, 0, 0>>("KMulKMulAdd");
+		test.addOp<OpVoidAB<KClamp, 0, 0>>("KClamp");
+		test.addOp<OpVoidAB<KClamp2, 0, 0>>("KClamp2");
 
 		test.addOp<OpVoidABC<InPlaceMulAdd, 0, 0, 0>>("InPlaceMulAdd");
 		test.addOp<OpVoidABC<InPlaceAddMul, 0, 0, 0>>("InPlaceAddMul");
