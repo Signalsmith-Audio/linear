@@ -1,6 +1,7 @@
 #pragma once
 
 #if defined(__SSE__) || defined(_M_X64)
+#	include <xmmintrin.h>
 	class StopDenormals {
 		unsigned int controlStatusRegister;
 	public:

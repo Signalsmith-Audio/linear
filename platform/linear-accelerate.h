@@ -39,11 +39,11 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 	template<class Pointer, class Expr>
 	void fill(Pointer pointer, Expression<Expr> expr, size_t size) {
 		return fillExpr(pointer, (Expr &)expr, size);
-	};
+	}
 	template<class Pointer, class Expr>
 	void fill(Pointer pointer, WritableExpression<Expr> expr, size_t size) {
 		return fillExpr(pointer, (Expr &)expr, size);
-	};
+	}
 
 private:
 	// Most generic fill
@@ -314,11 +314,11 @@ private:
 	}
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Abs)
 	//SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Abs, vDSP_zabs); - why is this commented out?
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RC(Abs, vDSP_zvabs);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RC(Abs, vDSP_zvabs)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Neg)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_C(Neg)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Neg, vDSP_vneg);
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_CC(Neg, vDSP_zvneg);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Neg, vDSP_vneg)
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_CC(Neg, vDSP_zvneg)
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE1_RR
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE1_RC
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE1_CC
@@ -340,23 +340,23 @@ private:
 		int intSize = int(size); \
 		vForce_double(pointer, a, &intSize); \
 	}
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Abs, vvfabsf, vvfabs);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Abs, vvfabsf, vvfabs)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Exp)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Exp, vvexpf, vvexp);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Exp, vvexpf, vvexp)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Exp2)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Exp2, vvexp2f, vvexp2);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Exp2, vvexp2f, vvexp2)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log, vvlogf, vvlog);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log, vvlogf, vvlog)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log2)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log2, vvlog2f, vvlog2);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log2, vvlog2f, vvlog2)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Log10)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log10, vvlog10f, vvlog10);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Log10, vvlog10f, vvlog10)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Sqrt)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Sqrt, vvsqrtf, vvsqrt);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Sqrt, vvsqrtf, vvsqrt)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Ceil)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Ceil, vvceilf, vvceil);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Ceil, vvceilf, vvceil)
 	SIGNALSMITH_AUDIO_LINEAR_OP1_R(Floor)
-	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Floor, vvfloorf, vvfloor);
+	SIGNALSMITH_AUDIO_LINEAR_TREE1_RR(Floor, vvfloorf, vvfloor)
 #undef SIGNALSMITH_AUDIO_LINEAR_OP1_R
 
 // Forwards .fillExpr() to .fillName(), but doesn't define that
@@ -417,10 +417,10 @@ private:
 		vDSP_func##D(b, 1, &a, pointer, 1, size); \
 	}
 	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Add)
-	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Add, vDSP_vadd);
-	SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Add, vDSP_vsadd);
+	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Add, vDSP_vadd)
+	SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Add, vDSP_vsadd)
 	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Sub)
-	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Sub, vDSP_vsub);
+	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Sub, vDSP_vsub)
 	template<class A, class V>
 	void fillSub(RealPointer<float> pointer, expression::Sub<A, expression::ConstantExpr<V>> expr, size_t size) {
 		expression::ConstantExpr<V> negB{-expr.b.value};
@@ -442,8 +442,8 @@ private:
 		fillNeg(pointer, expression::makeNeg(expression::makeAdd(expr.b, negA)), size);
 	}
 	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Mul)
-	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Mul, vDSP_vmul);
-	SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Mul, vDSP_vsmul);
+	SIGNALSMITH_AUDIO_LINEAR_TREE2FLIP_RRR(Mul, vDSP_vmul)
+	SIGNALSMITH_AUDIO_LINEAR_TREE2COMM_RRkR(Mul, vDSP_vsmul)
 	SIGNALSMITH_AUDIO_LINEAR_OP2_R(Div)
 	template<class A, class V>
 	void fillDiv(RealPointer<float> pointer, expression::Div<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -451,7 +451,7 @@ private:
 		fillMul(pointer, expression::makeMul(expr.a, recipB), size);
 	}
 	template<class A, class V>
-	void fillDiv(RealPointer<double> pointer, expression::Sub<A, expression::ConstantExpr<V>> expr, size_t size) {
+	void fillDiv(RealPointer<double> pointer, expression::Div<A, expression::ConstantExpr<V>> expr, size_t size) {
 		expression::ConstantExpr<V> recipB{1.0/expr.b.value};
 		fillMul(pointer, expression::makeMul(expr.a, recipB), size);
 	}
@@ -476,7 +476,7 @@ private:
 		int intSize = int(size); \
 		vForce_double(pointer, a, b, &intSize); \
 	}
-	SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR(Div, vvdivf, vvdiv);
+	SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR(Div, vvdivf, vvdiv)
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE2_RRR
 #undef SIGNALSMITH_AUDIO_LINEAR_OP2_R
 
@@ -510,6 +510,23 @@ private:
 	}
 	SIGNALSMITH_AUDIO_LINEAR_Op3L_R(Mul, Add)
 	SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR(Mul, Add, vDSP_vam)
+	// (A + B)*k: more specific than both `A*k` and `(A + B)*C`, which would otherwise be ambiguous
+	template<class A, class B, class V>
+	void fillMul(RealPointer<float> pointer, expression::Mul<expression::Add<A, B>, expression::ConstantExpr<V>> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto *a = floats.real(expr.a.a, size);
+		auto *b = floats.real(expr.a.b, size);
+		float c = expr.b.value;
+		vDSP_vasm(a, 1, b, 1, &c, pointer, 1, size);
+	}
+	template<class A, class B, class V>
+	void fillMul(RealPointer<double> pointer, expression::Mul<expression::Add<A, B>, expression::ConstantExpr<V>> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto *a = doubles.real(expr.a.a, size);
+		auto *b = doubles.real(expr.a.b, size);
+		double c = expr.b.value;
+		vDSP_vasmD(a, 1, b, 1, &c, pointer, 1, size);
+	}
 
 #undef SIGNALSMITH_AUDIO_LINEAR_TREE3L_RRR
 #undef SIGNALSMITH_AUDIO_LINEAR_Op3L_R

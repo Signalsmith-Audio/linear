@@ -434,14 +434,14 @@ namespace expression {
 		return {a, b}; \
 	}
 	// Min, Max, Dim, Pow, Atan2, Hypot, Copysign, Polar
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, std::fmax);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, std::fmin);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Dim, std::fdim);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Pow, std::pow);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Atan2, std::atan2);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Hypot, std::hypot);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Copysign, std::copysign);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Polar, std::polar);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, std::fmax)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, std::fmin)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Dim, std::fdim)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Pow, std::pow)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Atan2, std::atan2)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Hypot, std::hypot)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Copysign, std::copysign)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Polar, std::polar)
 #undef SIGNALSMITH_AUDIO_LINEAR_FUNC2
 
 } // expression::
@@ -519,10 +519,10 @@ struct WritableExpression : public Expression<BaseExpr> {
 	WritableExpression & operator assignOp(const E &expr) { \
 		return *this = (*this) binaryOp expr; \
 	}
-	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(+=, +);
-	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(-=, -);
-	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(*=, *);
-	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(/=, /);
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(+=, +)
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(-=, -)
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(*=, *)
+	SIGNALSMITH_AUDIO_ASSIGNMENT_OP(/=, /)
 #undef SIGNALSMITH_AUDIO_ASSIGNMENT_OP
 
 	// Use the pointer's `operator[]` instead of the expression
@@ -992,12 +992,12 @@ struct LinearImplBase {
 	template<class Pointer, class Expr>
 	void fill(Pointer pointer, Expression<Expr> expr, size_t size) {
 		return self().fill(pointer, (Expr &)expr, size);
-	};
+	}
 	// Separate otherwise it's ambiguous between the two previous ones
 	template<class V, class Expr>
 	void fill(SplitPointer<V> pointer, Expression<Expr> expr, size_t size) {
 		return self().fill(pointer, (Expr &)expr, size);
-	};
+	}
 
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(ExprName, methodName) \
 	template<class A> \
@@ -1045,14 +1045,14 @@ struct LinearImplBase {
 	auto methodName(A a, B b) -> Expression<decltype(expression::make##ExprName(wrap(a), wrap(b)))> { \
 		return expression::make##ExprName(wrap(a), wrap(b)); \
 	}
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, max);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, min);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Dim, dim);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Pow, pow);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Atan2, atan2);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Hypot, hypot);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Copysign, copysign);
-	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Polar, polar);
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Max, max)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Min, min)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Dim, dim)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Pow, pow)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Atan2, atan2)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Hypot, hypot)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Copysign, copysign)
+	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Polar, polar)
 #undef SIGNALSMITH_AUDIO_LINEAR_FUNC2
 
 protected:

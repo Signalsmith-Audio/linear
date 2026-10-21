@@ -467,15 +467,15 @@ struct DynamicSTFT {
 
 #define COMPAT_SPELLING(name, alt) \
 	template<class ...Args> \
-	void alt(Args &&...args) { \
-		name(std::forward<Args>(args)...); \
+	auto alt(Args &&...args) -> decltype(name(std::forward<Args>(args)...)) { \
+		return name(std::forward<Args>(args)...); \
 	}
-	COMPAT_SPELLING(analyse, analyze);
-	COMPAT_SPELLING(analyseStep, analyseStep);
-	COMPAT_SPELLING(analyseSteps, analyzeSteps);
-	COMPAT_SPELLING(synthesise, synthesize);
-	COMPAT_SPELLING(synthesiseStep, synthesizeStep);
-	COMPAT_SPELLING(synthesiseSteps, synthesizeSteps);
+	COMPAT_SPELLING(analyse, analyze)
+	COMPAT_SPELLING(analyseStep, analyzeStep)
+	COMPAT_SPELLING(analyseSteps, analyzeSteps)
+	COMPAT_SPELLING(synthesise, synthesize)
+	COMPAT_SPELLING(synthesiseStep, synthesizeStep)
+	COMPAT_SPELLING(synthesiseSteps, synthesizeSteps)
 
 	/// Input (only available so we can save/restore the input state)
 	struct Input {

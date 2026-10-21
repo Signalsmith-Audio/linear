@@ -206,6 +206,33 @@ struct OpVoidABCDE {
 	}
 };
 
+template<class Op, int typeA, int typeB, int typeC, int typeD>
+struct OpVoidABCDk {
+	Op op;
+
+	template<class Data>
+	void reference(Data &data) const {
+		auto a = data.template get<typeA>(0);
+		auto b = data.template get<typeB>(1);
+		auto c = data.template get<typeC>(2);
+		auto d = data.template get<typeD>(3)[0];
+		for (size_t i = 0; i < data.size; ++i) {
+			auto &&ai = getAssignable(a, i);
+			op.opRef(ai, b[i], c[i], d);
+		}
+	}
+
+	template<class L, class Data>
+	void linear(L &linear, Data &data) const {
+		auto a = data.template get<typeA>(0);
+		auto b = data.template get<typeB>(1);
+		auto c = data.template get<typeC>(2);
+		auto d = data.template get<typeD>(3)[0];
+		size_t size = data.size;
+		op.op(linear, linear(a, size), linear(b, size), linear(c, size), d);
+	}
+};
+
 struct TestLinear {
 	static const int bigPlotWidth = 300, bigPlotHeight = 250;
 	static const int tinyPlotWidth = 80, tinyPlotHeight = 80;
@@ -445,6 +472,8 @@ float toVal(float v) {return v;}
 double toVal(double v) {return v;}
 std::complex<float> toVal(std::complex<float> v) {return v;}
 std::complex<double> toVal(std::complex<double> v) {return v;}
+template<typename V>
+std::complex<V> toVal(const ComplexProxy<V> &v) {return v;}
 
 #define TEST_EXPR2(Name, refExpr, expr) \
 struct Name { \
@@ -508,12 +537,14 @@ struct Name { \
 		expr; \
 	} \
 };
+// Simple arithmetic
 TEST_EXPR2(Assign, a = b, a = b);
 TEST_EXPR3(Add, a = b + c, a = b + c);
 TEST_EXPR3(Sub, a = b - c, a = b - c);
 TEST_EXPR3(Mul, a = b*c, a = b*c);
 TEST_EXPR3(Div, a = b/c, a = b/c);
 
+// Single-argument functions
 TEST_EXPR2(Abs, a = std::abs(b), a = b.abs());
 TEST_EXPR2(Neg, a = -b, a = -b);
 TEST_EXPR2(Norm, a = std::norm(b), a = b.norm());
@@ -533,6 +564,7 @@ TEST_EXPR2(Floor, a = std::floor(b), a = b.floor());
 TEST_EXPR2(Ceil, a = std::ceil(b), a = b.ceil());
 TEST_EXPR2(MinusFloor, a = b - std::floor(b), a = b - b.floor());
 
+// Slightly compout expressions
 TEST_EXPR2(AbsNeg, a = -std::abs(b), a = -b.abs());
 TEST_EXPR4(MulAdd, a = b*c + d, a = b*c + d);
 TEST_EXPR4(MulAdd2, a = b + c*d, a = b + c*d);
@@ -551,6 +583,60 @@ TEST_EXPR5(MulMulSub, a = b*c - d*e, a = b*c - d*e);
 
 TEST_EXPR3(Max, a = std::max(b, c), a = linear.max(b, c));
 TEST_EXPR3(Min, a = std::min(b, c), a = linear.min(b, c));
+
+// Longer chains
+TEST_EXPR4(MulMul, a = b*c*d, a = b*c*d);
+TEST_EXPR5(AddAddAdd, a = b + c + d + e, a = b + c + d + e);
+TEST_EXPR5(SubSubSub, a = b - c - d - e, a = b - c - d - e);
+TEST_EXPR5(MulMulMul, a = b*c*d*e, a = b*c*d*e);
+TEST_EXPR5(MulAddMul, a = (b*c + d)*e, a = (b*c + d)*e);
+TEST_EXPR5(MulMulAddAdd, a = b*c + d*e + b, a = b*c + d*e + b);
+TEST_EXPR4(DivAdd, a = b/c + d, a = b/c + d);
+TEST_EXPR4(MulDiv, a = b*c/d, a = b*c/d);
+
+// Negation
+TEST_EXPR2(NegNeg, a = -(-b), a = -(-b));
+TEST_EXPR3(NegAdd, a = -(b + c), a = -(b + c));
+TEST_EXPR3(NegMul, a = -b*c, a = -b*c);
+TEST_EXPR3(SubNeg, a = b - (-c), a = b - (-c));
+
+// Functions of compound expressions
+TEST_EXPR3(AbsMul, a = std::abs(b*c), a = (b*c).abs());
+TEST_EXPR3(AbsSub, a = std::abs(b - c), a = (b - c).abs());
+TEST_EXPR3(AddAbs, a = std::abs(b) + std::abs(c), a = b.abs() + c.abs());
+TEST_EXPR3(ExpMul, a = std::exp(b*c), a = (b*c).exp());
+TEST_EXPR3(SinMul, a = std::sin(b*c), a = (b*c).sin());
+TEST_EXPR3(CosAdd, a = std::cos(b + c), a = (b + c).cos());
+TEST_EXPR4(TanhMulAdd, a = std::tanh(b*c + d), a = (b*c + d).tanh());
+TEST_EXPR3(SqrtSumSquares, a = std::sqrt(b*b + c*c), a = (b*b + c*c).sqrt());
+TEST_EXPR3(LogAbsAdd, a = std::log(std::abs(b) + c), a = (b.abs() + c).log());
+TEST_EXPR3(MulExp, a = b*std::exp(c), a = b*c.exp());
+TEST_EXPR3(FloorMul, a = std::floor(b*c), a = (b*c).floor());
+TEST_EXPR3(NormSub, a = std::norm(b - c), a = (b - c).norm());
+TEST_EXPR3(NormMul, a = std::norm(b*c), a = (b*c).norm());
+TEST_EXPR3(AbsAdd, a = std::abs(b + c), a = (b + c).abs());
+TEST_EXPR3(MulConj, a = b*std::conj(c), a = b*c.conj());
+TEST_EXPR3(ConjMul, a = std::conj(b*c), a = (b*c).conj());
+TEST_EXPR3(RealMulConj, a = std::real(b*std::conj(c)), a = (b*c.conj()).real());
+TEST_EXPR3(ImagMulConj, a = std::imag(b*std::conj(c)), a = (b*c.conj()).imag());
+TEST_EXPR4(MulConjAdd, a = b*std::conj(c) + d, a = b*c.conj() + d);
+TEST_EXPR3(ExpComplexMul, a = std::exp(b*c), a = (b*c).exp());
+
+// Binary functions combined with arithmetic
+TEST_EXPR4(MaxMul, a = std::max(b*c, d), a = linear.max(b*c, d));
+TEST_EXPR5(MinAddSub, a = std::min(b + c, d - e), a = linear.min(b + c, d - e));
+TEST_EXPR3(AbsMax, a = std::abs(std::max(b, c)), a = linear.max(b, c).abs());
+TEST_EXPR4(MulMin, a = std::min(b, c)*d, a = linear.min(b, c)*d);
+TEST_EXPR4(ClampMaxMin, a = std::max(std::min(b, c), d), a = linear.max(linear.min(b, c), d));
+TEST_EXPR3(PowMul, a = std::pow(b, c*c), a = linear.pow(b, c*c));
+TEST_EXPR4(HypotMul, a = std::hypot(b*c, d), a = linear.hypot(b*c, d));
+
+// Compound expressions which read from the output
+TEST_EXPR3(InPlaceMulAdd, a = toVal(a)*b + c, a = a*b + c);
+TEST_EXPR3(InPlaceAddMul, a = (toVal(a) + b)*c, a = (a + b)*c);
+TEST_EXPR3(AddAssignMul, a += b*c, a += b*c);
+TEST_EXPR3(SubAssignMul, a -= b*c, a -= b*c);
+TEST_EXPR3(MulAssignAdd, a *= b + c, a *= b + c);
 
 void testLinear(int maxSize, double benchmarkSeconds) {
 	std::cout << "\nExpressions\n-----------\n";
@@ -690,7 +776,7 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 	}
 
 	{
-		TestLinear test(maxSize, benchmarkSeconds, "complex2real");
+		TestLinear test(maxSize, benchmarkSeconds, "complex2Real");
 		test.addOp<OpVoidAB<Norm, 0, 2>>("Norm");
 		test.addOp<OpVoidAB<Abs, 0, 2>>("Abs");
 		test.addOp<OpVoidAB<SqrtNorm, 0, 2>>("SqrtNorm");
@@ -727,5 +813,131 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidABCDE<SubSubMul, 0, 0, 0, 0, 0>>("SubSubMul");
 		test.addOp<OpVoidABCDE<MulMulAdd, 0, 0, 0, 0, 0>>("MulMulAdd");
 		test.addOp<OpVoidABCDE<MulMulSub, 0, 0, 0, 0, 0>>("MulMulSub");
+
+		test.addOp<OpVoidABCD<MulMul, 0, 0, 0, 0>>("MulMul");
+		test.addOp<OpVoidABCDE<AddAddAdd, 0, 0, 0, 0, 0>>("AddAddAdd");
+		test.addOp<OpVoidABCDE<SubSubSub, 0, 0, 0, 0, 0>>("SubSubSub");
+		test.addOp<OpVoidABCDE<MulMulMul, 0, 0, 0, 0, 0>>("MulMulMul");
+		test.addOp<OpVoidABCDE<MulAddMul, 0, 0, 0, 0, 0>>("MulAddMul");
+		test.addOp<OpVoidABCDE<MulMulAddAdd, 0, 0, 0, 0, 0>>("MulMulAddAdd");
+		test.addOp<OpVoidABCD<DivAdd, 0, 0, 1, 0>>("DivAdd");
+		test.addOp<OpVoidABCD<MulDiv, 0, 0, 0, 1>>("MulDiv");
+
+		test.addOp<OpVoidAB<NegNeg, 0, 0>>("NegNeg");
+		test.addOp<OpVoidABC<NegAdd, 0, 0, 0>>("NegAdd");
+		test.addOp<OpVoidABC<NegMul, 0, 0, 0>>("NegMul");
+		test.addOp<OpVoidABC<SubNeg, 0, 0, 0>>("SubNeg");
+
+		test.addOp<OpVoidABC<AbsMul, 0, 0, 0>>("AbsMul");
+		test.addOp<OpVoidABC<AbsSub, 0, 0, 0>>("AbsSub");
+		test.addOp<OpVoidABC<AddAbs, 0, 0, 0>>("AddAbs");
+		test.addOp<OpVoidABC<ExpMul, 0, 0, 0>>("ExpMul");
+		test.addOp<OpVoidABC<SinMul, 0, 0, 0>>("SinMul");
+		test.addOp<OpVoidABC<CosAdd, 0, 0, 0>>("CosAdd");
+		test.addOp<OpVoidABCD<TanhMulAdd, 0, 0, 0, 0>>("TanhMulAdd");
+		test.addOp<OpVoidABC<SqrtSumSquares, 0, 0, 0>>("SqrtSumSq");
+		test.addOp<OpVoidABC<LogAbsAdd, 0, 0, 1>>("LogAbsAdd");
+		test.addOp<OpVoidABC<MulExp, 0, 0, 0>>("MulExp");
+		test.addOp<OpVoidABC<FloorMul, 0, 0, 0>>("FloorMul");
+
+		test.addOp<OpVoidABCD<MaxMul, 0, 0, 0, 0>>("MaxMul");
+		test.addOp<OpVoidABCDE<MinAddSub, 0, 0, 0, 0, 0>>("MinAddSub");
+		test.addOp<OpVoidABC<AbsMax, 0, 0, 0>>("AbsMax");
+		test.addOp<OpVoidABCD<MulMin, 0, 0, 0, 0>>("MulMin");
+		test.addOp<OpVoidABCD<ClampMaxMin, 0, 0, 0, 0>>("ClampMaxMin");
+		test.addOp<OpVoidABC<PowMul, 0, 1, 0>>("PowMul");
+		test.addOp<OpVoidABCD<HypotMul, 0, 0, 0, 0>>("HypotMul");
+
+		test.addOp<OpVoidABC<InPlaceMulAdd, 0, 0, 0>>("InPlaceMulAdd");
+		test.addOp<OpVoidABC<InPlaceAddMul, 0, 0, 0>>("InPlaceAddMul");
+		test.addOp<OpVoidABC<AddAssignMul, 0, 0, 0>>("AddAssignMul");
+		test.addOp<OpVoidABC<SubAssignMul, 0, 0, 0>>("SubAssignMul");
+		test.addOp<OpVoidABC<MulAssignAdd, 0, 0, 0>>("MulAssignAdd");
+	}
+	{
+		TestLinear test(maxSize, benchmarkSeconds, "realCompoundConstants");
+
+		test.addOp<OpVoidABCDk<MulAdd, 0, 0, 0, 0>>("MulAdd");
+		test.addOp<OpVoidABCDk<MulSub, 0, 0, 0, 0>>("MulSub");
+		test.addOp<OpVoidABCDk<AddMul2, 0, 0, 0, 0>>("AddMul");
+		test.addOp<OpVoidABCDk<SubMul2, 0, 0, 0, 0>>("SubMul");
+		test.addOp<OpVoidABCDk<MulMul, 0, 0, 0, 0>>("MulMul");
+		test.addOp<OpVoidABCDk<MaxMul, 0, 0, 0, 0>>("MaxMul");
+		test.addOp<OpVoidABCDk<ClampMaxMin, 0, 0, 0, 0>>("ClampMaxMin");
+		test.addOp<OpVoidABCk<AbsSub, 0, 0, 0>>("AbsSub");
+		test.addOp<OpVoidABCk<ExpMul, 0, 0, 0>>("ExpMul");
+		test.addOp<OpVoidABCk<InPlaceMulAdd, 0, 0, 0>>("InPlaceMulAdd");
+		test.addOp<OpVoidABCk<AddAssignMul, 0, 0, 0>>("AddAssignMul");
+	}
+	{
+		TestLinear test(maxSize, benchmarkSeconds, "complexCompound");
+
+		test.addOp<OpVoidABCD<MulAdd, 2, 2, 2, 2>>("MulAdd");
+		test.addOp<OpVoidABCD<MulSub2, 2, 2, 2, 2>>("MulSub2");
+		test.addOp<OpVoidABCD<AddMul, 2, 2, 2, 2>>("AddMul");
+		test.addOp<OpVoidABCD<SubMul2, 2, 2, 2, 2>>("SubMul2");
+		test.addOp<OpVoidABCD<MulMul, 2, 2, 2, 2>>("MulMul");
+		test.addOp<OpVoidABCDE<AddSubMul, 2, 2, 2, 2, 2>>("AddSubMul");
+		test.addOp<OpVoidABCDE<MulMulSub, 2, 2, 2, 2, 2>>("MulMulSub");
+		test.addOp<OpVoidABCDE<AddAddAdd, 2, 2, 2, 2, 2>>("AddAddAdd");
+
+		test.addOp<OpVoidABC<NegAdd, 2, 2, 2>>("NegAdd");
+		test.addOp<OpVoidABC<MulConj, 2, 2, 2>>("MulConj");
+		test.addOp<OpVoidABC<ConjMul, 2, 2, 2>>("ConjMul");
+		test.addOp<OpVoidABCD<MulConjAdd, 2, 2, 2, 2>>("MulConjAdd");
+		test.addOp<OpVoidABC<ExpComplexMul, 2, 2, 2>>("ExpMul");
+
+		test.addOp<OpVoidABC<InPlaceMulAdd, 2, 2, 2>>("InPlaceMulAdd");
+		test.addOp<OpVoidABC<AddAssignMul, 2, 2, 2>>("AddAssignMul");
+		test.addOp<OpVoidABC<MulAssignAdd, 2, 2, 2>>("MulAssignAdd");
+
+		test.addOp<OpVoidABCDk<MulAdd, 2, 2, 2, 2>>("MulAddK");
+		test.addOp<OpVoidABCDk<AddMul2, 2, 2, 2, 2>>("AddMulK");
+	}
+	{
+		TestLinear test(maxSize, benchmarkSeconds, "splitCompound");
+
+		test.addOp<OpVoidABCD<MulAdd, 3, 3, 3, 3>>("MulAdd");
+		test.addOp<OpVoidABCD<MulSub2, 3, 3, 3, 3>>("MulSub2");
+		test.addOp<OpVoidABCD<AddMul, 3, 3, 3, 3>>("AddMul");
+		test.addOp<OpVoidABCD<SubMul2, 3, 3, 3, 3>>("SubMul2");
+		test.addOp<OpVoidABCD<MulMul, 3, 3, 3, 3>>("MulMul");
+		test.addOp<OpVoidABCDE<AddSubMul, 3, 3, 3, 3, 3>>("AddSubMul");
+		test.addOp<OpVoidABCDE<MulMulSub, 3, 3, 3, 3, 3>>("MulMulSub");
+
+		test.addOp<OpVoidABC<NegAdd, 3, 3, 3>>("NegAdd");
+		test.addOp<OpVoidABC<MulConj, 3, 3, 3>>("MulConj");
+		test.addOp<OpVoidABCD<MulConjAdd, 3, 3, 3, 3>>("MulConjAdd");
+		test.addOp<OpVoidABC<ExpComplexMul, 3, 3, 3>>("ExpMul");
+
+		test.addOp<OpVoidABC<InPlaceMulAdd, 3, 3, 3>>("InPlaceMulAdd");
+
+		test.addOp<OpVoidABCDk<MulAdd, 3, 3, 3, 3>>("MulAddK");
+		test.addOp<OpVoidABCDk<AddMul2, 3, 3, 3, 3>>("AddMulK");
+	}
+	{
+		TestLinear test(maxSize, benchmarkSeconds, "mixedCompound");
+
+		test.addOp<OpVoidABCD<MulAdd, 2, 0, 2, 2>>("MulAddCRCC");
+		test.addOp<OpVoidABCD<MulAdd, 2, 2, 2, 0>>("MulAddCCCR");
+		test.addOp<OpVoidABCD<MulAdd, 2, 0, 0, 2>>("MulAddCRRC");
+		test.addOp<OpVoidABCD<AddMul2, 2, 2, 0, 0>>("AddMulCCRR");
+		test.addOp<OpVoidABCD<MulMul, 2, 0, 2, 0>>("MulMulCRCR");
+		test.addOp<OpVoidABCD<MulAdd, 3, 0, 3, 3>>("MulAddSRSS");
+		test.addOp<OpVoidABCD<MulAdd, 3, 3, 2, 3>>("MulAddSSCS");
+		test.addOp<OpVoidABCD<MulAdd, 2, 3, 3, 2>>("MulAddCSSC");
+		test.addOp<OpVoidABCD<MulConjAdd, 2, 2, 3, 0>>("MulConjAddCCSR");
+	}
+	{
+		TestLinear test(maxSize, benchmarkSeconds, "complex2RealCompound");
+
+		test.addOp<OpVoidABC<NormMul, 0, 2, 2>>("NormMul");
+		test.addOp<OpVoidABC<NormSub, 0, 2, 2>>("NormSub");
+		test.addOp<OpVoidABC<AbsAdd, 0, 2, 2>>("AbsAdd");
+		test.addOp<OpVoidABC<RealMulConj, 0, 2, 2>>("RealMulConj");
+		test.addOp<OpVoidABC<ImagMulConj, 0, 2, 2>>("ImagMulConj");
+		test.addOp<OpVoidABC<NormMul, 0, 3, 3>>("NormMul-Split");
+		test.addOp<OpVoidABC<AbsAdd, 0, 3, 3>>("AbsAdd-Split");
+		test.addOp<OpVoidABC<RealMulConj, 0, 3, 2>>("RealMulConj-SC");
 	}
 }

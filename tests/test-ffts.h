@@ -519,7 +519,7 @@ void testComplexFfts(int maxSize, double benchmarkSeconds) {
 	auto dspFloat = plot.runner<SignalsmithDSPWrapper<float>>("DSP library (float)");
 	auto dspDouble = plot.runner<SignalsmithDSPWrapper<double>>("DSP library (double)");
 
-	auto runSize = [&](int n, int pow3=0, int pow5=0, int pow7=0, bool alwaysRunSplit=false){
+	auto runSize = [&](int n, int pow3, int pow5, int pow7, bool alwaysRunSplit){
 		std::cout << "                n = " << n << "\r" << std::flush;
 		double refTime = 1e-8*n*(std::log2(n) + 1); // heuristic for expected computation time, just to compare different sizes
 
@@ -627,12 +627,12 @@ void testComplexFfts(int maxSize, double benchmarkSeconds) {
 	}
 	
 	for (int n = 1; n <= maxSize; n *= 2) {
-		if (n/16) runSize(n*9/16, 2);
-		if (n/8) runSize(n*5/8, 0, 1);
-		if (n/4) runSize(n*3/4, 1);
-		if (n/8) runSize(n*7/8, 0, 0, 1);
-		if (n/16) runSize(n*15/16, 1, 1);
-		runSize(n);
+		if (n/16) runSize(n*9/16, 2, 0, 0, false);
+		if (n/8) runSize(n*5/8, 0, 1, 0, false);
+		if (n/4) runSize(n*3/4, 1, 0, 0, false);
+		if (n/8) runSize(n*7/8, 0, 0, 1, false);
+		if (n/16) runSize(n*15/16, 1, 1, 0, false);
+		runSize(n, 0, 0, 0, false);
 
 		if (int(std::round(std::log2(n)))%2 == 0) {
 			plot.tick(n, 2);
@@ -682,7 +682,7 @@ void benchmarkRealFfts(int maxSize, double benchmarkSeconds) {
 	auto dspMFloat = plot.runner<SignalsmithDSPMRealWrapper<float>>("DSP library (modified float)");
 	auto dspMDouble = plot.runner<SignalsmithDSPMRealWrapper<double>>("DSP library (modified double)");
 
-	auto runSize = [&](int n, int pow3=0, int pow5=0, int pow7=0, bool alwaysRunSplit=false){
+	auto runSize = [&](int n, int pow3, int pow5, int pow7, bool alwaysRunSplit){
 		std::cout << "                n = " << n << "\r" << std::flush;
 		double refTime = 1e-8*n*(std::log2(n) + 1); // heuristic for expected computation time, just to compare different sizes
 
@@ -811,12 +811,12 @@ void benchmarkRealFfts(int maxSize, double benchmarkSeconds) {
 	};
 
 	for (int n = 2; n <= maxSize; n *= 2) {
-		if (n/32) runSize(n*9/16, 2);
-		if (n/16) runSize(n*5/8, 0, 1);
-		if (n/8) runSize(n*3/4, 1);
-		if (n/16) runSize(n*7/8, 0, 0, 1);
-		if (n/32) runSize(n*15/16, 1, 1);
-		runSize(n);
+		if (n/32) runSize(n*9/16, 2, 0, 0, false);
+		if (n/16) runSize(n*5/8, 0, 1, 0, false);
+		if (n/8) runSize(n*3/4, 1, 0, 0, false);
+		if (n/16) runSize(n*7/8, 0, 0, 1, false);
+		if (n/32) runSize(n*15/16, 1, 1, 0, false);
+		runSize(n, 0, 0, 0, false);
 
 		if (int(std::round(std::log2(n)))%2 == 0) {
 			plot.tick(n, 2);

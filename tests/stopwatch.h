@@ -58,6 +58,15 @@ public:
 	Stopwatch(const Stopwatch &other) : lapBest(other.lapBest), lapTotal(other.lapTotal), lapTotal2(other.lapTotal2), lapOverhead(other.lapOverhead), lapCount(other.lapCount) {
 		lapStart.store(other.lapStart.load());
 	}
+	Stopwatch & operator=(const Stopwatch &other) {
+		lapStart.store(other.lapStart.load());
+		lapBest = other.lapBest;
+		lapTotal = other.lapTotal;
+		lapTotal2 = other.lapTotal2;
+		lapOverhead = other.lapOverhead;
+		lapCount = other.lapCount;
+		return *this;
+	}
 
 	void start() {
 		lapCount = 0;
