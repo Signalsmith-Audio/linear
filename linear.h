@@ -1072,9 +1072,29 @@ e.g.
 	template<class A>
 	ItemType<A, float, void> fill(...)
 */
-template<class InputExpr, typename Item, class OutputExpr>
+template<class InputExpr, typename Item, class OutputExpr=void>
 using ItemType = typename std::enable_if<
 	std::is_same<expression::ElementType<InputExpr>, Item>::value,
+	OutputExpr
+>::type;
+template<class InputExpr, class OutputExpr=void>
+using ItemTypeF = ItemType<InputExpr, float, OutputExpr>;
+template<class InputExpr, class OutputExpr=void>
+using ItemTypeD = ItemType<InputExpr, double, OutputExpr>;
+template<class InputExpr, class OutputExpr=void>
+using ItemTypeCF = ItemType<InputExpr, std::complex<float>, OutputExpr>;
+template<class InputExpr, class OutputExpr=void>
+using ItemTypeCD = ItemType<InputExpr, std::complex<double>, OutputExpr>;
+
+// Similar SFINAE for constant-ness
+template<class InputExpr, class OutputExpr=void>
+using IsConstant = typename std::enable_if<
+	std::is_base_of<expression::BaseConstant, InputExpr>::value,
+	OutputExpr
+>::type;
+template<class InputExpr, class OutputExpr=void>
+using NotConstant = typename std::enable_if<
+	!std::is_base_of<expression::BaseConstant, InputExpr>::value,
 	OutputExpr
 >::type;
 

@@ -563,6 +563,25 @@ TEST_EXPR2(Arg, a = std::arg(b), a = b.arg());
 TEST_EXPR2(Floor, a = std::floor(b), a = b.floor());
 TEST_EXPR2(Ceil, a = std::ceil(b), a = b.ceil());
 TEST_EXPR2(MinusFloor, a = b - std::floor(b), a = b - b.floor());
+TEST_EXPR2(Trunc, a = std::trunc(b), a = b.trunc());
+TEST_EXPR2(Sin, a = std::sin(b), a = b.sin());
+TEST_EXPR2(Cos, a = std::cos(b), a = b.cos());
+TEST_EXPR2(Tan, a = std::tan(b), a = b.tan());
+TEST_EXPR2(Asin, a = std::asin(b), a = b.asin());
+TEST_EXPR2(Acos, a = std::acos(b), a = b.acos());
+TEST_EXPR2(Atan, a = std::atan(b), a = b.atan());
+TEST_EXPR2(Sinh, a = std::sinh(b), a = b.sinh());
+TEST_EXPR2(Cosh, a = std::cosh(b), a = b.cosh());
+TEST_EXPR2(Tanh, a = std::tanh(b), a = b.tanh());
+TEST_EXPR2(Asinh, a = std::asinh(b), a = b.asinh());
+TEST_EXPR2(Acosh, a = std::acosh(b + 1), a = (b + 1).acosh());
+TEST_EXPR2(Atanh, a = std::atanh(b*decltype(b)(0.9)), a = (b*0.9).atanh());
+TEST_EXPR2(Clamp, a = std::min(std::max(b, decltype(b)(-0.5)), decltype(b)(0.5)), a = linear.min(linear.max(b, -0.5), 0.5));
+TEST_EXPR2(Clamp2, a = std::max(std::min(b, decltype(b)(0.5)), decltype(b)(-0.5)), a = linear.max(linear.min(b, 0.5), -0.5));
+TEST_EXPR3(Pow, a = std::pow(b, c), a = linear.pow(b, c));
+TEST_EXPR3(Atan2, a = std::atan2(b, c), a = linear.atan2(b, c));
+TEST_EXPR3(Hypot, a = std::hypot(b, c), a = linear.hypot(b, c));
+TEST_EXPR3(Polar, a = std::polar(b, c), a = linear.polar(b, c));
 
 // Slightly compout expressions
 TEST_EXPR2(AbsNeg, a = -std::abs(b), a = -b.abs());
@@ -662,9 +681,28 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidAB<Floor, 0, 0>>("Floor");
 		test.addOp<OpVoidAB<MinusFloor, 0, 0>>("MinusFloor");
 		test.addOp<OpVoidAB<Ceil, 0, 0>>("Ceil");
+		test.addOp<OpVoidAB<Trunc, 0, 0>>("Trunc");
+		test.addOp<OpVoidAB<Norm, 0, 0>>("Norm");
+		test.addOp<OpVoidAB<Sin, 0, 0>>("Sin");
+		test.addOp<OpVoidAB<Cos, 0, 0>>("Cos");
+		test.addOp<OpVoidAB<Tan, 0, 0>>("Tan");
+		test.addOp<OpVoidAB<Asin, 0, 0>>("Asin");
+		test.addOp<OpVoidAB<Acos, 0, 0>>("Acos");
+		test.addOp<OpVoidAB<Atan, 0, 0>>("Atan");
+		test.addOp<OpVoidAB<Sinh, 0, 0>>("Sinh");
+		test.addOp<OpVoidAB<Cosh, 0, 0>>("Cosh");
+		test.addOp<OpVoidAB<Tanh, 0, 0>>("Tanh");
+		test.addOp<OpVoidAB<Asinh, 0, 0>>("Asinh");
+		test.addOp<OpVoidAB<Acosh, 0, 1>>("Acosh");
+		test.addOp<OpVoidAB<Atanh, 0, 0>>("Atanh");
+		test.addOp<OpVoidAB<Clamp, 0, 0>>("Clamp");
+		test.addOp<OpVoidAB<Clamp2, 0, 0>>("Clamp2");
 
 		test.addOp<OpVoidABC<Max, 0, 0, 0>>("Max");
 		test.addOp<OpVoidABC<Min, 0, 0, 0>>("Min");
+		test.addOp<OpVoidABC<Pow, 0, 1, 0>>("Pow");
+		test.addOp<OpVoidABC<Atan2, 0, 0, 0>>("Atan2");
+		test.addOp<OpVoidABC<Hypot, 0, 0, 0>>("Hypot");
 	}
 	{
 		TestLinear test(maxSize, benchmarkSeconds, "realConstants");
@@ -684,6 +722,7 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidABkC<Min, 0, 0, 0>>("Min");
 		test.addOp<OpVoidABCk<Max, 0, 0, 0>>("Max2");
 		test.addOp<OpVoidABCk<Min, 0, 0, 0>>("Min2");
+		test.addOp<OpVoidABCk<Pow, 0, 1, 0>>("Pow");
 	}
 	{
 		TestLinear test(maxSize, benchmarkSeconds, "complex");
@@ -773,6 +812,12 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 		test.addOp<OpVoidABC<Div, 2, 0, 0>>("DivCRR");
 		test.addOp<OpVoidABC<Div, 2, 2, 0>>("DivCCR");
 		test.addOp<OpVoidABC<Div, 2, 0, 2>>("DivCRC");
+		test.addOp<OpVoidABC<Div, 3, 3, 0>>("DivSSR");
+		test.addOp<OpVoidABC<Sub, 3, 0, 3>>("SubSRS");
+		test.addOp<OpVoidABC<Polar, 2, 1, 0>>("PolarCRR");
+		test.addOp<OpVoidABC<Polar, 3, 1, 0>>("PolarSRR");
+		test.addOp<OpVoidAB<Assign, 3, 2>>("AssignSC");
+		test.addOp<OpVoidAB<Assign, 2, 3>>("AssignCS");
 	}
 
 	{
