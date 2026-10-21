@@ -15,6 +15,16 @@
 
 namespace signalsmith { namespace linear {
 
+namespace _impl {
+	// SFINAE for "not a product", used when the same pattern could match either side
+	template<class E>
+	struct IsMulExpr : public std::false_type {};
+	template<class A, class B>
+	struct IsMulExpr<expression::Mul<A, B>> : public std::true_type {};
+	template<class InputExpr, class OutputExpr=void>
+	using NotConstantOrMul = typename std::enable_if<!IsMulExpr<InputExpr>::value, NotConstant<InputExpr, OutputExpr>>::type;
+}
+
 template<>
 struct LinearImpl<true> : public LinearImplBase<true> {
 	using Base = LinearImplBase<true>;
@@ -616,6 +626,56 @@ private:
 		vDSP_mmovD(a + 1, pointer, 1, size, 2, 1);
 	}
 
+	// Interleaved inputs can be read directly (stride 2) instead of converting to split
+	void fillExpr(RealPointer<float> pointer, expression::Abs<expression::ReadableComplex<float>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvabs(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Norm<expression::ReadableComplex<float>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvmags(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Arg<expression::ReadableComplex<float>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvphas(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Abs<WritableComplex<float>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvabs(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Norm<WritableComplex<float>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvmags(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<float> pointer, expression::Arg<WritableComplex<float>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvphas(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Abs<expression::ReadableComplex<double>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvabsD(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Norm<expression::ReadableComplex<double>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvmagsD(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Arg<expression::ReadableComplex<double>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvphasD(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Abs<WritableComplex<double>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvabsD(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Norm<WritableComplex<double>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvmagsD(&a, 2, pointer, 1, size);
+	}
+	void fillExpr(RealPointer<double> pointer, expression::Arg<WritableComplex<double>> expr, size_t size) {
+		auto a = dspSplit(expr.a.pointer);
+		vDSP_zvphasD(&a, 2, pointer, 1, size);
+	}
+
 	//---- Binary real ops
 	template<class A, class B>
 	NotConstant<A, NotConstant<B>> fillExpr(RealPointer<float> pointer, expression::Add<A, B> expr, size_t size) {
@@ -882,61 +942,35 @@ private:
 	// Constant on the left
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *b = floats.real(expr.b, size, pointer);
-		float a = float(expr.a.value);
-		vDSP_vsadd(b, 1, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *b = doubles.real(expr.b, size, pointer);
-		double a = double(expr.a.value);
-		vDSP_vsaddD(b, 1, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *b = floats.real(expr.b, size, pointer);
-		float a = float(expr.a.value);
-		vDSP_vsmul(b, 1, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *b = doubles.real(expr.b, size, pointer);
-		double a = double(expr.a.value);
-		vDSP_vsmulD(b, 1, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Max<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *b = floats.real(expr.b, size, pointer);
-		float a = float(expr.a.value);
-		vDSP_vthr(b, 1, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Max<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *b = doubles.real(expr.b, size, pointer);
-		double a = double(expr.a.value);
-		vDSP_vthrD(b, 1, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Min<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *b = floats.real(expr.b, size, pointer);
-		float a = float(expr.a.value);
-		float low = std::numeric_limits<float>::lowest();
-		vDSP_vclip(b, 1, &low, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Min<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *b = doubles.real(expr.b, size, pointer);
-		double a = double(expr.a.value);
-		double low = std::numeric_limits<double>::lowest();
-		vDSP_vclipD(b, 1, &low, &a, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
 	}
 	// Clamping (if the limits are the wrong way round, the result is constant)
 	template<class A, class V1, class V2>
@@ -974,99 +1008,51 @@ private:
 	// Clamping with constants on the other sides
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Min<expression::Max<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		float low = float(expr.a.a.value), high = float(expr.b.value);
-		if (low > high) return vDSP_vfill(&high, pointer, 1, size);
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.a.b, size, pointer);
-		vDSP_vclip(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Min<expression::Max<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		double low = double(expr.a.a.value), high = double(expr.b.value);
-		if (low > high) return vDSP_vfillD(&high, pointer, 1, size);
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.a.b, size, pointer);
-		vDSP_vclipD(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class V1, class V2>
 	void fillExpr(RealPointer<float> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		float low = float(expr.b.b.value), high = float(expr.a.value);
-		if (low > high) return vDSP_vfill(&high, pointer, 1, size);
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b.a, size, pointer);
-		vDSP_vclip(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
 	}
 	template<class A, class V1, class V2>
 	void fillExpr(RealPointer<double> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		double low = double(expr.b.b.value), high = double(expr.a.value);
-		if (low > high) return vDSP_vfillD(&high, pointer, 1, size);
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b.a, size, pointer);
-		vDSP_vclipD(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
 	}
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		float low = float(expr.b.a.value), high = float(expr.a.value);
-		if (low > high) return vDSP_vfill(&high, pointer, 1, size);
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b.b, size, pointer);
-		vDSP_vclip(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		double low = double(expr.b.a.value), high = double(expr.a.value);
-		if (low > high) return vDSP_vfillD(&high, pointer, 1, size);
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b.b, size, pointer);
-		vDSP_vclipD(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Max<expression::Min<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		float high = float(expr.a.a.value), low = float(expr.b.value);
-		if (low > high) return vDSP_vfill(&low, pointer, 1, size);
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.a.b, size, pointer);
-		vDSP_vclip(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Max<expression::Min<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		double high = double(expr.a.a.value), low = double(expr.b.value);
-		if (low > high) return vDSP_vfillD(&low, pointer, 1, size);
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.a.b, size, pointer);
-		vDSP_vclipD(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class V1, class V2>
 	void fillExpr(RealPointer<float> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		float high = float(expr.b.b.value), low = float(expr.a.value);
-		if (low > high) return vDSP_vfill(&low, pointer, 1, size);
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b.a, size, pointer);
-		vDSP_vclip(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
 	}
 	template<class A, class V1, class V2>
 	void fillExpr(RealPointer<double> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		double high = double(expr.b.b.value), low = double(expr.a.value);
-		if (low > high) return vDSP_vfillD(&low, pointer, 1, size);
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b.a, size, pointer);
-		vDSP_vclipD(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
 	}
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		float high = float(expr.b.a.value), low = float(expr.a.value);
-		if (low > high) return vDSP_vfill(&low, pointer, 1, size);
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b.b, size, pointer);
-		vDSP_vclip(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class A, class V1, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		double high = double(expr.b.a.value), low = double(expr.a.value);
-		if (low > high) return vDSP_vfillD(&low, pointer, 1, size);
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b.b, size, pointer);
-		vDSP_vclipD(a, 1, &low, &high, pointer, 1, size);
+		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.b.b, expr.b.a), expr.a), size);
 	}
 	
 	//---- Compound real expressions
@@ -1172,21 +1158,11 @@ private:
 	}
 	template<class A, class B, class C, class D>
 	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::Sub<A, B>, expression::Add<C, D>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.a.a, size);
-		auto *b = floats.real(expr.a.b, size);
-		auto *c = floats.real(expr.b.a, size);
-		auto *d = floats.real(expr.b.b, size);
-		vDSP_vasbm(c, 1, d, 1, a, 1, b, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class B, class C, class D>
 	void fillExpr(RealPointer<double> pointer, expression::Mul<expression::Sub<A, B>, expression::Add<C, D>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.a.a, size);
-		auto *b = doubles.real(expr.a.b, size);
-		auto *c = doubles.real(expr.b.a, size);
-		auto *d = doubles.real(expr.b.b, size);
-		vDSP_vasbmD(c, 1, d, 1, a, 1, b, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class B, class C, class D>
 	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::Sub<A, B>, expression::Sub<C, D>> expr, size_t size) {
@@ -1442,319 +1418,155 @@ private:
 	// Compound expressions with constants on the other sides
 	template<class V, class A, class C>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		auto *c = floats.real(expr.b, size);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V, class A, class C>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		auto *c = doubles.real(expr.b, size);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		float c = float(expr.b.value);
-		vDSP_vsmsa(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		double c = double(expr.b.value);
-		vDSP_vsmsaD(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V, class A, class C, class D>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		auto *c = floats.real(expr.b, size);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V, class A, class C, class D>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		auto *c = doubles.real(expr.b, size);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class V1, class V2, class C>
 	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.a.a, size);
-		float b = float(expr.a.b.value);
-		float d = float(expr.b.a.value);
-		auto *c = floats.real(expr.b.b, size);
-		vDSP_vsmsma(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class A, class V1, class V2, class C>
 	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.a.a, size);
-		double b = double(expr.a.b.value);
-		double d = double(expr.b.a.value);
-		auto *c = doubles.real(expr.b.b, size);
-		vDSP_vsmsmaD(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V1, class A, class C, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		auto *c = floats.real(expr.b.a, size);
-		float d = float(expr.b.b.value);
-		vDSP_vsmsma(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class C, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		auto *c = doubles.real(expr.b.a, size);
-		double d = double(expr.b.b.value);
-		vDSP_vsmsmaD(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class V2, class C>
 	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		float d = float(expr.b.a.value);
-		auto *c = floats.real(expr.b.b, size);
-		vDSP_vsmsma(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V1, class A, class V2, class C>
 	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		double d = double(expr.b.a.value);
-		auto *c = doubles.real(expr.b.b, size);
-		vDSP_vsmsmaD(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V, class A, class B>
 	void fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, expression::Mul<A, B>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float c = float(expr.a.value);
-		auto *a = floats.real(expr.b.a, size);
-		auto *b = floats.real(expr.b.b, size);
-		vDSP_vmsa(a, 1, b, 1, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V, class A, class B>
 	void fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, expression::Mul<A, B>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double c = double(expr.a.value);
-		auto *a = doubles.real(expr.b.a, size);
-		auto *b = doubles.real(expr.b.b, size);
-		vDSP_vmsaD(a, 1, b, 1, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V1, class A, class V2>
 	void fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<A, expression::ConstantExpr<V2>>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float c = float(expr.a.value);
-		auto *a = floats.real(expr.b.a, size);
-		float b = float(expr.b.b.value);
-		vDSP_vsmsa(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V1, class A, class V2>
 	void fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<A, expression::ConstantExpr<V2>>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double c = double(expr.a.value);
-		auto *a = doubles.real(expr.b.a, size);
-		double b = double(expr.b.b.value);
-		vDSP_vsmsaD(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V1, class V2, class A>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float c = float(expr.a.value);
-		float b = float(expr.b.a.value);
-		auto *a = floats.real(expr.b.b, size);
-		vDSP_vsmsa(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class V1, class V2, class A>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double c = double(expr.a.value);
-		double b = double(expr.b.a.value);
-		auto *a = doubles.real(expr.b.b, size);
-		vDSP_vsmsaD(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class C, class A, class V>
 	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<C, expression::Mul<A, expression::ConstantExpr<V>>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *c = floats.real(expr.a, size);
-		auto *a = floats.real(expr.b.a, size);
-		float b = float(expr.b.b.value);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class C, class A, class V>
 	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<C, expression::Mul<A, expression::ConstantExpr<V>>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *c = doubles.real(expr.a, size);
-		auto *a = doubles.real(expr.b.a, size);
-		double b = double(expr.b.b.value);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class C, class V, class A>
 	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<float> pointer, expression::Add<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *c = floats.real(expr.a, size);
-		float b = float(expr.b.a.value);
-		auto *a = floats.real(expr.b.b, size);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class C, class V, class A>
 	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<double> pointer, expression::Add<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *c = doubles.real(expr.a, size);
-		double b = double(expr.b.a.value);
-		auto *a = doubles.real(expr.b.b, size);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class A, class B, class C, class V>
 	void fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *c = floats.real(expr.a, size);
-		auto *a = floats.real(expr.b.a, size);
-		float b = float(expr.b.b.value);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class A, class B, class C, class V>
 	void fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *c = doubles.real(expr.a, size);
-		auto *a = doubles.real(expr.b.a, size);
-		double b = double(expr.b.b.value);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class A, class B, class V, class C>
 	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *c = floats.real(expr.a, size);
-		float b = float(expr.b.a.value);
-		auto *a = floats.real(expr.b.b, size);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class A, class B, class V, class C>
 	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *c = doubles.real(expr.a, size);
-		double b = double(expr.b.a.value);
-		auto *a = doubles.real(expr.b.b, size);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
 	}
 	template<class V, class A, class C>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		auto *c = floats.real(expr.b, size);
-		vDSP_vsmsb(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V, class A, class C>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		auto *c = doubles.real(expr.b, size);
-		vDSP_vsmsbD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		float c = -float(expr.b.value);
-		vDSP_vsmsa(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		double c = -double(expr.b.value);
-		vDSP_vsmsaD(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V, class A, class C, class D>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		auto *c = floats.real(expr.b, size);
-		vDSP_vsmsb(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V, class A, class C, class D>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		auto *c = doubles.real(expr.b, size);
-		vDSP_vsmsbD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class V1, class V2, class C>
 	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.a.a, size);
-		float b = float(expr.a.b.value);
-		float d = -float(expr.b.a.value);
-		auto *c = floats.real(expr.b.b, size);
-		vDSP_vsmsma(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class A, class V1, class V2, class C>
 	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.a.a, size);
-		double b = double(expr.a.b.value);
-		double d = -double(expr.b.a.value);
-		auto *c = doubles.real(expr.b.b, size);
-		vDSP_vsmsmaD(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V1, class A, class C, class V2>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		auto *c = floats.real(expr.b.a, size);
-		float d = -float(expr.b.b.value);
-		vDSP_vsmsma(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class C, class V2>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		auto *c = doubles.real(expr.b.a, size);
-		double d = -double(expr.b.b.value);
-		vDSP_vsmsmaD(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class V1, class A, class V2, class C>
 	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float b = float(expr.a.a.value);
-		auto *a = floats.real(expr.a.b, size);
-		float d = -float(expr.b.a.value);
-		auto *c = floats.real(expr.b.b, size);
-		vDSP_vsmsma(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V1, class A, class V2, class C>
 	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double b = double(expr.a.a.value);
-		auto *a = doubles.real(expr.a.b, size);
-		double d = -double(expr.b.a.value);
-		auto *c = doubles.real(expr.b.b, size);
-		vDSP_vsmsmaD(a, 1, &b, c, 1, &d, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V1, class A, class V2>
 	void fillExpr(RealPointer<float> pointer, expression::Sub<expression::ConstantExpr<V1>, expression::Mul<A, expression::ConstantExpr<V2>>> expr, size_t size) {
@@ -1774,19 +1586,11 @@ private:
 	}
 	template<class V1, class V2, class A>
 	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float c = float(expr.a.value);
-		float b = -float(expr.b.a.value);
-		auto *a = floats.real(expr.b.b, size);
-		vDSP_vsmsa(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V1, class V2, class A>
 	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double c = double(expr.a.value);
-		double b = -double(expr.b.a.value);
-		auto *a = doubles.real(expr.b.b, size);
-		vDSP_vsmsaD(a, 1, &b, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class C, class A, class V>
 	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Sub<C, expression::Mul<A, expression::ConstantExpr<V>>> expr, size_t size) {
@@ -1806,19 +1610,11 @@ private:
 	}
 	template<class C, class V, class A>
 	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<float> pointer, expression::Sub<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *c = floats.real(expr.a, size);
-		float b = -float(expr.b.a.value);
-		auto *a = floats.real(expr.b.b, size);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class C, class V, class A>
 	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<double> pointer, expression::Sub<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *c = doubles.real(expr.a, size);
-		double b = -double(expr.b.a.value);
-		auto *a = doubles.real(expr.b.b, size);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class A, class B, class C, class V>
 	void fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
@@ -1838,51 +1634,53 @@ private:
 	}
 	template<class A, class B, class V, class C>
 	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *c = floats.real(expr.a, size);
-		float b = -float(expr.b.a.value);
-		auto *a = floats.real(expr.b.b, size);
-		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class A, class B, class V, class C>
 	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *c = doubles.real(expr.a, size);
-		double b = -double(expr.b.a.value);
-		auto *a = doubles.real(expr.b.b, size);
-		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class V, class A, class B>
 	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Add<A, B>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float c = float(expr.a.value);
-		auto *a = floats.real(expr.b.a, size);
-		auto *b = floats.real(expr.b.b, size);
-		vDSP_vasm(a, 1, b, 1, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class A, class B>
 	void fillExpr(RealPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Add<A, B>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double c = double(expr.a.value);
-		auto *a = doubles.real(expr.b.a, size);
-		auto *b = doubles.real(expr.b.b, size);
-		vDSP_vasmD(a, 1, b, 1, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class A, class B>
 	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Sub<A, B>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		float c = float(expr.a.value);
-		auto *a = floats.real(expr.b.a, size);
-		auto *b = floats.real(expr.b.b, size);
-		vDSP_vsbsm(a, 1, b, 1, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class A, class B>
 	void fillExpr(RealPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Sub<A, B>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		double c = double(expr.a.value);
-		auto *a = doubles.real(expr.b.a, size);
-		auto *b = doubles.real(expr.b.b, size);
-		vDSP_vsbsmD(a, 1, b, 1, &c, pointer, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
+	}
+
+	// Compound expressions with the compound part on the right
+	template<class C, class A, class B>
+	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Mul<C, expression::Add<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Mul<C, expression::Sub<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Mul<C, expression::Add<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Mul<C, expression::Sub<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 
 	//---- Complex/split copies and conversions
@@ -1963,6 +1761,174 @@ private:
 		auto a = dspSplit(doubles.split(expr.a, size, pointer));
 		auto p = dspSplit(pointer);
 		vDSP_zvconjD(&a, 1, &p, 1, size);
+	}
+	// exp(x + iy) = e^x (cos(y) + i sin(y))
+	template<class A>
+	ItemTypeCF<A> fillExpr(ComplexPointer<float> pointer, expression::Exp<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = floats.split(expr.a, size);
+		auto e = floats(size), sin = floats(size), cos = floats(size);
+		int intSize = int(size);
+		vvexpf(e, a.real, &intSize);
+		vvsincosf(sin, cos, a.imag, &intSize);
+		auto p = dspSplit(pointer);
+		vDSP_vmul(e, 1, cos, 1, p.realp, 2, size);
+		vDSP_vmul(e, 1, sin, 1, p.imagp, 2, size);
+	}
+	// log(z) = log(abs(z)) + i arg(z)
+	template<class A>
+	ItemTypeCF<A> fillExpr(ComplexPointer<float> pointer, expression::Log<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = dspSplit(floats.split(expr.a, size));
+		auto abs = floats(size), arg = floats(size);
+		vDSP_zvabs(&a, 1, abs, 1, size);
+		vDSP_zvphas(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlogf(abs, abs, &intSize);
+		vDSP_mmov(abs, p.realp, 1, size, 1, 2);
+		vDSP_mmov(arg, p.imagp, 1, size, 1, 2);
+	}
+	// log10(z) = log(z)/log(10)
+	template<class A>
+	ItemTypeCF<A> fillExpr(ComplexPointer<float> pointer, expression::Log10<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = dspSplit(floats.split(expr.a, size));
+		auto abs = floats(size), arg = floats(size);
+		vDSP_zvabs(&a, 1, abs, 1, size);
+		vDSP_zvphas(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlog10f(abs, abs, &intSize);
+		vDSP_mmov(abs, p.realp, 1, size, 1, 2);
+		float scale = float(1/std::log(10.0));
+		vDSP_vsmul(arg, 1, &scale, p.imagp, 2, size);
+	}
+	// exp(x + iy) = e^x (cos(y) + i sin(y))
+	template<class A>
+	ItemTypeCD<A> fillExpr(ComplexPointer<double> pointer, expression::Exp<A> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto a = doubles.split(expr.a, size);
+		auto e = doubles(size), sin = doubles(size), cos = doubles(size);
+		int intSize = int(size);
+		vvexp(e, a.real, &intSize);
+		vvsincos(sin, cos, a.imag, &intSize);
+		auto p = dspSplit(pointer);
+		vDSP_vmulD(e, 1, cos, 1, p.realp, 2, size);
+		vDSP_vmulD(e, 1, sin, 1, p.imagp, 2, size);
+	}
+	// log(z) = log(abs(z)) + i arg(z)
+	template<class A>
+	ItemTypeCD<A> fillExpr(ComplexPointer<double> pointer, expression::Log<A> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto a = dspSplit(doubles.split(expr.a, size));
+		auto abs = doubles(size), arg = doubles(size);
+		vDSP_zvabsD(&a, 1, abs, 1, size);
+		vDSP_zvphasD(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlog(abs, abs, &intSize);
+		vDSP_mmovD(abs, p.realp, 1, size, 1, 2);
+		vDSP_mmovD(arg, p.imagp, 1, size, 1, 2);
+	}
+	// log10(z) = log(z)/log(10)
+	template<class A>
+	ItemTypeCD<A> fillExpr(ComplexPointer<double> pointer, expression::Log10<A> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto a = dspSplit(doubles.split(expr.a, size));
+		auto abs = doubles(size), arg = doubles(size);
+		vDSP_zvabsD(&a, 1, abs, 1, size);
+		vDSP_zvphasD(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlog10(abs, abs, &intSize);
+		vDSP_mmovD(abs, p.realp, 1, size, 1, 2);
+		double scale = double(1/std::log(10.0));
+		vDSP_vsmulD(arg, 1, &scale, p.imagp, 2, size);
+	}
+	// exp(x + iy) = e^x (cos(y) + i sin(y))
+	template<class A>
+	ItemTypeCF<A> fillExpr(SplitPointer<float> pointer, expression::Exp<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = floats.split(expr.a, size);
+		auto e = floats(size), sin = floats(size), cos = floats(size);
+		int intSize = int(size);
+		vvexpf(e, a.real, &intSize);
+		vvsincosf(sin, cos, a.imag, &intSize);
+		auto p = dspSplit(pointer);
+		vDSP_vmul(e, 1, cos, 1, p.realp, 1, size);
+		vDSP_vmul(e, 1, sin, 1, p.imagp, 1, size);
+	}
+	// log(z) = log(abs(z)) + i arg(z)
+	template<class A>
+	ItemTypeCF<A> fillExpr(SplitPointer<float> pointer, expression::Log<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = dspSplit(floats.split(expr.a, size));
+		auto abs = floats(size), arg = floats(size);
+		vDSP_zvabs(&a, 1, abs, 1, size);
+		vDSP_zvphas(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlogf(abs, abs, &intSize);
+		vDSP_mmov(abs, p.realp, 1, size, 1, 1);
+		vDSP_mmov(arg, p.imagp, 1, size, 1, 1);
+	}
+	// log10(z) = log(z)/log(10)
+	template<class A>
+	ItemTypeCF<A> fillExpr(SplitPointer<float> pointer, expression::Log10<A> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = dspSplit(floats.split(expr.a, size));
+		auto abs = floats(size), arg = floats(size);
+		vDSP_zvabs(&a, 1, abs, 1, size);
+		vDSP_zvphas(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlog10f(abs, abs, &intSize);
+		vDSP_mmov(abs, p.realp, 1, size, 1, 1);
+		float scale = float(1/std::log(10.0));
+		vDSP_vsmul(arg, 1, &scale, p.imagp, 1, size);
+	}
+	// exp(x + iy) = e^x (cos(y) + i sin(y))
+	template<class A>
+	ItemTypeCD<A> fillExpr(SplitPointer<double> pointer, expression::Exp<A> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto a = doubles.split(expr.a, size);
+		auto e = doubles(size), sin = doubles(size), cos = doubles(size);
+		int intSize = int(size);
+		vvexp(e, a.real, &intSize);
+		vvsincos(sin, cos, a.imag, &intSize);
+		auto p = dspSplit(pointer);
+		vDSP_vmulD(e, 1, cos, 1, p.realp, 1, size);
+		vDSP_vmulD(e, 1, sin, 1, p.imagp, 1, size);
+	}
+	// log(z) = log(abs(z)) + i arg(z)
+	template<class A>
+	ItemTypeCD<A> fillExpr(SplitPointer<double> pointer, expression::Log<A> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto a = dspSplit(doubles.split(expr.a, size));
+		auto abs = doubles(size), arg = doubles(size);
+		vDSP_zvabsD(&a, 1, abs, 1, size);
+		vDSP_zvphasD(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlog(abs, abs, &intSize);
+		vDSP_mmovD(abs, p.realp, 1, size, 1, 1);
+		vDSP_mmovD(arg, p.imagp, 1, size, 1, 1);
+	}
+	// log10(z) = log(z)/log(10)
+	template<class A>
+	ItemTypeCD<A> fillExpr(SplitPointer<double> pointer, expression::Log10<A> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto a = dspSplit(doubles.split(expr.a, size));
+		auto abs = doubles(size), arg = doubles(size);
+		vDSP_zvabsD(&a, 1, abs, 1, size);
+		vDSP_zvphasD(&a, 1, arg, 1, size);
+		auto p = dspSplit(pointer);
+		int intSize = int(size);
+		vvlog10(abs, abs, &intSize);
+		vDSP_mmovD(abs, p.realp, 1, size, 1, 1);
+		double scale = double(1/std::log(10.0));
+		vDSP_vsmulD(arg, 1, &scale, p.imagp, 1, size);
 	}
 	// polar(abs, arg)
 	template<class A, class B>
@@ -2380,11 +2346,7 @@ private:
 	}
 	template<class A, class B>
 	ItemTypeCF<A, ItemTypeCF<B, NotConstant<A>>> fillExpr(ComplexPointer<float> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto a = dspSplit(floats.complex(expr.a, size));
-		auto b = dspSplit(floats.complex(expr.b.a, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvmul(&b, 2, &a, 2, &p, 2, size, -1);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
@@ -2406,11 +2368,7 @@ private:
 	}
 	template<class A, class B>
 	ItemTypeCD<A, ItemTypeCD<B, NotConstant<A>>> fillExpr(ComplexPointer<double> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto a = dspSplit(doubles.complex(expr.a, size));
-		auto b = dspSplit(doubles.complex(expr.b.a, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvmulD(&b, 2, &a, 2, &p, 2, size, -1);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
@@ -2432,11 +2390,7 @@ private:
 	}
 	template<class A, class B>
 	ItemTypeCF<A, ItemTypeCF<B, NotConstant<A>>> fillExpr(SplitPointer<float> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto a = dspSplit(floats.split(expr.a, size));
-		auto b = dspSplit(floats.split(expr.b.a, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvmul(&b, 1, &a, 1, &p, 1, size, -1);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
@@ -2458,11 +2412,7 @@ private:
 	}
 	template<class A, class B>
 	ItemTypeCD<A, ItemTypeCD<B, NotConstant<A>>> fillExpr(SplitPointer<double> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto a = dspSplit(doubles.split(expr.a, size));
-		auto b = dspSplit(doubles.split(expr.b.a, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvmulD(&b, 1, &a, 1, &p, 1, size, -1);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
@@ -2732,115 +2682,41 @@ private:
 	// Constant on the left
 	template<class V, class B>
 	ItemTypeCF<B, NotConstant<B>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto b = dspSplit(floats.complex(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<float> a = expr.a.value;
-		float ar = a.real(), ai = a.imag();
-		vDSP_vsadd(b.realp, 2, &ar, p.realp, 2, size);
-		vDSP_vsadd(b.imagp, 2, &ai, p.imagp, 2, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	ItemTypeCF<B, NotConstant<B>> fillExpr(ComplexPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto b = dspSplit(floats.complex(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<float> a = expr.a.value;
-		float ar = a.real(), ai = a.imag();
-		if (ai == 0) {
-			vDSP_vsmul(b.realp, 2, &ar, p.realp, 2, size);
-			vDSP_vsmul(b.imagp, 2, &ar, p.imagp, 2, size);
-		} else {
-			auto aSplit = dspSplit({&ar, &ai});
-			vDSP_zvzsml(&b, 2, &aSplit, &p, 2, size);
-		}
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	ItemTypeCD<B, NotConstant<B>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto b = dspSplit(doubles.complex(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<double> a = expr.a.value;
-		double ar = a.real(), ai = a.imag();
-		vDSP_vsaddD(b.realp, 2, &ar, p.realp, 2, size);
-		vDSP_vsaddD(b.imagp, 2, &ai, p.imagp, 2, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	ItemTypeCD<B, NotConstant<B>> fillExpr(ComplexPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto b = dspSplit(doubles.complex(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<double> a = expr.a.value;
-		double ar = a.real(), ai = a.imag();
-		if (ai == 0) {
-			vDSP_vsmulD(b.realp, 2, &ar, p.realp, 2, size);
-			vDSP_vsmulD(b.imagp, 2, &ar, p.imagp, 2, size);
-		} else {
-			auto aSplit = dspSplit({&ar, &ai});
-			vDSP_zvzsmlD(&b, 2, &aSplit, &p, 2, size);
-		}
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	ItemTypeCF<B, NotConstant<B>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto b = dspSplit(floats.split(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<float> a = expr.a.value;
-		float ar = a.real(), ai = a.imag();
-		vDSP_vsadd(b.realp, 1, &ar, p.realp, 1, size);
-		vDSP_vsadd(b.imagp, 1, &ai, p.imagp, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	ItemTypeCF<B, NotConstant<B>> fillExpr(SplitPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto b = dspSplit(floats.split(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<float> a = expr.a.value;
-		float ar = a.real(), ai = a.imag();
-		if (ai == 0) {
-			vDSP_vsmul(b.realp, 1, &ar, p.realp, 1, size);
-			vDSP_vsmul(b.imagp, 1, &ar, p.imagp, 1, size);
-		} else {
-			auto aSplit = dspSplit({&ar, &ai});
-			vDSP_zvzsml(&b, 1, &aSplit, &p, 1, size);
-		}
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	ItemTypeCD<B, NotConstant<B>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto b = dspSplit(doubles.split(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<double> a = expr.a.value;
-		double ar = a.real(), ai = a.imag();
-		vDSP_vsaddD(b.realp, 1, &ar, p.realp, 1, size);
-		vDSP_vsaddD(b.imagp, 1, &ai, p.imagp, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class V, class B>
 	ItemTypeCD<B, NotConstant<B>> fillExpr(SplitPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto b = dspSplit(doubles.split(expr.b, size, pointer));
-		auto p = dspSplit(pointer);
-		std::complex<double> a = expr.a.value;
-		double ar = a.real(), ai = a.imag();
-		if (ai == 0) {
-			vDSP_vsmulD(b.realp, 1, &ar, p.realp, 1, size);
-			vDSP_vsmulD(b.imagp, 1, &ar, p.imagp, 1, size);
-		} else {
-			auto aSplit = dspSplit({&ar, &ai});
-			vDSP_zvzsmlD(&b, 1, &aSplit, &p, 1, size);
-		}
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 
 	// Real values combined with a (possibly complex) constant
 	template<class V, class B>
 	ItemTypeF<B> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<float> b = expr.a.value;
-		float br = b.real(), bi = b.imag();
-		vDSP_vsadd(a, 1, &br, p.realp, 2, size);
-		vDSP_vfill(&bi, p.imagp, 2, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(ComplexPointer<float> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2854,13 +2730,7 @@ private:
 	}
 	template<class V, class B>
 	ItemTypeF<B> fillExpr(ComplexPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<float> b = expr.a.value;
-		float br = b.real(), bi = b.imag();
-		vDSP_vsmul(a, 1, &br, p.realp, 2, size);
-		vDSP_vsmul(a, 1, &bi, p.imagp, 2, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(ComplexPointer<float> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2874,13 +2744,7 @@ private:
 	}
 	template<class V, class B>
 	ItemTypeD<B> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<double> b = expr.a.value;
-		double br = b.real(), bi = b.imag();
-		vDSP_vsaddD(a, 1, &br, p.realp, 2, size);
-		vDSP_vfillD(&bi, p.imagp, 2, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(ComplexPointer<double> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2894,13 +2758,7 @@ private:
 	}
 	template<class V, class B>
 	ItemTypeD<B> fillExpr(ComplexPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<double> b = expr.a.value;
-		double br = b.real(), bi = b.imag();
-		vDSP_vsmulD(a, 1, &br, p.realp, 2, size);
-		vDSP_vsmulD(a, 1, &bi, p.imagp, 2, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(ComplexPointer<double> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2914,13 +2772,7 @@ private:
 	}
 	template<class V, class B>
 	ItemTypeF<B> fillExpr(SplitPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<float> b = expr.a.value;
-		float br = b.real(), bi = b.imag();
-		vDSP_vsadd(a, 1, &br, p.realp, 1, size);
-		vDSP_vfill(&bi, p.imagp, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(SplitPointer<float> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2934,13 +2786,7 @@ private:
 	}
 	template<class V, class B>
 	ItemTypeF<B> fillExpr(SplitPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto *a = floats.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<float> b = expr.a.value;
-		float br = b.real(), bi = b.imag();
-		vDSP_vsmul(a, 1, &br, p.realp, 1, size);
-		vDSP_vsmul(a, 1, &bi, p.imagp, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(SplitPointer<float> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2954,13 +2800,7 @@ private:
 	}
 	template<class V, class B>
 	ItemTypeD<B> fillExpr(SplitPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<double> b = expr.a.value;
-		double br = b.real(), bi = b.imag();
-		vDSP_vsaddD(a, 1, &br, p.realp, 1, size);
-		vDSP_vfillD(&bi, p.imagp, 1, size);
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(SplitPointer<double> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2974,13 +2814,7 @@ private:
 	}
 	template<class V, class B>
 	ItemTypeD<B> fillExpr(SplitPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto *a = doubles.real(expr.b, size);
-		auto p = dspSplit(pointer);
-		std::complex<double> b = expr.a.value;
-		double br = b.real(), bi = b.imag();
-		vDSP_vsmulD(a, 1, &br, p.realp, 1, size);
-		vDSP_vsmulD(a, 1, &bi, p.imagp, 1, size);
+		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(SplitPointer<double> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -3014,12 +2848,7 @@ private:
 	}
 	template<class A, class B, class C>
 	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto a = dspSplit(floats.complex(expr.a.a, size));
-		auto b = dspSplit(floats.complex(expr.a.b.a, size));
-		auto c = dspSplit(floats.complex(expr.b, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvcma(&b, 2, &a, 2, &c, 2, &p, 2, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::Mul<A, B>, C> expr, size_t size) {
@@ -3041,12 +2870,7 @@ private:
 	}
 	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
-		auto doubles = cached.doubleScope();
-		auto a = dspSplit(doubles.complex(expr.a.a, size));
-		auto b = dspSplit(doubles.complex(expr.a.b.a, size));
-		auto c = dspSplit(doubles.complex(expr.b, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvcmaD(&b, 2, &a, 2, &c, 2, &p, 2, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class B, class C>
 	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::Mul<A, B>, C> expr, size_t size) {
@@ -3068,12 +2892,7 @@ private:
 	}
 	template<class A, class B, class C>
 	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
-		auto floats = cached.floatScope();
-		auto a = dspSplit(floats.split(expr.a.a, size));
-		auto b = dspSplit(floats.split(expr.a.b.a, size));
-		auto c = dspSplit(floats.split(expr.b, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvcma(&b, 1, &a, 1, &c, 1, &p, 1, size);
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::Mul<A, B>, C> expr, size_t size) {
@@ -3095,12 +2914,112 @@ private:
 	}
 	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
+	}
+	// Compound part on the right (unless the left is a product, which is handled above)
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
+	}
+	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	template<class A, class B, class C>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = dspSplit(floats.complex(expr.a.a.a, size));
+		auto b = dspSplit(floats.complex(expr.a.b, size));
+		auto c = dspSplit(floats.complex(expr.b, size));
+		auto p = dspSplit(pointer);
+		vDSP_zvcma(&a, 2, &b, 2, &c, 2, &p, 2, size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
+	}
+	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	template<class A, class B, class C>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
 		auto doubles = cached.doubleScope();
-		auto a = dspSplit(doubles.split(expr.a.a, size));
-		auto b = dspSplit(doubles.split(expr.a.b.a, size));
+		auto a = dspSplit(doubles.complex(expr.a.a.a, size));
+		auto b = dspSplit(doubles.complex(expr.a.b, size));
+		auto c = dspSplit(doubles.complex(expr.b, size));
+		auto p = dspSplit(pointer);
+		vDSP_zvcmaD(&a, 2, &b, 2, &c, 2, &p, 2, size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
+	}
+	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	template<class A, class B, class C>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto a = dspSplit(floats.split(expr.a.a.a, size));
+		auto b = dspSplit(floats.split(expr.a.b, size));
+		auto c = dspSplit(floats.split(expr.b, size));
+		auto p = dspSplit(pointer);
+		vDSP_zvcma(&a, 1, &b, 1, &c, 1, &p, 1, size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
+	}
+	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	template<class A, class B, class C>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto a = dspSplit(doubles.split(expr.a.a.a, size));
+		auto b = dspSplit(doubles.split(expr.a.b, size));
 		auto c = dspSplit(doubles.split(expr.b, size));
 		auto p = dspSplit(pointer);
-		vDSP_zvcmaD(&b, 1, &a, 1, &c, 1, &p, 1, size);
+		vDSP_zvcmaD(&a, 1, &b, 1, &c, 1, &p, 1, size);
+	}
+	template<class C, class A, class B>
+	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
+		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 
 protected:

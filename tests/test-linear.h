@@ -650,6 +650,10 @@ TEST_EXPR4(ClampMaxMin, a = std::max(std::min(b, c), d), a = linear.max(linear.m
 TEST_EXPR3(PowMul, a = std::pow(b, c*c), a = linear.pow(b, c*c));
 TEST_EXPR4(HypotMul, a = std::hypot(b*c, d), a = linear.hypot(b*c, d));
 
+TEST_EXPR4(AddMulConj, a = b + c*std::conj(d), a = b + c*d.conj());
+TEST_EXPR4(AddConjMul, a = b + std::conj(c)*d, a = b + c.conj()*d);
+TEST_EXPR4(ConjConjMulAdd, a = std::conj(b)*std::conj(c) + d, a = b.conj()*c.conj() + d);
+
 // Constants on the left of commutative ops
 TEST_EXPR3(KMulAdd, a = decltype(b)(0.5)*b + c, a = 0.5*b + c);
 TEST_EXPR3(AddMulK, a = b + c*decltype(b)(0.5), a = b + c*0.5);
@@ -969,6 +973,10 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 
 		test.addOp<OpVoidABCDk<MulAdd, 2, 2, 2, 2>>("MulAddK");
 		test.addOp<OpVoidABCDk<AddMul2, 2, 2, 2, 2>>("AddMulK");
+		test.addOp<OpVoidABCD<MulAdd2, 2, 2, 2, 2>>("MulAdd2");
+		test.addOp<OpVoidABCD<AddMulConj, 2, 2, 2, 2>>("AddMulConj");
+		test.addOp<OpVoidABCD<AddConjMul, 2, 2, 2, 2>>("AddConjMul");
+		test.addOp<OpVoidABCD<ConjConjMulAdd, 2, 2, 2, 2>>("ConjConjMulAdd");
 	}
 	{
 		TestLinear test(maxSize, benchmarkSeconds, "splitCompound");
@@ -990,6 +998,10 @@ void testLinear(int maxSize, double benchmarkSeconds) {
 
 		test.addOp<OpVoidABCDk<MulAdd, 3, 3, 3, 3>>("MulAddK");
 		test.addOp<OpVoidABCDk<AddMul2, 3, 3, 3, 3>>("AddMulK");
+		test.addOp<OpVoidABCD<MulAdd2, 3, 3, 3, 3>>("MulAdd2");
+		test.addOp<OpVoidABCD<AddMulConj, 3, 3, 3, 3>>("AddMulConj");
+		test.addOp<OpVoidABCD<AddConjMul, 3, 3, 3, 3>>("AddConjMul");
+		test.addOp<OpVoidABCD<ConjConjMulAdd, 3, 3, 3, 3>>("ConjConjMulAdd");
 	}
 	{
 		TestLinear test(maxSize, benchmarkSeconds, "mixedCompound");
