@@ -316,16 +316,41 @@ const Expression<expression::Name<expression::Unwrap<A>, expression::Unwrap<B>>>
 template<class A, class B> \
 const Expression<expression::Name<expression::Unwrap<A>, expression::Constant<B>>> operator OP(const Expression<A> &a, const B &b) { \
 	return {a, b}; \
-} \
+}
+// Constants go on the right for commutative ops, but not otherwise
+#define SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_NONCOMMUTE(Name, OP) \
 template<class A, class B> \
 const Expression<expression::Name<expression::Constant<A>, expression::Unwrap<B>>> operator OP(const A &a, const Expression<B> &b) { \
 	return {a, b}; \
 }
+#define SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_COMMUTE(Name, OP) \
+template<class A, class B> \
+const Expression<expression::Name<expression::Unwrap<B>, expression::Constant<A>>> operator OP(const A &a, const Expression<B> &b) { \
+	return {b, a}; \
+}
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Add, +)
+SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_COMMUTE(Add, +)
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Mul, *)
+SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_COMMUTE(Mul, *)
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Sub, -)
+SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_NONCOMMUTE(Sub, -)
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Div, /)
+SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_NONCOMMUTE(Div, /)
 #undef SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX
+#undef SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_COMMUTE
+#undef SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_NONCOMMUTE
+
+// Specific commutative swaps we want in a canonical form.  When there's a commonly-matched shape, we put the "more interesting" one on the left
+// A + B*C -> B*C + A
+template<class A, class B, class C>
+const Expression<expression::Add<expression::Mul<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator+(const Expression<A> &a, const Expression<expression::Mul<B, C>> &bc) {
+	return {bc, a};
+}
+// A*(B + C) -> (B + C)*A
+template<class A, class B, class C>
+const Expression<expression::Mul<expression::Add<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Add<B, C>> &bc) {
+	return {bc, a};
+}
 
 namespace expression {
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(Name, func) \

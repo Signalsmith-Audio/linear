@@ -359,10 +359,10 @@ struct TestLinear {
 		signalsmith::linear::LinearImpl<false> linearFallback;
 		auto runSize = [&](int n){
 			std::cout << "\tn = " << n << "\r" << std::flush;
-			linear.reserve<float>(n);
-			linear.reserve<double>(n);
-			linearFallback.reserve<float>(n);
-			linearFallback.reserve<double>(n);
+			linear.reserve<float>(n*4);
+			linear.reserve<double>(n*4);
+			linearFallback.reserve<float>(n*4);
+			linearFallback.reserve<double>(n*4);
 
 			RunData<double> dataDouble(n);
 			RunData<float> dataFloat(n);

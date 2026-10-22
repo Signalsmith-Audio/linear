@@ -15,16 +15,6 @@
 
 namespace signalsmith { namespace linear {
 
-namespace _impl {
-	// SFINAE for "not a product", used when the same pattern could match either side
-	template<class E>
-	struct IsMulExpr : public std::false_type {};
-	template<class A, class B>
-	struct IsMulExpr<expression::Mul<A, B>> : public std::true_type {};
-	template<class InputExpr, class OutputExpr=void>
-	using NotConstantOrMul = typename std::enable_if<!IsMulExpr<InputExpr>::value, NotConstant<InputExpr, OutputExpr>>::type;
-}
-
 template<>
 struct LinearImpl<true> : public LinearImplBase<true> {
 	using Base = LinearImplBase<true>;
@@ -939,39 +929,6 @@ private:
 		double a = double(expr.a.value);
 		vDSP_svdivD(&a, b, 1, pointer, 1, size);
 	}
-	// Constant on the left
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Max<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Max<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<float> pointer, expression::Min<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	NotConstant<B> fillExpr(RealPointer<double> pointer, expression::Min<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
-	}
 	// Clamping (if the limits are the wrong way round, the result is constant)
 	template<class A, class V1, class V2>
 	void fillExpr(RealPointer<float> pointer, expression::Min<expression::Max<A, expression::ConstantExpr<V1>>, expression::ConstantExpr<V2>> expr, size_t size) {
@@ -1004,55 +961,6 @@ private:
 		auto doubles = cached.doubleScope();
 		auto *a = doubles.real(expr.a.a, size, pointer);
 		vDSP_vclipD(a, 1, &low, &high, pointer, 1, size);
-	}
-	// Clamping with constants on the other sides
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Min<expression::Max<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Min<expression::Max<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class V1, class V2>
-	void fillExpr(RealPointer<float> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
-	}
-	template<class A, class V1, class V2>
-	void fillExpr(RealPointer<double> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expr.b, expr.a), size);
-	}
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Min<expression::ConstantExpr<V2>, expression::Max<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMin(expression::makeMax(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Max<expression::Min<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Max<expression::Min<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class V1, class V2>
-	void fillExpr(RealPointer<float> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
-	}
-	template<class A, class V1, class V2>
-	void fillExpr(RealPointer<double> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<A, expression::ConstantExpr<V1>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expr.b, expr.a), size);
-	}
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class A, class V1, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Max<expression::ConstantExpr<V2>, expression::Min<expression::ConstantExpr<V1>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMax(expression::makeMin(expr.b.b, expr.b.a), expr.a), size);
 	}
 	
 	//---- Compound real expressions
@@ -1155,14 +1063,6 @@ private:
 		auto *c = doubles.real(expr.b.a, size);
 		auto *d = doubles.real(expr.b.b, size);
 		vDSP_vasbmD(a, 1, b, 1, c, 1, d, 1, pointer, 1, size);
-	}
-	template<class A, class B, class C, class D>
-	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::Sub<A, B>, expression::Add<C, D>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class A, class B, class C, class D>
-	void fillExpr(RealPointer<double> pointer, expression::Mul<expression::Sub<A, B>, expression::Add<C, D>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class B, class C, class D>
 	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::Sub<A, B>, expression::Sub<C, D>> expr, size_t size) {
@@ -1415,159 +1315,7 @@ private:
 		vDSP_vsmsmaD(a, 1, &b, c, 1, &d, pointer, 1, size);
 	}
 
-	// Compound expressions with constants on the other sides
-	template<class V, class A, class C>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V, class A, class C>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V, class A, class C, class D>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V, class A, class C, class D>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class V1, class V2, class C>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class A, class V1, class V2, class C>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class V1, class A, class C, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class C, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class V2, class C>
-	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class V1, class A, class V2, class C>
-	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class V, class A, class B>
-	void fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V, class A, class B>
-	void fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V1, class A, class V2>
-	void fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<A, expression::ConstantExpr<V2>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V1, class A, class V2>
-	void fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<A, expression::ConstantExpr<V2>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V1, class V2, class A>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class V1, class V2, class A>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Add<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class C, class A, class V>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<C, expression::Mul<A, expression::ConstantExpr<V>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class V>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<C, expression::Mul<A, expression::ConstantExpr<V>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class V, class A>
-	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<float> pointer, expression::Add<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class C, class V, class A>
-	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<double> pointer, expression::Add<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class A, class B, class C, class V>
-	void fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class A, class B, class C, class V>
-	void fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class A, class B, class V, class C>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class A, class B, class V, class C>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	template<class V, class A, class C>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V, class A, class C>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::ConstantExpr<V2>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V, class A, class C, class D>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V, class A, class C, class D>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V>, A>, expression::Mul<C, D>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class V1, class V2, class C>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class A, class V1, class V2, class C>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class V1, class A, class C, class V2>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class C, class V2>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class V1, class A, class V2, class C>
-	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class V1, class A, class V2, class C>
-	NotConstant<A, NotConstant<C>> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<expression::ConstantExpr<V1>, A>, expression::Mul<expression::ConstantExpr<V2>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expression::makeMul(expr.a.b, expr.a.a), expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
+	// Subtracting a scaled value (as a multiply-add with the scale negated)
 	template<class V1, class A, class V2>
 	void fillExpr(RealPointer<float> pointer, expression::Sub<expression::ConstantExpr<V1>, expression::Mul<A, expression::ConstantExpr<V2>>> expr, size_t size) {
 		auto floats = cached.floatScope();
@@ -1583,14 +1331,6 @@ private:
 		auto *a = doubles.real(expr.b.a, size);
 		double b = -double(expr.b.b.value);
 		vDSP_vsmsaD(a, 1, &b, &c, pointer, 1, size);
-	}
-	template<class V1, class V2, class A>
-	NotConstant<A> fillExpr(RealPointer<float> pointer, expression::Sub<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class V1, class V2, class A>
-	NotConstant<A> fillExpr(RealPointer<double> pointer, expression::Sub<expression::ConstantExpr<V1>, expression::Mul<expression::ConstantExpr<V2>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
 	}
 	template<class C, class A, class V>
 	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Sub<C, expression::Mul<A, expression::ConstantExpr<V>>> expr, size_t size) {
@@ -1608,14 +1348,6 @@ private:
 		double b = -double(expr.b.b.value);
 		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
 	}
-	template<class C, class V, class A>
-	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<float> pointer, expression::Sub<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class C, class V, class A>
-	NotConstant<C, NotConstant<A>> fillExpr(RealPointer<double> pointer, expression::Sub<C, expression::Mul<expression::ConstantExpr<V>, A>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
 	template<class A, class B, class C, class V>
 	void fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
 		auto floats = cached.floatScope();
@@ -1632,56 +1364,7 @@ private:
 		double b = -double(expr.b.b.value);
 		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
 	}
-	template<class A, class B, class V, class C>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Sub<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class A, class B, class V, class C>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Sub<expression::Mul<A, B>, expression::Mul<expression::ConstantExpr<V>, C>> expr, size_t size) {
-		fillExpr(pointer, expression::makeSub(expr.a, expression::makeMul(expr.b.b, expr.b.a)), size);
-	}
-	template<class V, class A, class B>
-	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Add<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class A, class B>
-	void fillExpr(RealPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Add<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class A, class B>
-	void fillExpr(RealPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Sub<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class A, class B>
-	void fillExpr(RealPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, expression::Sub<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
 
-	// Compound expressions with the compound part on the right
-	template<class C, class A, class B>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Mul<C, expression::Add<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Mul<C, expression::Sub<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	NotConstant<C> fillExpr(RealPointer<float> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Mul<C, expression::Add<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Mul<C, expression::Sub<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	NotConstant<C> fillExpr(RealPointer<double> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
 
 	//---- Complex/split copies and conversions
 	void fillExpr(SplitPointer<float> pointer, expression::ReadableSplit<float> expr, size_t size) {
@@ -2344,10 +2027,6 @@ private:
 		auto p = dspSplit(pointer);
 		vDSP_zvmul(&a, 2, &b, 2, &p, 2, size, -1);
 	}
-	template<class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, NotConstant<A>>> fillExpr(ComplexPointer<float> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
 	ItemTypeCF<A, ItemTypeCF<B>> fillExpr(ComplexPointer<float> pointer, expression::Mul<expression::Conj<A>, expression::Conj<B>> expr, size_t size) {
@@ -2365,10 +2044,6 @@ private:
 		auto b = dspSplit(doubles.complex(expr.b, size));
 		auto p = dspSplit(pointer);
 		vDSP_zvmulD(&a, 2, &b, 2, &p, 2, size, -1);
-	}
-	template<class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, NotConstant<A>>> fillExpr(ComplexPointer<double> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
@@ -2388,10 +2063,6 @@ private:
 		auto p = dspSplit(pointer);
 		vDSP_zvmul(&a, 1, &b, 1, &p, 1, size, -1);
 	}
-	template<class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, NotConstant<A>>> fillExpr(SplitPointer<float> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
 	ItemTypeCF<A, ItemTypeCF<B>> fillExpr(SplitPointer<float> pointer, expression::Mul<expression::Conj<A>, expression::Conj<B>> expr, size_t size) {
@@ -2409,10 +2080,6 @@ private:
 		auto b = dspSplit(doubles.split(expr.b, size));
 		auto p = dspSplit(pointer);
 		vDSP_zvmulD(&a, 1, &b, 1, &p, 1, size, -1);
-	}
-	template<class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, NotConstant<A>>> fillExpr(SplitPointer<double> pointer, expression::Mul<A, expression::Conj<B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	// conj(A)*conj(B) = conj(A*B)
 	template<class A, class B>
@@ -2679,45 +2346,8 @@ private:
 		}
 	}
 
-	// Constant on the left
-	template<class V, class B>
-	ItemTypeCF<B, NotConstant<B>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	ItemTypeCF<B, NotConstant<B>> fillExpr(ComplexPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	ItemTypeCD<B, NotConstant<B>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	ItemTypeCD<B, NotConstant<B>> fillExpr(ComplexPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	ItemTypeCF<B, NotConstant<B>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	ItemTypeCF<B, NotConstant<B>> fillExpr(SplitPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	ItemTypeCD<B, NotConstant<B>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class V, class B>
-	ItemTypeCD<B, NotConstant<B>> fillExpr(SplitPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
-	}
 
 	// Real values combined with a (possibly complex) constant
-	template<class V, class B>
-	ItemTypeF<B> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(ComplexPointer<float> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
 		auto floats = cached.floatScope();
@@ -2727,10 +2357,6 @@ private:
 		float br = b.real(), bi = b.imag();
 		vDSP_vsadd(a, 1, &br, p.realp, 2, size);
 		vDSP_vfill(&bi, p.imagp, 2, size);
-	}
-	template<class V, class B>
-	ItemTypeF<B> fillExpr(ComplexPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(ComplexPointer<float> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2742,10 +2368,6 @@ private:
 		vDSP_vsmul(a, 1, &br, p.realp, 2, size);
 		vDSP_vsmul(a, 1, &bi, p.imagp, 2, size);
 	}
-	template<class V, class B>
-	ItemTypeD<B> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(ComplexPointer<double> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
 		auto doubles = cached.doubleScope();
@@ -2755,10 +2377,6 @@ private:
 		double br = b.real(), bi = b.imag();
 		vDSP_vsaddD(a, 1, &br, p.realp, 2, size);
 		vDSP_vfillD(&bi, p.imagp, 2, size);
-	}
-	template<class V, class B>
-	ItemTypeD<B> fillExpr(ComplexPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(ComplexPointer<double> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2770,10 +2388,6 @@ private:
 		vDSP_vsmulD(a, 1, &br, p.realp, 2, size);
 		vDSP_vsmulD(a, 1, &bi, p.imagp, 2, size);
 	}
-	template<class V, class B>
-	ItemTypeF<B> fillExpr(SplitPointer<float> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(SplitPointer<float> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
 		auto floats = cached.floatScope();
@@ -2783,10 +2397,6 @@ private:
 		float br = b.real(), bi = b.imag();
 		vDSP_vsadd(a, 1, &br, p.realp, 1, size);
 		vDSP_vfill(&bi, p.imagp, 1, size);
-	}
-	template<class V, class B>
-	ItemTypeF<B> fillExpr(SplitPointer<float> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeF<A> fillExpr(SplitPointer<float> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2798,10 +2408,6 @@ private:
 		vDSP_vsmul(a, 1, &br, p.realp, 1, size);
 		vDSP_vsmul(a, 1, &bi, p.imagp, 1, size);
 	}
-	template<class V, class B>
-	ItemTypeD<B> fillExpr(SplitPointer<double> pointer, expression::Add<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(SplitPointer<double> pointer, expression::Add<A, expression::ConstantExpr<V>> expr, size_t size) {
 		auto doubles = cached.doubleScope();
@@ -2811,10 +2417,6 @@ private:
 		double br = b.real(), bi = b.imag();
 		vDSP_vsaddD(a, 1, &br, p.realp, 1, size);
 		vDSP_vfillD(&bi, p.imagp, 1, size);
-	}
-	template<class V, class B>
-	ItemTypeD<B> fillExpr(SplitPointer<double> pointer, expression::Mul<expression::ConstantExpr<V>, B> expr, size_t size) {
-		fillExpr(pointer, expression::makeMul(expr.b, expr.a), size);
 	}
 	template<class A, class V>
 	ItemTypeD<A> fillExpr(SplitPointer<double> pointer, expression::Mul<A, expression::ConstantExpr<V>> expr, size_t size) {
@@ -2847,10 +2449,6 @@ private:
 		vDSP_zvcma(&a, 2, &b, 2, &c, 2, &p, 2, size);
 	}
 	template<class A, class B, class C>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::Mul<A, B>, C> expr, size_t size) {
 		auto doubles = cached.doubleScope();
 		auto a = dspSplit(doubles.complex(expr.a.a, size));
@@ -2867,10 +2465,6 @@ private:
 		auto c = dspSplit(doubles.complex(expr.b, size));
 		auto p = dspSplit(pointer);
 		vDSP_zvcmaD(&a, 2, &b, 2, &c, 2, &p, 2, size);
-	}
-	template<class A, class B, class C>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
 	}
 	template<class A, class B, class C>
 	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::Mul<A, B>, C> expr, size_t size) {
@@ -2891,10 +2485,6 @@ private:
 		vDSP_zvcma(&a, 1, &b, 1, &c, 1, &p, 1, size);
 	}
 	template<class A, class B, class C>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::Mul<A, B>, C> expr, size_t size) {
 		auto doubles = cached.doubleScope();
 		auto a = dspSplit(doubles.split(expr.a.a, size));
@@ -2912,24 +2502,7 @@ private:
 		auto p = dspSplit(pointer);
 		vDSP_zvcmaD(&a, 1, &b, 1, &c, 1, &p, 1, size);
 	}
-	template<class A, class B, class C>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::Mul<A, expression::Conj<B>>, C> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.a.b, expr.a.a), expr.b), size);
-	}
-	// Compound part on the right (unless the left is a product, which is handled above)
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	// conj(A)*conj(B) + C: compute conj(B) first, then use zvcma
 	template<class A, class B, class C>
 	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
 		auto floats = cached.floatScope();
@@ -2939,23 +2512,7 @@ private:
 		auto p = dspSplit(pointer);
 		vDSP_zvcma(&a, 2, &b, 2, &c, 2, &p, 2, size);
 	}
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	// conj(A)*conj(B) + C: compute conj(B) first, then use zvcma
 	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
 		auto doubles = cached.doubleScope();
@@ -2965,23 +2522,7 @@ private:
 		auto p = dspSplit(pointer);
 		vDSP_zvcmaD(&a, 2, &b, 2, &c, 2, &p, 2, size);
 	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(ComplexPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	// conj(A)*conj(B) + C: compute conj(B) first, then use zvcma
 	template<class A, class B, class C>
 	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
 		auto floats = cached.floatScope();
@@ -2991,23 +2532,7 @@ private:
 		auto p = dspSplit(pointer);
 		vDSP_zvcma(&a, 1, &b, 1, &c, 1, &p, 1, size);
 	}
-	template<class C, class A, class B>
-	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<float> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<A, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, B>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<A, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expression::makeMul(expr.b.b, expr.b.a), expr.a), size);
-	}
-	// conj(A)*conj(B) + C matches both conjugate patterns, so compute conj(B) first
+	// conj(A)*conj(B) + C: compute conj(B) first, then use zvcma
 	template<class A, class B, class C>
 	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, NotConstant<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<expression::Mul<expression::Conj<A>, expression::Conj<B>>, C> expr, size_t size) {
 		auto doubles = cached.doubleScope();
@@ -3016,10 +2541,6 @@ private:
 		auto c = dspSplit(doubles.split(expr.b, size));
 		auto p = dspSplit(pointer);
 		vDSP_zvcmaD(&a, 1, &b, 1, &c, 1, &p, 1, size);
-	}
-	template<class C, class A, class B>
-	ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, _impl::NotConstantOrMul<C>>>> fillExpr(SplitPointer<double> pointer, expression::Add<C, expression::Mul<expression::Conj<A>, expression::Conj<B>>> expr, size_t size) {
-		fillExpr(pointer, expression::makeAdd(expr.b, expr.a), size);
 	}
 
 protected:
