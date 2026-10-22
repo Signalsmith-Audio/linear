@@ -12,6 +12,9 @@ namespace sse2 {
 	struct ComplexFloat {
 		__m128 real, imag;
 	};
+	struct ComplexDouble {
+		__m128d real, imag;
+	};
 
 	// Fallback
 	template<class Expr>
@@ -22,29 +25,47 @@ namespace sse2 {
 	__m128 getFloat(Expr expr, size_t i) {
 		return _mm_setr_ps(expr.get(i), expr.get(i + 1), expr.get(i + 2), expr.get(i + 3));
 	}
+	template<bool aligned, class Expr>
+	__m128d getDouble(Expr expr, size_t i) {
+		return _mm_setr_pd(expr.get(i), expr.get(i + 1));
+	}
 
 	//---- Pre-declare (needs to be done first so the implementations can reference each other)
 	// ReadableReal
-	inline bool isAligned(expression::ReadableReal<float> expr, size_t);
+	template<class V>
+	bool isAligned(expression::ReadableReal<V> expr, size_t);
 	template<bool aligned>
 	__m128 getFloat(expression::ReadableReal<float> expr, size_t i);
+	template<bool aligned>
+	__m128d getDouble(expression::ReadableReal<double> expr, size_t i);
 	// Abs
 	template<class A>
 	bool isAligned(expression::Abs<A> expr, size_t i);
 	template<bool aligned, class A, class=ItemTypeF<A>>
 	__m128 getFloat(expression::Abs<A> expr, size_t i);
+	template<bool aligned, class A, class=ItemTypeD<A>>
+	__m128d getDouble(expression::Abs<A> expr, size_t i);
 
 	//---- Implementations
 	// ReadableReal
-	bool isAligned(expression::ReadableReal<float> expr, size_t i) {
+	template<class V>
+	bool isAligned(expression::ReadableReal<V> expr, size_t i) {
 		return (size_t(expr.pointer + i)&15) == 0;
 	}
 	template<bool aligned>
 	__m128 getFloat(expression::ReadableReal<float> expr, size_t i) {
 		if (aligned) {
-			return _mm_loadu_ps(expr.pointer + i);
+			return _mm_load_ps(expr.pointer + i);
 		} else {
 			return _mm_loadu_ps(expr.pointer + i);
+		}
+	}
+	template<bool aligned>
+	__m128d getDouble(expression::ReadableReal<double> expr, size_t i) {
+		if (aligned) {
+			return _mm_load_pd(expr.pointer + i);
+		} else {
+			return _mm_loadu_pd(expr.pointer + i);
 		}
 	}
 	// Abs
@@ -57,6 +78,12 @@ namespace sse2 {
 		__m128 mask = _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)); // clears the sign bit
 		__m128 a = getFloat<aligned>(expr.a, i);
 		return _mm_and_ps(a, mask);
+	}
+	template<bool aligned, class A, class>
+	__m128d getDouble(expression::Abs<A> expr, size_t i) {
+		__m128d mask = _mm_castsi128_pd(_mm_set1_epi64x(0x7FFFFFFFFFFFFFFFLL)); // clears the sign bit
+		__m128d a = getDouble<aligned>(expr.a, i);
+		return _mm_and_pd(a, mask);
 	}
 }
 
@@ -121,7 +148,35 @@ private:
 			++i;
 		}
 	}
-
+	template<class Expr>
+	void fillBasic(RealPointer<double> pointer, Expr expr, size_t size) {
+		// SSE2: width 2
+		size_t i = 0;
+		// scalar until the output is aligned
+		while (i < size && (size_t(pointer + i)&15)) {
+			pointer[i] = expr.get(i);
+			++i;
+		}
+		size_t simdEndI = i + (size - i)/2*2;
+		if (sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
+			while (i < simdEndI) {
+				__m128d v = sse2::getDouble<true>(expr, i);
+				_mm_store_pd(pointer + i, v);
+				i += 2;
+			}
+		} else {
+			while (i < simdEndI) {
+				__m128d v = sse2::getDouble<false>(expr, i);
+				_mm_store_pd(pointer + i, v);
+				i += 2;
+			}
+		}
+		while (i < size) {
+			pointer[i] = expr.get(i);
+			++i;
+		}
+	}
+	
 	template<class V, class Expr>
 	void fillBasic(RealPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
