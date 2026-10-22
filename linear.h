@@ -1190,6 +1190,8 @@ private:
 
 #if defined(SIGNALSMITH_USE_ACCELERATE)
 #	include "./platform/linear-accelerate.h"
+#elif defined(_M_X64) || defined(__x86_64__)
+#	include "./platform/linear-intrinsics-x86_64.h"
 #elif defined(SIGNALSMITH_USE_XSIMD)
 #	include "./platform/linear-xsimd.h"
 #elif defined(SIGNALSMITH_USE_CMSISDSP)
