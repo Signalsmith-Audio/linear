@@ -9,16 +9,35 @@
 namespace signalsmith { namespace linear {
 
 namespace sse2 {
-	// Fallback: calculate as scalars and collect into SIMD register
+	struct ComplexFloat {
+		__m128 real, imag;
+	};
+
+	// Fallback
 	template<class Expr>
-	bool isAligned(Expr expr, size_t i) {
+	bool isAligned(Expr, size_t) {
 		return false;
 	}
-
-	// Fallback: calculate as scalars and collect into SIMD register
 	template<bool aligned, class Expr>
 	__m128 getFloat(Expr expr, size_t i) {
 		return _mm_setr_ps(expr.get(i), expr.get(i + 1), expr.get(i + 2), expr.get(i + 3));
+	}
+
+	//---- Pre-declare (needs to be done first so the implementations can reference each other)
+	// ReadableReal
+	inline bool isAligned(expression::ReadableReal<float> expr, size_t);
+	template<bool aligned>
+	__m128 getFloat(expression::ReadableReal<float> expr, size_t i);
+	// Abs
+	template<class A>
+	bool isAligned(expression::Abs<A> expr, size_t i);
+	template<bool aligned, class A, class=ItemTypeF<A>>
+	__m128 getFloat(expression::Abs<A> expr, size_t i);
+
+	//---- Implementations
+	// ReadableReal
+	bool isAligned(expression::ReadableReal<float> expr, size_t i) {
+		return (size_t(expr.pointer + i)&15) == 0;
 	}
 	template<bool aligned>
 	__m128 getFloat(expression::ReadableReal<float> expr, size_t i) {
@@ -28,8 +47,13 @@ namespace sse2 {
 			return _mm_loadu_ps(expr.pointer + i);
 		}
 	}
-	template<bool aligned, class Expr>
-	ItemTypeF<Expr, __m128> getFloat(expression::Abs<Expr> expr, size_t i) {
+	// Abs
+	template<class A>
+	bool isAligned(expression::Abs<A> expr, size_t i) {
+		return isAligned(expr.a, i);
+	}
+	template<bool aligned, class A, class>
+	__m128 getFloat(expression::Abs<A> expr, size_t i) {
 		__m128 mask = _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)); // clears the sign bit
 		__m128 a = getFloat<aligned>(expr.a, i);
 		return _mm_and_ps(a, mask);
@@ -72,28 +96,11 @@ private:
 	template<class Expr>
 	void fillBasic(RealPointer<float> pointer, Expr expr, size_t size) {
 		// SSE2: width 4
-		// sizes 0-3 handled explicitly (too short to be SIMD)
-		switch(size) {
-			case 3: pointer[2] = expr.get(2);
-			case 2: pointer[1] = expr.get(1);
-			case 1: pointer[0] = expr.get(0);
-			case 0: return;
-			default: break;
-		}
 		size_t i = 0;
-		size_t alignmentResidual = (size_t(pointer)/4)&3;
-		switch(alignmentResidual) {
-			case 4:
-				pointer[0] = expr.get(0);
-				++i;
-			case 8:
-				pointer[i] = expr.get(i);
-				++i;
-			case 12:
-				pointer[i] = expr.get(i);
-				++i;
-			default:
-				break;
+		// scalar until the output is aligned
+		while (i < size && (size_t(pointer + i)&15)) {
+			pointer[i] = expr.get(i);
+			++i;
 		}
 		size_t simdEndI = i + (size - i)/4*4;
 		if (sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
