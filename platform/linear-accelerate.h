@@ -232,16 +232,14 @@ private:
 	template<class A>
 	ItemType<A, std::complex<float>> fillExpr(ComplexPointer<float> pointer, expression::Neg<A> expr, size_t size) {
 		auto floats = cached.floatScope();
-		auto a = dspSplit(floats.complex(expr.a, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvneg(&a, 2, &p, 2, size);
+		auto *a = (const float *)floats.complex(expr.a, size);
+		vDSP_vneg(a, 1, (float *)pointer, 1, size*2);
 	}
 	template<class A>
 	ItemType<A, std::complex<double>> fillExpr(ComplexPointer<double> pointer, expression::Neg<A> expr, size_t size) {
 		auto doubles = cached.doubleScope();
-		auto a = dspSplit(doubles.complex(expr.a, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvnegD(&a, 2, &p, 2, size);
+		auto *a = (const double *)doubles.complex(expr.a, size);
+		vDSP_vnegD(a, 1, (double *)pointer, 1, size*2);
 	}
 	template<class A>
 	ItemType<A, std::complex<float>> fillExpr(SplitPointer<float> pointer, expression::Neg<A> expr, size_t size) {
@@ -1699,18 +1697,16 @@ private:
 	template<class A, class B>
 	ItemTypeCF<NotConstant<A, A>, ItemTypeCF<B>> fillExpr(ComplexPointer<float> pointer, expression::Add<A, B> expr, size_t size) {
 		auto floats = cached.floatScope();
-		auto a = dspSplit(floats.complex(expr.a, size));
-		auto b = dspSplit(floats.complex(expr.b, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvadd(&a, 2, &b, 2, &p, 2, size);
+		auto *a = (const float *)floats.complex(expr.a, size);
+		auto *b = (const float *)floats.complex(expr.b, size);
+		vDSP_vadd(a, 1, b, 1, (float *)pointer, 1, size*2);
 	}
 	template<class A, class B>
 	ItemTypeCD<NotConstant<A, A>, ItemTypeCD<B>> fillExpr(ComplexPointer<double> pointer, expression::Add<A, B> expr, size_t size) {
 		auto doubles = cached.doubleScope();
-		auto a = dspSplit(doubles.complex(expr.a, size));
-		auto b = dspSplit(doubles.complex(expr.b, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvaddD(&a, 2, &b, 2, &p, 2, size);
+		auto *a = (const double *)doubles.complex(expr.a, size);
+		auto *b = (const double *)doubles.complex(expr.b, size);
+		vDSP_vaddD(a, 1, b, 1, (double *)pointer, 1, size*2);
 	}
 	template<class A, class B>
 	ItemTypeCF<NotConstant<A, A>, ItemTypeCF<B>> fillExpr(SplitPointer<float> pointer, expression::Add<A, B> expr, size_t size) {
@@ -1795,18 +1791,16 @@ private:
 	template<class A, class B>
 	ItemTypeCF<NotConstant<A, A>, ItemTypeCF<B>> fillExpr(ComplexPointer<float> pointer, expression::Sub<A, B> expr, size_t size) {
 		auto floats = cached.floatScope();
-		auto a = dspSplit(floats.complex(expr.a, size));
-		auto b = dspSplit(floats.complex(expr.b, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvsub(&a, 2, &b, 2, &p, 2, size);
+		auto *a = (const float *)floats.complex(expr.a, size);
+		auto *b = (const float *)floats.complex(expr.b, size);
+		vDSP_vsub(b, 1, a, 1, (float *)pointer, 1, size*2);
 	}
 	template<class A, class B>
 	ItemTypeCD<A, ItemTypeCD<B>> fillExpr(ComplexPointer<double> pointer, expression::Sub<A, B> expr, size_t size) {
 		auto doubles = cached.doubleScope();
-		auto a = dspSplit(doubles.complex(expr.a, size));
-		auto b = dspSplit(doubles.complex(expr.b, size));
-		auto p = dspSplit(pointer);
-		vDSP_zvsubD(&a, 2, &b, 2, &p, 2, size);
+		auto *a = (const double *)doubles.complex(expr.a, size);
+		auto *b = (const double *)doubles.complex(expr.b, size);
+		vDSP_vsubD(b, 1, a, 1, (double *)pointer, 1, size*2);
 	}
 	template<class A, class B>
 	ItemTypeCF<A, ItemTypeCF<B>> fillExpr(SplitPointer<float> pointer, expression::Sub<A, B> expr, size_t size) {
@@ -2165,8 +2159,8 @@ private:
 		std::complex<float> b = expr.b.value;
 		float br = b.real(), bi = b.imag();
 		if (bi == 0) {
-			vDSP_vsmul(a.realp, 2, &br, p.realp, 2, size);
-			vDSP_vsmul(a.imagp, 2, &br, p.imagp, 2, size);
+			// both parts scale the same way, so treat them as one real array
+			vDSP_vsmul(a.realp, 1, &br, p.realp, 1, size*2);
 		} else {
 			auto bSplit = dspSplit({&br, &bi});
 			vDSP_zvzsml(&a, 2, &bSplit, &p, 2, size);
@@ -2180,8 +2174,8 @@ private:
 		std::complex<float> b = expr.b.value;
 		float br = b.real(), bi = b.imag();
 		if (bi == 0) {
-			vDSP_vsdiv(a.realp, 2, &br, p.realp, 2, size);
-			vDSP_vsdiv(a.imagp, 2, &br, p.imagp, 2, size);
+			// both parts scale the same way, so treat them as one real array
+			vDSP_vsdiv(a.realp, 1, &br, p.realp, 1, size*2);
 		} else {
 			b = float(1)/b;
 			br = b.real();
@@ -2228,8 +2222,8 @@ private:
 		std::complex<double> b = expr.b.value;
 		double br = b.real(), bi = b.imag();
 		if (bi == 0) {
-			vDSP_vsmulD(a.realp, 2, &br, p.realp, 2, size);
-			vDSP_vsmulD(a.imagp, 2, &br, p.imagp, 2, size);
+			// both parts scale the same way, so treat them as one real array
+			vDSP_vsmulD(a.realp, 1, &br, p.realp, 1, size*2);
 		} else {
 			auto bSplit = dspSplit({&br, &bi});
 			vDSP_zvzsmlD(&a, 2, &bSplit, &p, 2, size);
@@ -2243,8 +2237,8 @@ private:
 		std::complex<double> b = expr.b.value;
 		double br = b.real(), bi = b.imag();
 		if (bi == 0) {
-			vDSP_vsdivD(a.realp, 2, &br, p.realp, 2, size);
-			vDSP_vsdivD(a.imagp, 2, &br, p.imagp, 2, size);
+			// both parts scale the same way, so treat them as one real array
+			vDSP_vsdivD(a.realp, 1, &br, p.realp, 1, size*2);
 		} else {
 			b = double(1)/b;
 			br = b.real();
