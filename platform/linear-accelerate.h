@@ -1198,6 +1198,22 @@ private:
 		auto *c = doubles.real(expr.b, size);
 		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
 	}
+	template<class A, class B, class C, class V>
+	void fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
+		auto floats = cached.floatScope();
+		auto *c = floats.real(expr.a, size);
+		auto *a = floats.real(expr.b.a, size);
+		float b = float(expr.b.b.value);
+		vDSP_vsma(a, 1, &b, c, 1, pointer, 1, size);
+	}
+	template<class A, class B, class C, class V>
+	void fillExpr(RealPointer<double> pointer, expression::Add<expression::Mul<A, B>, expression::Mul<C, expression::ConstantExpr<V>>> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		auto *c = doubles.real(expr.a, size);
+		auto *a = doubles.real(expr.b.a, size);
+		double b = double(expr.b.b.value);
+		vDSP_vsmaD(a, 1, &b, c, 1, pointer, 1, size);
+	}
 	template<class A, class V1, class C, class V2>
 	void fillExpr(RealPointer<float> pointer, expression::Add<expression::Mul<A, expression::ConstantExpr<V1>>, expression::Mul<C, expression::ConstantExpr<V2>>> expr, size_t size) {
 		auto floats = cached.floatScope();
