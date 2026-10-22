@@ -351,6 +351,16 @@ template<class A, class B, class C>
 const Expression<expression::Mul<expression::Add<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Add<B, C>> &bc) {
 	return {bc, a};
 }
+// A*(B - C) -> (B - C)*A
+template<class A, class B, class C>
+const Expression<expression::Mul<expression::Sub<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Sub<B, C>> &bc) {
+	return {bc, a};
+}
+// (A + B)*(C - D) stays as it is, since the sum is more likely to have a specialised function
+template<class A, class B, class C, class D>
+const Expression<expression::Mul<expression::Add<expression::Unwrap<A>, expression::Unwrap<B>>, expression::Sub<expression::Unwrap<C>, expression::Unwrap<D>>>> operator*(const Expression<expression::Add<A, B>> &ab, const Expression<expression::Sub<C, D>> &cd) {
+	return {ab, cd};
+}
 
 namespace expression {
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(Name, func) \
@@ -469,7 +479,31 @@ namespace expression {
 	SIGNALSMITH_AUDIO_LINEAR_FUNC2(Polar, std::polar)
 #undef SIGNALSMITH_AUDIO_LINEAR_FUNC2
 
+	// Constants go on the right for max/min (which are commutative)
+	template<class V, class B>
+	Max<Unwrap<B>, ConstantExpr<V>> makeMax(ConstantExpr<V> a, B b) {
+		return {b, a};
+	}
+	template<class V, class B>
+	Max<Unwrap<B>, ConstantExpr<V>> makeMax(Expression<ConstantExpr<V>> a, B b) {
+		return {b, a};
+	}
+	template<class V, class B>
+	Min<Unwrap<B>, ConstantExpr<V>> makeMin(ConstantExpr<V> a, B b) {
+		return {b, a};
+	}
+	template<class V, class B>
+	Min<Unwrap<B>, ConstantExpr<V>> makeMin(Expression<ConstantExpr<V>> a, B b) {
+		return {b, a};
+	}
+
 } // expression::
+
+// A*conj(B) -> conj(B)*A
+template<class A, class B>
+const Expression<expression::Mul<expression::Conj<expression::Unwrap<B>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Conj<B>> &b) {
+	return {b, a};
+}
 
 template<class BaseExpr>
 struct Expression : public BaseExpr {
