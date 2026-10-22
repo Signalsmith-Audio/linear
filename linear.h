@@ -356,11 +356,6 @@ template<class A, class B, class C>
 const Expression<expression::Mul<expression::Sub<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Sub<B, C>> &bc) {
 	return {bc, a};
 }
-// (A + B)*(C - D) stays as it is, since the sum is more likely to have a specialised function
-template<class A, class B, class C, class D>
-const Expression<expression::Mul<expression::Add<expression::Unwrap<A>, expression::Unwrap<B>>, expression::Sub<expression::Unwrap<C>, expression::Unwrap<D>>>> operator*(const Expression<expression::Add<A, B>> &ab, const Expression<expression::Sub<C, D>> &cd) {
-	return {ab, cd};
-}
 
 namespace expression {
 #define SIGNALSMITH_AUDIO_LINEAR_FUNC1(Name, func) \
