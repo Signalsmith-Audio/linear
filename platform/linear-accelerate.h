@@ -2458,6 +2458,42 @@ private:
 	}
 
 	//---- Compound complex expressions
+	template<class A, class V, class C>
+	ItemTypeCF<A, ItemTypeCF<C, NotConstant<C>>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::Mul<A, expression::ConstantExpr<V>>, C> expr, size_t size) {
+		auto floats = cached.floatScope();
+		std::complex<float> k = expr.a.b.value;
+		float kr = k.real();
+		if (k.imag() == 0) {
+			// both parts scale the same way, so treat them as one real array
+			auto *a = (const float *)floats.complex(expr.a.a, size);
+			auto *c = (const float *)floats.complex(expr.b, size);
+			vDSP_vsma(a, 1, &kr, c, 1, (float *)pointer, 1, size*2);
+		} else {
+			auto a = dspSplit(floats.complex(expr.a.a, size));
+			auto b = dspSplit(floats.complex(expr.a.b, size));
+			auto c = dspSplit(floats.complex(expr.b, size));
+			auto p = dspSplit(pointer);
+			vDSP_zvma(&a, 2, &b, 2, &c, 2, &p, 2, size);
+		}
+	}
+	template<class A, class V, class C>
+	ItemTypeCD<A, ItemTypeCD<C, NotConstant<C>>> fillExpr(ComplexPointer<double> pointer, expression::Add<expression::Mul<A, expression::ConstantExpr<V>>, C> expr, size_t size) {
+		auto doubles = cached.doubleScope();
+		std::complex<double> k = expr.a.b.value;
+		double kr = k.real();
+		if (k.imag() == 0) {
+			// both parts scale the same way, so treat them as one real array
+			auto *a = (const double *)doubles.complex(expr.a.a, size);
+			auto *c = (const double *)doubles.complex(expr.b, size);
+			vDSP_vsmaD(a, 1, &kr, c, 1, (double *)pointer, 1, size*2);
+		} else {
+			auto a = dspSplit(doubles.complex(expr.a.a, size));
+			auto b = dspSplit(doubles.complex(expr.a.b, size));
+			auto c = dspSplit(doubles.complex(expr.b, size));
+			auto p = dspSplit(pointer);
+			vDSP_zvmaD(&a, 2, &b, 2, &c, 2, &p, 2, size);
+		}
+	}
 	template<class A, class B, class C>
 	ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, NotConstant<C>>>> fillExpr(ComplexPointer<float> pointer, expression::Add<expression::Mul<A, B>, C> expr, size_t size) {
 		auto floats = cached.floatScope();
