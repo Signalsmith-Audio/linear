@@ -43,6 +43,13 @@ private:
 		fillBasic(pointer, expr, size);
 	}
 
+	template<class V, class Expr>
+	void fillBasic(RealPointer<V> pointer, Expr expr, size_t size) {
+		basicFillWarning<Expr>();
+		for (size_t i = 0; i < size; ++i) {
+			pointer[i] = expr.get(i);
+		}
+	}
 	template<class Expr>
 	void fillBasic(RealPointer<float> pointer, Expr expr, size_t size) {
 		// SSE2: width 4
@@ -101,13 +108,6 @@ private:
 	}
 	
 	template<class V, class Expr>
-	void fillBasic(RealPointer<V> pointer, Expr expr, size_t size) {
-		basicFillWarning<Expr>();
-		for (size_t i = 0; i < size; ++i) {
-			pointer[i] = expr.get(i);
-		}
-	}
-	template<class V, class Expr>
 	void fillBasic(ComplexPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
 		for (size_t i = 0; i < size; ++i) {
@@ -129,12 +129,12 @@ private:
 	void clear(V *v, size_t size) {
 		for (size_t i = 0; i < size; ++i) v[i] = 0;
 	}
-//	void clear(float *v, size_t size) {
-//		vDSP_vclr(v, 1, size);
-//	}
-//	void clear(double *v, size_t size) {
-//		vDSP_vclrD(v, 1, size);
-//	}
+	void clear(float *v, size_t size) {
+		std::memset(static_cast<void *>(v), 0, size*4);
+	}
+	void clear(double *v, size_t size) {
+		std::memset(static_cast<void *>(v), 0, size*8);
+	}
 	// Filling a split-complex vector with real values won't hit the specialisations below, so we handle it here
 	template<class Expr>
 	ItemTypeF<Expr> fillBasic(SplitPointer<float> pointer, Expr expr, size_t size) {
@@ -199,19 +199,6 @@ private:
 	void fillExpr(RealPointer<double> pointer, expression::Imag<WritableSplit<double>> expr, size_t size) {
 		std::memcpy(pointer, expr.a.pointer.imag, size*sizeof(double));
 	}
-	
-//	// Filling with a constant
-//	template<class V>
-//	void fillExpr(RealPointer<float> pointer, expression::ConstantExpr<V> expr, size_t size) {
-//		float v = expr.value;
-//		vDSP_vfill(&v, pointer, 1, size);
-//	}
-//	template<class A>
-//	ItemTypeF<A> fillExpr(RealPointer<float> pointer, expression::Abs<A> expr, size_t size) {
-//		auto floats = cached.floatScope();
-//		auto *a = floats.real(expr.a, size);
-//		vDSP_vabs(a, 1, pointer, 1, size);
-//	}
 };
 
 }}; // namespace
