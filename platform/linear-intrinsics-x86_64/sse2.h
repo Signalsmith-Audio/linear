@@ -6,6 +6,7 @@
 namespace signalsmith { namespace linear {
 
 namespace sse2 {
+
 	struct ComplexFloat {
 		__m128 real, imag;
 	};
@@ -13,6 +14,44 @@ namespace sse2 {
 		__m128d real, imag;
 	};
 
+#define SIGNALSMITH_MATHFUN_BITS 32
+#define SIGNALSMITH_MATHFUN_VF __m128
+#define SIGNALSMITH_MATHFUN_VF_0 _mm_setzero_ps()
+#define SIGNALSMITH_MATHFUN_VF_F(v) _mm_set1_ps(v)
+#define SIGNALSMITH_MATHFUN_VF_I(v) _mm_castsi128_ps(_mm_set1_epi32(v))
+#define SIGNALSMITH_MATHFUN_VF_AND(a, b) _mm_and_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_ANDNOT(a, b) _mm_andnot_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_OR(a, b) _mm_or_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_XOR(a, b) _mm_xor_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_ADD(a, b) _mm_add_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_SUB(a, b) _mm_sub_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_MUL(a, b) _mm_mul_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_DIV(a, b) _mm_div_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_MAX(a, b) _mm_max_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_MIN(a, b) _mm_min_ps(a, b)
+#define SIGNALSMITH_MATHFUN_VF_RSHIFT_K(a, bits) _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(a), bits))
+#define SIGNALSMITH_MATHFUN_VF_ITOF(a) _mm_cvtepi32_ps(_mm_castps_si128(a))
+#include "../mathfun.h"
+
+#define SIGNALSMITH_MATHFUN_BITS 64
+#define SIGNALSMITH_MATHFUN_VF __m128d
+#define SIGNALSMITH_MATHFUN_VF_0 _mm_setzero_pd()
+#define SIGNALSMITH_MATHFUN_VF_F(v) _mm_set1_pd(v)
+#define SIGNALSMITH_MATHFUN_VF_I(v) _mm_castsi128_pd(_mm_set1_epi64x(v))
+#define SIGNALSMITH_MATHFUN_VF_AND(a, b) _mm_and_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_ANDNOT(a, b) _mm_andnot_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_OR(a, b) _mm_or_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_XOR(a, b) _mm_xor_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_ADD(a, b) _mm_add_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_SUB(a, b) _mm_sub_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_MUL(a, b) _mm_mul_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_DIV(a, b) _mm_div_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_MAX(a, b) _mm_max_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_MIN(a, b) _mm_min_pd(a, b)
+#define SIGNALSMITH_MATHFUN_VF_RSHIFT_K(a, b) _mm_castsi128_pd(_mm_srli_epi64(_mm_castpd_si128(a), b))
+#include "../mathfun.h"
+
+//#ifndef DEV_NO_FALLBACK
 	// Fallback
 	template<class Expr>
 	bool isAligned(Expr, size_t) {
@@ -26,6 +65,7 @@ namespace sse2 {
 	__m128d getDouble(Expr expr, size_t i) {
 		return _mm_setr_pd(expr.get(i), expr.get(i + 1));
 	}
+//#endif
 
 	// ReadableReal
 	template<class V>
@@ -75,8 +115,8 @@ namespace sse2 {
 	SIGNALSMITH_EXPR_UNARY(Norm)
 	SIGNALSMITH_EXPR_UNARY(Neg)
 	SIGNALSMITH_EXPR_UNARY(Sqrt)
+	SIGNALSMITH_EXPR_UNARY(Log)
 #undef SIGNALSMITH_EXPR_UNARY
-
 #define SIGNALSMITH_EXPR_BINARY(Name) \
 	template<class A, class B> \
 	bool isAligned(expression::Name<A, B> expr, size_t i); \
@@ -94,20 +134,9 @@ namespace sse2 {
 	SIGNALSMITH_EXPR_BINARY(Copysign)
 #undef SIGNALSMITH_EXPR_BINARY
 
-	// Define `isAligned` since they're always predictable
-#define SIGNALSMITH_EXPR_UNARY(Name) \
-	template<class A> \
-	bool isAligned(expression::Abs<A> expr, size_t i) { \
-		return isAligned(expr.a, i); \
-	}
-	SIGNALSMITH_EXPR_UNARY(Abs)
-	SIGNALSMITH_EXPR_UNARY(Norm)
-	SIGNALSMITH_EXPR_UNARY(Neg)
-	SIGNALSMITH_EXPR_UNARY(Sqrt)
-#undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name) \
 	template<class A, class B> \
-	bool isAligned(expression::Add<A, B> expr, size_t i) { \
+	bool isAligned(expression::Name<A, B> expr, size_t i) { \
 		return isAligned(expr.a, i) && isAligned(expr.b, i); \
 	}
 	SIGNALSMITH_EXPR_BINARY(Add)
@@ -120,52 +149,26 @@ namespace sse2 {
 	SIGNALSMITH_EXPR_BINARY(Copysign)
 #undef SIGNALSMITH_EXPR_BINARY
 
-	// Abs
-	template<bool aligned, class A, class>
-	__m128 getFloat(expression::Abs<A> expr, size_t i) {
-		__m128 mask = _mm_castsi128_ps(_mm_set1_epi32(0x7FFFFFFF)); // clears the sign bit
-		__m128 a = getFloat<aligned>(expr.a, i);
-		return _mm_and_ps(a, mask);
-	}
-	template<bool aligned, class A, class>
-	__m128d getDouble(expression::Abs<A> expr, size_t i) {
-		__m128d mask = _mm_castsi128_pd(_mm_set1_epi64x(0x7FFFFFFFFFFFFFFFLL)); // clears the sign bit
-		__m128d a = getDouble<aligned>(expr.a, i);
-		return _mm_and_pd(a, mask);
-	}
-	// Norm (real only, complex values fall back)
-	template<bool aligned, class A, class>
-	__m128 getFloat(expression::Norm<A> expr, size_t i) {
-		__m128 a = getFloat<aligned>(expr.a, i);
-		return _mm_mul_ps(a, a);
-	}
-	template<bool aligned, class A, class>
-	__m128d getDouble(expression::Norm<A> expr, size_t i) {
-		__m128d a = getDouble<aligned>(expr.a, i);
-		return _mm_mul_pd(a, a);
-	}
-	// Neg
-	template<bool aligned, class A>
-	__m128 getFloat(expression::Neg<A> expr, size_t i) {
-		__m128 signBit = _mm_set1_ps(-0.0f);
-		return _mm_xor_ps(getFloat<aligned>(expr.a, i), signBit);
-	}
-	template<bool aligned, class A>
-	__m128d getDouble(expression::Neg<A> expr, size_t i) {
-		__m128d signBit = _mm_set1_pd(-0.0);
-		return _mm_xor_pd(getDouble<aligned>(expr.a, i), signBit);
-	}
-	// Sqrt
-	template<bool aligned, class A>
-	__m128 getFloat(expression::Sqrt<A> expr, size_t i) {
-		return _mm_sqrt_ps(getFloat<aligned>(expr.a, i));
-	}
-	template<bool aligned, class A>
-	__m128d getDouble(expression::Sqrt<A> expr, size_t i) {
-		return _mm_sqrt_pd(getDouble<aligned>(expr.a, i));
-	}
-
 	// Expressions which map neatly to a single intrinsic
+#define SIGNALSMITH_EXPR_UNARY(Name, mmFloat, mmDouble) \
+	template<class A> \
+	bool isAligned(expression::Name<A> expr, size_t i) { \
+		return isAligned(expr.a, i); \
+	} \
+	template<bool aligned, class A, class> \
+	__m128 getFloat(expression::Name<A> expr, size_t i) { \
+		return mmFloat(getFloat<aligned>(expr.a, i)); \
+	} \
+	template<bool aligned, class A, class B> \
+	__m128d getDouble(expression::Name<A> expr, size_t i) { \
+		return mmDouble(getDouble<aligned>(expr.a, i)); \
+	}
+	SIGNALSMITH_EXPR_UNARY(Norm, mathfun_pow2f, mathfun_pow2d)
+	SIGNALSMITH_EXPR_UNARY(Abs, mathfun_absf, mathfun_absd)
+	SIGNALSMITH_EXPR_UNARY(Neg, mathfun_negf, mathfun_negd)
+	SIGNALSMITH_EXPR_UNARY(Sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
+	SIGNALSMITH_EXPR_UNARY(Log, mathfun_logf, mathfun_logd)
+#undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
 	template<bool aligned, class A, class B> \
 	__m128 getFloat(expression::Name<A, B> expr, size_t i) { \
@@ -181,32 +184,9 @@ namespace sse2 {
 	SIGNALSMITH_EXPR_BINARY(Div, _mm_div_ps, _mm_div_pd)
 	SIGNALSMITH_EXPR_BINARY(Max, _mm_max_ps, _mm_max_pd)
 	SIGNALSMITH_EXPR_BINARY(Min, _mm_min_ps, _mm_min_pd)
+	SIGNALSMITH_EXPR_BINARY(Dim, mathfun_dimf, mathfun_dimd)
+	SIGNALSMITH_EXPR_BINARY(Copysign, mathfun_copysignf, mathfun_copysignd)
 #undef SIGNALSMITH_EXPR_BINARY
-	
-	// Dim - implemented as max(0, a - b)
-	template<bool aligned, class A, class B>
-	__m128 getFloat(expression::Dim<A, B> expr, size_t i) {
-		__m128 diff = _mm_sub_ps(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i));
-		return _mm_max_ps(_mm_setzero_ps(), diff);
-	}
-	template<bool aligned, class A, class B>
-	__m128d getDouble(expression::Dim<A, B> expr, size_t i) {
-		__m128d diff = _mm_sub_pd(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i));
-		return _mm_max_pd(_mm_setzero_pd(), diff);
-	}
-	// Copysign
-	template<bool aligned, class A, class B>
-	__m128 getFloat(expression::Copysign<A, B> expr, size_t i) {
-		__m128 signBit = _mm_set1_ps(-0.0f);
-		__m128 a = getFloat<aligned>(expr.a, i), b = getFloat<aligned>(expr.b, i);
-		return _mm_or_ps(_mm_andnot_ps(signBit, a), _mm_and_ps(signBit, b));
-	}
-	template<bool aligned, class A, class B>
-	__m128d getDouble(expression::Copysign<A, B> expr, size_t i) {
-		__m128d signBit = _mm_set1_pd(-0.0);
-		__m128d a = getDouble<aligned>(expr.a, i), b = getDouble<aligned>(expr.b, i);
-		return _mm_or_pd(_mm_andnot_pd(signBit, a), _mm_and_pd(signBit, b));
-	}
 }
 
 }}; // namespace

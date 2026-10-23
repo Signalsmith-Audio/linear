@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 project(linear-tests VERSION 1.0.0)
 set(CMAKE_CXX_STANDARD 11)
-add_compile_definitions(SIGNALSMITH_LOG_WARNINGS)
+add_compile_definitions(SIGNALSMITH_LOG_WARNINGS DEV_NO_FALLBACK)
 
 # MSVC needs an extra flag to handle this many templates
 if (MSVC)
