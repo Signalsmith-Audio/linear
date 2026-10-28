@@ -7,6 +7,16 @@ It's a "function header" - explicitly designed to be included multiple times if 
 Some of these fundamental operations are required (and they'll error), but others are optional and the implementation will work around that.
 */
 
+#ifndef SIGNALSMITH_MATHFUN_ACCURACY
+#	if SIGNALSMITH_MATHFUN_BITS == 32
+#		define SIGNALSMITH_MATHFUN_ACCURACY 22
+#	elif SIGNALSMITH_MATHFUN_BITS == 64
+#		define SIGNALSMITH_MATHFUN_ACCURACY 48
+#	else
+#		error "need SIGNALSMITH_MATHFUN_ACCURACY"
+#	endif
+#endif
+
 // make constants from scalar literals
 #ifndef SIGNALSMITH_MATHFUN_F
 #if SIGNALSMITH_MATHFUN_BITS == 32
