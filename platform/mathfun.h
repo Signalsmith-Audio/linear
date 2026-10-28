@@ -7,12 +7,14 @@ It's a "function header" - explicitly designed to be included multiple times if 
 Some of these fundamental operations are required (and they'll error), but others are optional and the implementation will work around that.
 */
 
+// make constants from scalar literals
+#ifndef SIGNALSMITH_MATHFUN_F
 #if SIGNALSMITH_MATHFUN_BITS == 32
-#	define SIGNALSMITH_MATHFUN_F float
+#	define SIGNALSMITH_MATHFUN_F(v) float(v)
 #elif SIGNALSMITH_MATHFUN_BITS == 64
-#	define SIGNALSMITH_MATHFUN_F double
+#	define SIGNALSMITH_MATHFUN_F(v) double(v)
 #else
-#	error "SIGNALSMITH_MATHFUN_BITS must be defined as 32 (float) or 64 (double)"
+#	error "if SIGNALSMITH_MATHFUN_F() isn't defined, SIGNALSMITH_MATHFUN_BITS must be 32 (float) or 64 (double)"
 #endif
 // types for the SIMD vector
 #ifndef SIGNALSMITH_MATHFUN_VF
@@ -79,9 +81,11 @@ Some of these fundamental operations are required (and they'll error), but other
 #ifndef SIGNALSMITH_MATHFUN_VF_ITOF
 #	if SIGNALSMITH_MATHFUN_BITS == 32
 #		define SIGNALSMITH_MATHFUN_VF_ITOF_MAGIC 16777216.0f
-#	else
+#elif SIGNALSMITH_MATHFUN_BITS == 64
 #		define SIGNALSMITH_MATHFUN_VF_ITOF_MAGIC 4503599627370496.0
-#	endif
+#else
+#		error "SIGNALSMITH_MATHFUN_VF_ITOF is required unless it's 32/64-bit IEEE float"
+#endif
 // The "magic number" is a float such that the mantissa ends up incrementing by integers
 #	define SIGNALSMITH_MATHFUN_VF_ITOF(v) SIGNALSMITH_MATHFUN_VF_SUB( \
 		SIGNALSMITH_MATHFUN_VF_OR(SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_VF_ITOF_MAGIC), v), \
@@ -93,27 +97,37 @@ Some of these fundamental operations are required (and they'll error), but other
 #ifndef SIGNALSMITH_MATHFUN_NAME
 #	if SIGNALSMITH_MATHFUN_BITS == 32
 #		define SIGNALSMITH_MATHFUN_NAME(name) mathfun_##name##f
-#	else
+#elif SIGNALSMITH_MATHFUN_BITS == 64
 #		define SIGNALSMITH_MATHFUN_NAME(name) mathfun_##name##d
+#	else
+#		define SIGNALSMITH_MATHFUN_NAME(name) mathfun_##name##
 #	endif
 #endif
 
 // abs(): bitwise AND to clear the sign bit
 inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(abs)(SIGNALSMITH_MATHFUN_VF v) {
-#if SIGNALSMITH_MATHFUN_BITS == 32
+#ifdef SIGNALSMITH_MATHFUN_VF_ABS
+	return SIGNALSMITH_MATHFUN_VF_ABS(v);
+#elif SIGNALSMITH_MATHFUN_BITS == 32
 	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_I(0x7FFFFFFF);
-#else
+#elif SIGNALSMITH_MATHFUN_BITS == 64
 	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_I(0x7FFFFFFFFFFFFFFFLL);
+#else
+#	error "need SIGNALSMITH_MATHFUN_VF_ABS() unless it's 32/64-bit IEEE floats"
 #endif
 	return SIGNALSMITH_MATHFUN_VF_AND(v, mask);
 }
 
 // neg(): bitwise XOR to flip the sign bit
 inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(neg)(SIGNALSMITH_MATHFUN_VF v) {
-#if SIGNALSMITH_MATHFUN_BITS == 32
+#ifdef SIGNALSMITH_MATHFUN_VF_NEG
+	return SIGNALSMITH_MATHFUN_VF_NEG(v);
+#elif SIGNALSMITH_MATHFUN_BITS == 32
 	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0f);
-#else
+#elif SIGNALSMITH_MATHFUN_BITS == 64
 	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0);
+#else
+#	error "need SIGNALSMITH_MATHFUN_VF_NEG() unless it's 32/64-bit IEEE floats"
 #endif
 	return SIGNALSMITH_MATHFUN_VF_XOR(v, mask);
 }
@@ -131,40 +145,50 @@ inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(dim)(SIGNALSMITH_MATHFUN_
 
 // copysign()
 inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(copysign)(SIGNALSMITH_MATHFUN_VF a, SIGNALSMITH_MATHFUN_VF b) {
-#if SIGNALSMITH_MATHFUN_BITS == 32
+#ifdef SIGNALSMITH_MATHFUN_VF_COPYSIGN
+	return SIGNALSMITH_MATHFUN_VF_COPYSIGN(a, b);
+#elif SIGNALSMITH_MATHFUN_BITS == 32
 	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0f);
-#else
+#elif SIGNALSMITH_MATHFUN_BITS == 64
 	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0);
+#else
+#	error "need SIGNALSMITH_MATHFUN_VF_COPYSIGN() unless it's 32/64-bit IEEE floats"
 #endif
 	return SIGNALSMITH_MATHFUN_VF_OR(SIGNALSMITH_MATHFUN_VF_ANDNOT(mask, a), SIGNALSMITH_MATHFUN_VF_AND(mask, b));
 }
 
 // log(): Pulls out exponent and mantissa, converting both to float
 inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(log2)(SIGNALSMITH_MATHFUN_VF v) {
-#if SIGNALSMITH_MATHFUN_BITS == 32
+#ifdef SIGNALSMITH_MATHFUN_VF_GET_EM
+SIGNALSMITH_MATHFUN_VF exponent, mantissa;
+SIGNALSMITH_MATHFUN_VF_GET_EM(v, exponent, mantissa);
+#else
+#	if SIGNALSMITH_MATHFUN_BITS == 32
 	static constexpr int mantissaMaskInt = 0x007FFFFF, mantissaBits = 23;
 	static constexpr float mantissaScale = 1.1920928955078125e-7f; // 2^-23
 	static constexpr float exponentBase = 127;
-#else
+#	elif SIGNALSMITH_MATHFUN_BITS == 64
 	static constexpr long long mantissaMaskInt = 0x000FFFFFFFFFFFFFLL;
 	static constexpr int mantissaBits = 52;
 	static constexpr double mantissaScale = 2.220446049250313e-16; // 2^-52
 	static constexpr double exponentBase = 1023;
-#endif
+#	else
+#		error "SIGNALSMITH_MATHFUN_VF_GET_EM(v, e, m) required unless it's 32/64-bit IEEE"
+#	endif
 	// Get the mantissa by masking, converting to float, and scaling
 	SIGNALSMITH_MATHFUN_VF mantissaMask = SIGNALSMITH_MATHFUN_VF_I(mantissaMaskInt);
 	SIGNALSMITH_MATHFUN_VF mantissaInt = SIGNALSMITH_MATHFUN_VF_ITOF(SIGNALSMITH_MATHFUN_VF_AND(mantissaMask, v));
 	SIGNALSMITH_MATHFUN_VF mantissa = SIGNALSMITH_MATHFUN_VF_MUL(mantissaInt, SIGNALSMITH_MATHFUN_VF_F(mantissaScale));
+	
+	SIGNALSMITH_MATHFUN_VF exponentOffset = SIGNALSMITH_MATHFUN_VF_ITOF(SIGNALSMITH_MATHFUN_VF_RSHIFT_K(v, mantissaBits));
+	SIGNALSMITH_MATHFUN_VF exponent = SIGNALSMITH_MATHFUN_VF_SUB(exponentOffset, SIGNALSMITH_MATHFUN_VF_F(exponentBase));
+#endif
 
 	// Cubic which matches value/gradient of log2(1 + x) at 0 and 1
 	SIGNALSMITH_MATHFUN_VF c1 = SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_F(1.4426950408889634));
 	SIGNALSMITH_MATHFUN_VF c2 = SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_F(-0.6067376022224086));
 	SIGNALSMITH_MATHFUN_VF c3 = SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_F(0.16404256133344516));
-	SIGNALSMITH_MATHFUN_VF curve = SIGNALSMITH_MATHFUN_VF_MUL(mantissa, SIGNALSMITH_MATHFUN_VF_ADD(c1, SIGNALSMITH_MATHFUN_VF_MUL(mantissa, SIGNALSMITH_MATHFUN_VF_ADD(c2, SIGNALSMITH_MATHFUN_VF_MUL(mantissa, c3)))));
-	
-	SIGNALSMITH_MATHFUN_VF exponentOffset = SIGNALSMITH_MATHFUN_VF_ITOF(SIGNALSMITH_MATHFUN_VF_RSHIFT_K(v, mantissaBits));
-	SIGNALSMITH_MATHFUN_VF exponent = SIGNALSMITH_MATHFUN_VF_SUB(exponentOffset, SIGNALSMITH_MATHFUN_VF_F(exponentBase));
-	
+	SIGNALSMITH_MATHFUN_VF curve = SIGNALSMITH_MATHFUN_VF_MUL(mantissa, SIGNALSMITH_MATHFUN_VF_ADD(c1, SIGNALSMITH_MATHFUN_VF_MUL(mantissa, SIGNALSMITH_MATHFUN_VF_ADD(c2, SIGNALSMITH_MATHFUN_VF_MUL(mantissa, c3)))));	
 	return SIGNALSMITH_MATHFUN_VF_ADD(curve, exponent);
 }
 
