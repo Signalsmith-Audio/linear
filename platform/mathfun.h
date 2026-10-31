@@ -2,237 +2,238 @@
 
 This header defines floating-point functions, given #defines for the basic operations (constants, arithmetic, bitwise).
 
-It's a "function header" - explicitly designed to be included multiple times if needed.  You define various `SIGNALSMITH_MATHFUN_...` macros, and these are un-defined by this header.  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SIGNALSMITH_MATHFUN_NAME(abs)` -> `prefix_abs_suffix`.
+It's a "function header" - explicitly designed to be included multiple times if needed.  You define various `SSMF_...` macros, and these are un-defined by this header.  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
 
 Some of these fundamental operations are required (and they'll error), but others are optional and the implementation will work around that.
 */
 
-#ifndef SIGNALSMITH_MATHFUN_ACCURACY
-#	if SIGNALSMITH_MATHFUN_BITS == 32
-#		define SIGNALSMITH_MATHFUN_ACCURACY 22
-#	elif SIGNALSMITH_MATHFUN_BITS == 64
-#		define SIGNALSMITH_MATHFUN_ACCURACY 48
+#ifndef SSMF_ACCURACY
+#	if SSMF_BITS == 32
+#		define SSMF_ACCURACY 22
+#	elif SSMF_BITS == 64
+#		define SSMF_ACCURACY 48
 #	else
-#		error "need SIGNALSMITH_MATHFUN_ACCURACY"
+#		error "need SSMF_ACCURACY"
 #	endif
 #endif
 
 // make constants from scalar literals
-#ifndef SIGNALSMITH_MATHFUN_F
-#if SIGNALSMITH_MATHFUN_BITS == 32
-#	define SIGNALSMITH_MATHFUN_F(v) float(v)
-#elif SIGNALSMITH_MATHFUN_BITS == 64
-#	define SIGNALSMITH_MATHFUN_F(v) double(v)
+#ifndef SSMF_F
+#if SSMF_BITS == 32
+#	define SSMF_F(v) float(v)
+#elif SSMF_BITS == 64
+#	define SSMF_F(v) double(v)
 #else
-#	error "if SIGNALSMITH_MATHFUN_F() isn't defined, SIGNALSMITH_MATHFUN_BITS must be 32 (float) or 64 (double)"
+#	error "if SSMF_F() isn't defined, SSMF_BITS must be 32 (float) or 64 (double)"
+#endif
 #endif
 // types for the SIMD vector
-#ifndef SIGNALSMITH_MATHFUN_VF
-#	error "SIGNALSMITH_MATHFUN_VF not defined"
+#ifndef SSMF_VF
+#	error "SSMF_VF not defined"
 #endif
 // evaluates to a vector full of 0s
-#ifndef SIGNALSMITH_MATHFUN_VF_0
-#	error "SIGNALSMITH_MATHFUN_VF_0 not defined"
+#ifndef SSMF_VF_0
+#	error "SSMF_VF_0 not defined"
 #endif
 // create a vector from a (float) scalar
-#ifndef SIGNALSMITH_MATHFUN_VF_F
-#	error "SIGNALSMITH_MATHFUN_VF_F() not defined"
+#ifndef SSMF_VF_F
+#	error "SSMF_VF_F() not defined"
 #endif
 // create a vector from an (int) scalar
-#ifndef SIGNALSMITH_MATHFUN_VF_I
-#	error "SIGNALSMITH_MATHFUN_VF_I() not defined"
+#ifndef SSMF_VF_I
+#	error "SSMF_VF_I() not defined"
 #endif
 // a & b
-#ifndef SIGNALSMITH_MATHFUN_VF_AND
-#	error "SIGNALSMITH_MATHFUN_VF_AND() not defined"
+#ifndef SSMF_VF_AND
+#	error "SSMF_VF_AND() not defined"
 #endif
 // ~a & b
-#ifndef SIGNALSMITH_MATHFUN_VF_ANDNOT
-#	error "SIGNALSMITH_MATHFUN_VF_ANDNOT() not defined"
+#ifndef SSMF_VF_ANDNOT
+#	error "SSMF_VF_ANDNOT() not defined"
 #endif
 // a | b
-#ifndef SIGNALSMITH_MATHFUN_VF_OR
-#	error "SIGNALSMITH_MATHFUN_VF_OR() not defined"
+#ifndef SSMF_VF_OR
+#	error "SSMF_VF_OR() not defined"
 #endif
 // a ^ b
-#ifndef SIGNALSMITH_MATHFUN_VF_XOR
-#	error "SIGNALSMITH_MATHFUN_VF_XOR() not defined"
+#ifndef SSMF_VF_XOR
+#	error "SSMF_VF_XOR() not defined"
 #endif
 // a + b
-#ifndef SIGNALSMITH_MATHFUN_VF_ADD
-#	error "SIGNALSMITH_MATHFUN_VF_ADD() not defined"
+#ifndef SSMF_VF_ADD
+#	error "SSMF_VF_ADD() not defined"
 #endif
 // a - b
-#ifndef SIGNALSMITH_MATHFUN_VF_SUB
-#	error "SIGNALSMITH_MATHFUN_VF_SUB() not defined"
+#ifndef SSMF_VF_SUB
+#	error "SSMF_VF_SUB() not defined"
 #endif
 // a * b
-#ifndef SIGNALSMITH_MATHFUN_VF_MUL
-#	error "SIGNALSMITH_MATHFUN_VF_MUL() not defined"
+#ifndef SSMF_VF_MUL
+#	error "SSMF_VF_MUL() not defined"
 #endif
 // a / b
-#ifndef SIGNALSMITH_MATHFUN_VF_DIV
-#	error "SIGNALSMITH_MATHFUN_VF_DIV() not defined"
+#ifndef SSMF_VF_DIV
+#	error "SSMF_VF_DIV() not defined"
 #endif
 // max(a, b)
-#ifndef SIGNALSMITH_MATHFUN_VF_MAX
-#	error "SIGNALSMITH_MATHFUN_VF_MAX() not defined"
+#ifndef SSMF_VF_MAX
+#	error "SSMF_VF_MAX() not defined"
 #endif
 // min(a, b)
-#ifndef SIGNALSMITH_MATHFUN_VF_MIN
-#	error "SIGNALSMITH_MATHFUN_VF_MIN() not defined"
+#ifndef SSMF_VF_MIN
+#	error "SSMF_VF_MIN() not defined"
 #endif
 // a >> bits
-#ifndef SIGNALSMITH_MATHFUN_VF_RSHIFT_K
-#	error "SIGNALSMITH_MATHFUN_VF_RSHIFT_K() not defined"
+#ifndef SSMF_VF_RSHIFT_K
+#	error "SSMF_VF_RSHIFT_K() not defined"
 #endif
 
 // If we don't have "interpret this as integers, and then convert to float", we can implement it
-#ifndef SIGNALSMITH_MATHFUN_VF_ITOF
-#	if SIGNALSMITH_MATHFUN_BITS == 32
-#		define SIGNALSMITH_MATHFUN_VF_ITOF_MAGIC 16777216.0f
-#elif SIGNALSMITH_MATHFUN_BITS == 64
-#		define SIGNALSMITH_MATHFUN_VF_ITOF_MAGIC 4503599627370496.0
+#ifndef SSMF_VF_ITOF
+#	if SSMF_BITS == 32
+#		define SSMF_VF_ITOF_MAGIC 16777216.0f
+#elif SSMF_BITS == 64
+#		define SSMF_VF_ITOF_MAGIC 4503599627370496.0
 #else
-#		error "SIGNALSMITH_MATHFUN_VF_ITOF is required unless it's 32/64-bit IEEE float"
+#		error "SSMF_VF_ITOF is required unless it's 32/64-bit IEEE float"
 #endif
 // The "magic number" is a float such that the mantissa ends up incrementing by integers
-#	define SIGNALSMITH_MATHFUN_VF_ITOF(v) SIGNALSMITH_MATHFUN_VF_SUB( \
-		SIGNALSMITH_MATHFUN_VF_OR(SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_VF_ITOF_MAGIC), v), \
-		SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_VF_ITOF_MAGIC) \
+#	define SSMF_VF_ITOF(v) SSMF_VF_SUB( \
+		SSMF_VF_OR(SSMF_VF_F(SSMF_VF_ITOF_MAGIC), v), \
+		SSMF_VF_F(SSMF_VF_ITOF_MAGIC) \
 	)
 #endif
 
 // Optional
-#ifndef SIGNALSMITH_MATHFUN_NAME
-#	if SIGNALSMITH_MATHFUN_BITS == 32
-#		define SIGNALSMITH_MATHFUN_NAME(name) mathfun_##name##f
-#elif SIGNALSMITH_MATHFUN_BITS == 64
-#		define SIGNALSMITH_MATHFUN_NAME(name) mathfun_##name##d
+#ifndef SSMF_NAME
+#	if SSMF_BITS == 32
+#		define SSMF_NAME(name) mathfun_##name##f
+#elif SSMF_BITS == 64
+#		define SSMF_NAME(name) mathfun_##name##d
 #	else
-#		define SIGNALSMITH_MATHFUN_NAME(name) mathfun_##name##
+#		define SSMF_NAME(name) mathfun_##name##
 #	endif
 #endif
 
 // abs(): bitwise AND to clear the sign bit
-inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(abs)(SIGNALSMITH_MATHFUN_VF v) {
-#ifdef SIGNALSMITH_MATHFUN_VF_ABS
-	return SIGNALSMITH_MATHFUN_VF_ABS(v);
-#elif SIGNALSMITH_MATHFUN_BITS == 32
-	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_I(0x7FFFFFFF);
-#elif SIGNALSMITH_MATHFUN_BITS == 64
-	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_I(0x7FFFFFFFFFFFFFFFLL);
+inline SSMF_VF SSMF_NAME(abs)(SSMF_VF v) {
+#ifdef SSMF_VF_ABS
+	return SSMF_VF_ABS(v);
+#elif SSMF_BITS == 32
+	SSMF_VF mask = SSMF_VF_I(0x7FFFFFFF);
+#elif SSMF_BITS == 64
+	SSMF_VF mask = SSMF_VF_I(0x7FFFFFFFFFFFFFFFLL);
 #else
-#	error "need SIGNALSMITH_MATHFUN_VF_ABS() unless it's 32/64-bit IEEE floats"
+#	error "need SSMF_VF_ABS() unless it's 32/64-bit IEEE floats"
 #endif
-	return SIGNALSMITH_MATHFUN_VF_AND(v, mask);
+	return SSMF_VF_AND(v, mask);
 }
 
 // neg(): bitwise XOR to flip the sign bit
-inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(neg)(SIGNALSMITH_MATHFUN_VF v) {
-#ifdef SIGNALSMITH_MATHFUN_VF_NEG
-	return SIGNALSMITH_MATHFUN_VF_NEG(v);
-#elif SIGNALSMITH_MATHFUN_BITS == 32
-	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0f);
-#elif SIGNALSMITH_MATHFUN_BITS == 64
-	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0);
+inline SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
+#ifdef SSMF_VF_NEG
+	return SSMF_VF_NEG(v);
+#elif SSMF_BITS == 32
+	SSMF_VF mask = SSMF_VF_F(-0.0f);
+#elif SSMF_BITS == 64
+	SSMF_VF mask = SSMF_VF_F(-0.0);
 #else
-#	error "need SIGNALSMITH_MATHFUN_VF_NEG() unless it's 32/64-bit IEEE floats"
+#	error "need SSMF_VF_NEG() unless it's 32/64-bit IEEE floats"
 #endif
-	return SIGNALSMITH_MATHFUN_VF_XOR(v, mask);
+	return SSMF_VF_XOR(v, mask);
 }
 
 // pow2(): multiply with itself
-inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(pow2)(SIGNALSMITH_MATHFUN_VF v) {
-	return SIGNALSMITH_MATHFUN_VF_MUL(v, v);
+inline SSMF_VF SSMF_NAME(pow2)(SSMF_VF v) {
+	return SSMF_VF_MUL(v, v);
 }
 
 // dim()
-inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(dim)(SIGNALSMITH_MATHFUN_VF a, SIGNALSMITH_MATHFUN_VF b) {
-	SIGNALSMITH_MATHFUN_VF diff = SIGNALSMITH_MATHFUN_VF_SUB(a, b);
-	return SIGNALSMITH_MATHFUN_VF_MAX(SIGNALSMITH_MATHFUN_VF_0, diff);
+inline SSMF_VF SSMF_NAME(dim)(SSMF_VF a, SSMF_VF b) {
+	SSMF_VF diff = SSMF_VF_SUB(a, b);
+	return SSMF_VF_MAX(SSMF_VF_0, diff);
 }
 
 // copysign()
-inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(copysign)(SIGNALSMITH_MATHFUN_VF a, SIGNALSMITH_MATHFUN_VF b) {
-#ifdef SIGNALSMITH_MATHFUN_VF_COPYSIGN
-	return SIGNALSMITH_MATHFUN_VF_COPYSIGN(a, b);
-#elif SIGNALSMITH_MATHFUN_BITS == 32
-	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0f);
-#elif SIGNALSMITH_MATHFUN_BITS == 64
-	SIGNALSMITH_MATHFUN_VF mask = SIGNALSMITH_MATHFUN_VF_F(-0.0);
+inline SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
+#ifdef SSMF_VF_COPYSIGN
+	return SSMF_VF_COPYSIGN(a, b);
+#elif SSMF_BITS == 32
+	SSMF_VF mask = SSMF_VF_F(-0.0f);
+#elif SSMF_BITS == 64
+	SSMF_VF mask = SSMF_VF_F(-0.0);
 #else
-#	error "need SIGNALSMITH_MATHFUN_VF_COPYSIGN() unless it's 32/64-bit IEEE floats"
+#	error "need SSMF_VF_COPYSIGN() unless it's 32/64-bit IEEE floats"
 #endif
-	return SIGNALSMITH_MATHFUN_VF_OR(SIGNALSMITH_MATHFUN_VF_ANDNOT(mask, a), SIGNALSMITH_MATHFUN_VF_AND(mask, b));
+	return SSMF_VF_OR(SSMF_VF_ANDNOT(mask, a), SSMF_VF_AND(mask, b));
 }
 
 // log(): Pulls out exponent and mantissa, converting both to float
-inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(log2)(SIGNALSMITH_MATHFUN_VF v) {
-#ifdef SIGNALSMITH_MATHFUN_VF_GET_EM
-SIGNALSMITH_MATHFUN_VF exponent, mantissa;
-SIGNALSMITH_MATHFUN_VF_GET_EM(v, exponent, mantissa);
+inline SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
+#ifdef SSMF_VF_GET_EM
+SSMF_VF exponent, mantissa;
+SSMF_VF_GET_EM(v, exponent, mantissa);
 #else
-#	if SIGNALSMITH_MATHFUN_BITS == 32
+#	if SSMF_BITS == 32
 	static constexpr int mantissaMaskInt = 0x007FFFFF, mantissaBits = 23;
 	static constexpr float mantissaScale = 1.1920928955078125e-7f; // 2^-23
 	static constexpr float exponentBase = 127;
-#	elif SIGNALSMITH_MATHFUN_BITS == 64
+#	elif SSMF_BITS == 64
 	static constexpr long long mantissaMaskInt = 0x000FFFFFFFFFFFFFLL;
 	static constexpr int mantissaBits = 52;
 	static constexpr double mantissaScale = 2.220446049250313e-16; // 2^-52
 	static constexpr double exponentBase = 1023;
 #	else
-#		error "SIGNALSMITH_MATHFUN_VF_GET_EM(v, e, m) required unless it's 32/64-bit IEEE"
+#		error "SSMF_VF_GET_EM(v, e, m) required unless it's 32/64-bit IEEE"
 #	endif
 	// Get the mantissa by masking, converting to float, and scaling
-	SIGNALSMITH_MATHFUN_VF mantissaMask = SIGNALSMITH_MATHFUN_VF_I(mantissaMaskInt);
-	SIGNALSMITH_MATHFUN_VF mantissaInt = SIGNALSMITH_MATHFUN_VF_ITOF(SIGNALSMITH_MATHFUN_VF_AND(mantissaMask, v));
-	SIGNALSMITH_MATHFUN_VF mantissa = SIGNALSMITH_MATHFUN_VF_MUL(mantissaInt, SIGNALSMITH_MATHFUN_VF_F(mantissaScale));
+	SSMF_VF mantissaMask = SSMF_VF_I(mantissaMaskInt);
+	SSMF_VF mantissaInt = SSMF_VF_ITOF(SSMF_VF_AND(mantissaMask, v));
+	SSMF_VF mantissa = SSMF_VF_MUL(mantissaInt, SSMF_VF_F(mantissaScale));
 	
-	SIGNALSMITH_MATHFUN_VF exponentOffset = SIGNALSMITH_MATHFUN_VF_ITOF(SIGNALSMITH_MATHFUN_VF_RSHIFT_K(v, mantissaBits));
-	SIGNALSMITH_MATHFUN_VF exponent = SIGNALSMITH_MATHFUN_VF_SUB(exponentOffset, SIGNALSMITH_MATHFUN_VF_F(exponentBase));
+	SSMF_VF exponentOffset = SSMF_VF_ITOF(SSMF_VF_RSHIFT_K(v, mantissaBits));
+	SSMF_VF exponent = SSMF_VF_SUB(exponentOffset, SSMF_VF_F(exponentBase));
 #endif
 
-#if SIGNALSMITH_MATHFUN_ACCURACY < 4
-	SIGNALSMITH_MATHFUN_VF curve = mantissa;
+#if SSMF_ACCURACY < 4
+	SSMF_VF curve = mantissa;
 #else
 	// Cubic which matches value/gradient of log2(1 + x) at 0 and 1
-	SIGNALSMITH_MATHFUN_VF c1 = SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_F(1.4426950408889634));
-	SIGNALSMITH_MATHFUN_VF c2 = SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_F(-0.6067376022224086));
-	SIGNALSMITH_MATHFUN_VF c3 = SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_F(0.16404256133344516));
-	SIGNALSMITH_MATHFUN_VF curve = SIGNALSMITH_MATHFUN_VF_MUL(mantissa, SIGNALSMITH_MATHFUN_VF_ADD(c1, SIGNALSMITH_MATHFUN_VF_MUL(mantissa, SIGNALSMITH_MATHFUN_VF_ADD(c2, SIGNALSMITH_MATHFUN_VF_MUL(mantissa, c3)))));
+	SSMF_VF c1 = SSMF_VF_F(SSMF_F(1.4426950408889634));
+	SSMF_VF c2 = SSMF_VF_F(SSMF_F(-0.6067376022224086));
+	SSMF_VF c3 = SSMF_VF_F(SSMF_F(0.16404256133344516));
+	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_ADD(c1, SSMF_VF_MUL(mantissa, SSMF_VF_ADD(c2, SSMF_VF_MUL(mantissa, c3)))));
 #endif	
-	return SIGNALSMITH_MATHFUN_VF_ADD(curve, exponent);
+	return SSMF_VF_ADD(curve, exponent);
 }
 
 // log(): multiplies log2()
-inline SIGNALSMITH_MATHFUN_VF SIGNALSMITH_MATHFUN_NAME(log)(SIGNALSMITH_MATHFUN_VF v) {
-	SIGNALSMITH_MATHFUN_VF resultLog2 = SIGNALSMITH_MATHFUN_NAME(log2)(v);
-	SIGNALSMITH_MATHFUN_VF mult = SIGNALSMITH_MATHFUN_VF_F(SIGNALSMITH_MATHFUN_F(0.6931471805599453));
-	return SIGNALSMITH_MATHFUN_VF_MUL(resultLog2, mult);
+inline SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
+	SSMF_VF resultLog2 = SSMF_NAME(log2)(v);
+	SSMF_VF mult = SSMF_VF_F(SSMF_F(0.6931471805599453));
+	return SSMF_VF_MUL(resultLog2, mult);
 }
 
 // Clean up all our arguments unless explicitly told not to
-#ifndef SIGNALSMITH_MATHFUN_NO_CLEANUP
-#	undef SIGNALSMITH_MATHFUN_BITS
-#	undef SIGNALSMITH_MATHFUN_F
-#	undef SIGNALSMITH_MATHFUN_VF
-#	undef SIGNALSMITH_MATHFUN_VF_0
-#	undef SIGNALSMITH_MATHFUN_VF_F
-#	undef SIGNALSMITH_MATHFUN_VF_I
-#	undef SIGNALSMITH_MATHFUN_VF_AND
-#	undef SIGNALSMITH_MATHFUN_VF_ANDNOT
-#	undef SIGNALSMITH_MATHFUN_VF_OR
-#	undef SIGNALSMITH_MATHFUN_VF_XOR
-#	undef SIGNALSMITH_MATHFUN_VF_ADD
-#	undef SIGNALSMITH_MATHFUN_VF_SUB
-#	undef SIGNALSMITH_MATHFUN_VF_MUL
-#	undef SIGNALSMITH_MATHFUN_VF_DIV
-#	undef SIGNALSMITH_MATHFUN_VF_MAX
-#	undef SIGNALSMITH_MATHFUN_VF_MIN
-#	undef SIGNALSMITH_MATHFUN_VF_RSHIFT_K
-#	undef SIGNALSMITH_MATHFUN_VF_ITOF
+#ifndef SSMF_NO_CLEANUP
+#	undef SSMF_BITS
+#	undef SSMF_F
+#	undef SSMF_VF
+#	undef SSMF_VF_0
+#	undef SSMF_VF_F
+#	undef SSMF_VF_I
+#	undef SSMF_VF_AND
+#	undef SSMF_VF_ANDNOT
+#	undef SSMF_VF_OR
+#	undef SSMF_VF_XOR
+#	undef SSMF_VF_ADD
+#	undef SSMF_VF_SUB
+#	undef SSMF_VF_MUL
+#	undef SSMF_VF_DIV
+#	undef SSMF_VF_MAX
+#	undef SSMF_VF_MIN
+#	undef SSMF_VF_RSHIFT_K
+#	undef SSMF_VF_ITOF
 
-#	undef SIGNALSMITH_MATHFUN_NAME
+#	undef SSMF_NAME
 #endif

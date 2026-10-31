@@ -14,41 +14,41 @@ namespace sse2 {
 		__m128d real, imag;
 	};
 
-#define SIGNALSMITH_MATHFUN_BITS 32
-#define SIGNALSMITH_MATHFUN_VF __m128
-#define SIGNALSMITH_MATHFUN_VF_0 _mm_setzero_ps()
-#define SIGNALSMITH_MATHFUN_VF_F(v) _mm_set1_ps(v)
-#define SIGNALSMITH_MATHFUN_VF_I(v) _mm_castsi128_ps(_mm_set1_epi32(v))
-#define SIGNALSMITH_MATHFUN_VF_AND(a, b) _mm_and_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_ANDNOT(a, b) _mm_andnot_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_OR(a, b) _mm_or_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_XOR(a, b) _mm_xor_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_ADD(a, b) _mm_add_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_SUB(a, b) _mm_sub_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_MUL(a, b) _mm_mul_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_DIV(a, b) _mm_div_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_MAX(a, b) _mm_max_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_MIN(a, b) _mm_min_ps(a, b)
-#define SIGNALSMITH_MATHFUN_VF_RSHIFT_K(a, bits) _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(a), bits))
-#define SIGNALSMITH_MATHFUN_VF_ITOF(a) _mm_cvtepi32_ps(_mm_castps_si128(a))
+#define SSMF_BITS 32
+#define SSMF_VF __m128
+#define SSMF_VF_0 _mm_setzero_ps()
+#define SSMF_VF_F(v) _mm_set1_ps(v)
+#define SSMF_VF_I(v) _mm_castsi128_ps(_mm_set1_epi32(v))
+#define SSMF_VF_AND(a, b) _mm_and_ps(a, b)
+#define SSMF_VF_ANDNOT(a, b) _mm_andnot_ps(a, b)
+#define SSMF_VF_OR(a, b) _mm_or_ps(a, b)
+#define SSMF_VF_XOR(a, b) _mm_xor_ps(a, b)
+#define SSMF_VF_ADD(a, b) _mm_add_ps(a, b)
+#define SSMF_VF_SUB(a, b) _mm_sub_ps(a, b)
+#define SSMF_VF_MUL(a, b) _mm_mul_ps(a, b)
+#define SSMF_VF_DIV(a, b) _mm_div_ps(a, b)
+#define SSMF_VF_MAX(a, b) _mm_max_ps(a, b)
+#define SSMF_VF_MIN(a, b) _mm_min_ps(a, b)
+#define SSMF_VF_RSHIFT_K(a, bits) _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(a), bits))
+#define SSMF_VF_ITOF(a) _mm_cvtepi32_ps(_mm_castps_si128(a))
 #include "../mathfun.h"
 
-#define SIGNALSMITH_MATHFUN_BITS 64
-#define SIGNALSMITH_MATHFUN_VF __m128d
-#define SIGNALSMITH_MATHFUN_VF_0 _mm_setzero_pd()
-#define SIGNALSMITH_MATHFUN_VF_F(v) _mm_set1_pd(v)
-#define SIGNALSMITH_MATHFUN_VF_I(v) _mm_castsi128_pd(_mm_set1_epi64x(v))
-#define SIGNALSMITH_MATHFUN_VF_AND(a, b) _mm_and_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_ANDNOT(a, b) _mm_andnot_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_OR(a, b) _mm_or_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_XOR(a, b) _mm_xor_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_ADD(a, b) _mm_add_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_SUB(a, b) _mm_sub_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_MUL(a, b) _mm_mul_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_DIV(a, b) _mm_div_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_MAX(a, b) _mm_max_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_MIN(a, b) _mm_min_pd(a, b)
-#define SIGNALSMITH_MATHFUN_VF_RSHIFT_K(a, b) _mm_castsi128_pd(_mm_srli_epi64(_mm_castpd_si128(a), b))
+#define SSMF_BITS 64
+#define SSMF_VF __m128d
+#define SSMF_VF_0 _mm_setzero_pd()
+#define SSMF_VF_F(v) _mm_set1_pd(v)
+#define SSMF_VF_I(v) _mm_castsi128_pd(_mm_set1_epi64x(v))
+#define SSMF_VF_AND(a, b) _mm_and_pd(a, b)
+#define SSMF_VF_ANDNOT(a, b) _mm_andnot_pd(a, b)
+#define SSMF_VF_OR(a, b) _mm_or_pd(a, b)
+#define SSMF_VF_XOR(a, b) _mm_xor_pd(a, b)
+#define SSMF_VF_ADD(a, b) _mm_add_pd(a, b)
+#define SSMF_VF_SUB(a, b) _mm_sub_pd(a, b)
+#define SSMF_VF_MUL(a, b) _mm_mul_pd(a, b)
+#define SSMF_VF_DIV(a, b) _mm_div_pd(a, b)
+#define SSMF_VF_MAX(a, b) _mm_max_pd(a, b)
+#define SSMF_VF_MIN(a, b) _mm_min_pd(a, b)
+#define SSMF_VF_RSHIFT_K(a, b) _mm_castsi128_pd(_mm_srli_epi64(_mm_castpd_si128(a), b))
 #include "../mathfun.h"
 
 //#ifndef DEV_NO_FALLBACK
