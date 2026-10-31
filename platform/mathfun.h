@@ -104,6 +104,47 @@ Some of these fundamental operations are required (and they'll error), but other
 	)
 #endif
 
+// Optional: a*b + k, for constant literal `k`
+#ifndef SSMF_FMAK
+#	define SSMF_FMAK(a, b, k) SSMF_VF_ADD(SSMF_VF_MUL(a, b), SSMF_VF_F(SSMF_F(k)))
+#endif
+
+// Polynomials (Horner's method) with constant coefficients
+#define SSMF_VF_POLY0(x, c0) SSMF_VF_F(SSMF_F(c0))
+#define SSMF_VF_POLY1(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY0(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY2(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY1(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY3(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY2(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY4(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY3(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY5(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY4(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY6(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY5(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY7(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY6(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY8(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY7(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY9(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY8(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY10(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY9(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY11(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY10(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY12(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY11(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY13(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY12(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY14(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY13(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY15(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY14(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY16(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY15(x, __VA_ARGS__), x, c0)
+// Monic variants, where the highest-order coefficient is 1 (so we can skip the multiplication)
+#define SSMF_VF_POLY1M(x, c0) SSMF_VF_ADD(x, SSMF_VF_F(SSMF_F(c0)))
+#define SSMF_VF_POLY2M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY1M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY3M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY2M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY4M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY3M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY5M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY4M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY6M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY5M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY7M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY6M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY8M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY7M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY9M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY8M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY10M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY9M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY11M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY10M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY12M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY11M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY13M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY12M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY14M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY13M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY15M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY14M(x, __VA_ARGS__), x, c0)
+#define SSMF_VF_POLY16M(x, c0, ...) SSMF_FMAK(SSMF_VF_POLY15M(x, __VA_ARGS__), x, c0)
+
 // Optional
 #ifndef SSMF_NAME
 #	if SSMF_BITS == 32
@@ -199,10 +240,7 @@ SSMF_VF_GET_EM(v, exponent, mantissa);
 	SSMF_VF curve = mantissa;
 #else
 	// Cubic which matches value/gradient of log2(1 + x) at 0 and 1
-	SSMF_VF c1 = SSMF_VF_F(SSMF_F(1.4426950408889634));
-	SSMF_VF c2 = SSMF_VF_F(SSMF_F(-0.6067376022224086));
-	SSMF_VF c3 = SSMF_VF_F(SSMF_F(0.16404256133344516));
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_ADD(c1, SSMF_VF_MUL(mantissa, SSMF_VF_ADD(c2, SSMF_VF_MUL(mantissa, c3)))));
+	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_POLY2(mantissa, 1.4426950408889634, -0.6067376022224086, 0.16404256133344516));
 #endif	
 	return SSMF_VF_ADD(curve, exponent);
 }
@@ -234,6 +272,40 @@ inline SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_MIN
 #	undef SSMF_VF_RSHIFT_K
 #	undef SSMF_VF_ITOF
+#	undef SSMF_FMAK
 
 #	undef SSMF_NAME
 #endif
+#undef SSMF_VF_POLY0
+#undef SSMF_VF_POLY1
+#undef SSMF_VF_POLY2
+#undef SSMF_VF_POLY3
+#undef SSMF_VF_POLY4
+#undef SSMF_VF_POLY5
+#undef SSMF_VF_POLY6
+#undef SSMF_VF_POLY7
+#undef SSMF_VF_POLY8
+#undef SSMF_VF_POLY9
+#undef SSMF_VF_POLY10
+#undef SSMF_VF_POLY11
+#undef SSMF_VF_POLY12
+#undef SSMF_VF_POLY13
+#undef SSMF_VF_POLY14
+#undef SSMF_VF_POLY15
+#undef SSMF_VF_POLY16
+#undef SSMF_VF_POLY1M
+#undef SSMF_VF_POLY2M
+#undef SSMF_VF_POLY3M
+#undef SSMF_VF_POLY4M
+#undef SSMF_VF_POLY5M
+#undef SSMF_VF_POLY6M
+#undef SSMF_VF_POLY7M
+#undef SSMF_VF_POLY8M
+#undef SSMF_VF_POLY9M
+#undef SSMF_VF_POLY10M
+#undef SSMF_VF_POLY11M
+#undef SSMF_VF_POLY12M
+#undef SSMF_VF_POLY13M
+#undef SSMF_VF_POLY14M
+#undef SSMF_VF_POLY15M
+#undef SSMF_VF_POLY16M
