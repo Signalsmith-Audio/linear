@@ -149,6 +149,10 @@ Some of these fundamental operations are required (and they'll error), but other
 #define SSMF_VF_POLY15M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY14M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY16M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY15M(x, __VA_ARGS__), x, c0)
 
+// Optional: attributes added before every function definition (e.g. `__attribute__((always_inline))`)
+#ifndef SSMF_ATTRIBUTES
+#	define SSMF_ATTRIBUTES
+#endif
 // Optional: how functions are declared (`static` in C, so a single translation unit doesn't need an external definition)
 #ifndef SSMF_INLINE
 #	ifdef __cplusplus
@@ -170,7 +174,7 @@ Some of these fundamental operations are required (and they'll error), but other
 #endif
 
 // abs(): bitwise AND to clear the sign bit
-SSMF_INLINE SSMF_VF SSMF_NAME(abs)(SSMF_VF v) {
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(abs)(SSMF_VF v) {
 #ifdef SSMF_VF_ABS
 	return SSMF_VF_ABS(v);
 #elif SSMF_BITS == 32
@@ -184,7 +188,7 @@ SSMF_INLINE SSMF_VF SSMF_NAME(abs)(SSMF_VF v) {
 }
 
 // neg(): bitwise XOR to flip the sign bit
-SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 #ifdef SSMF_VF_NEG
 	return SSMF_VF_NEG(v);
 #elif SSMF_BITS == 32
@@ -198,18 +202,18 @@ SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 }
 
 // pow2(): multiply with itself
-SSMF_INLINE SSMF_VF SSMF_NAME(pow2)(SSMF_VF v) {
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(pow2)(SSMF_VF v) {
 	return SSMF_VF_MUL(v, v);
 }
 
 // dim()
-SSMF_INLINE SSMF_VF SSMF_NAME(dim)(SSMF_VF a, SSMF_VF b) {
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(dim)(SSMF_VF a, SSMF_VF b) {
 	SSMF_VF diff = SSMF_VF_SUB(a, b);
 	return SSMF_VF_MAX(SSMF_VF_0, diff);
 }
 
 // copysign()
-SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 #ifdef SSMF_VF_COPYSIGN
 	return SSMF_VF_COPYSIGN(a, b);
 #elif SSMF_BITS == 32
@@ -223,7 +227,7 @@ SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 }
 
 // log(): Pulls out exponent and mantissa, converting both to float
-SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 #ifdef SSMF_VF_GET_EM
 SSMF_VF exponent, mantissa;
 SSMF_VF_GET_EM(v, exponent, mantissa);
@@ -297,7 +301,7 @@ SSMF_VF_GET_EM(v, exponent, mantissa);
 }
 
 // log(): multiplies log2()
-SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 	SSMF_VF resultLog2 = SSMF_NAME(log2)(v);
 	SSMF_VF mult = SSMF_VF_F(SSMF_F(0.6931471805599453));
 	return SSMF_VF_MUL(resultLog2, mult);
@@ -330,6 +334,7 @@ SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
+#	undef SSMF_ATTRIBUTES
 #endif
 #undef SSMF_VF_POLY0
 #undef SSMF_VF_POLY1
