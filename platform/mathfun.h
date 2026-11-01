@@ -23,6 +23,17 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #	endif
 #endif
 
+// SSMF_EPSILON: difference between 1 and the next representable value
+#ifndef SSMF_EPSILON
+#	if SSMF_BITS == 32
+#		define SSMF_EPSILON 1.1920928955078125e-07 // 2^-23
+#	elif SSMF_BITS == 64
+#		define SSMF_EPSILON 2.220446049250313080847263336181640625e-16 // 2^-52
+#	else
+#		error "need SSMF_EPSILON if it's not 32-/64-bit IEEE"
+#	endif
+#endif
+
 #ifndef SSMF_SMALL_LIMIT
 #	if SSMF_BITS == 32
 #		define SSMF_SMALL_LIMIT 4194304 // 2^22
@@ -213,7 +224,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 #elif defined(SSMF_VF_ROUND)
 #	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
 #elif defined(SSMF_VF_FLOOR)
-#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5)))
+// Add the largest value below 0.5, so that e.g. 0.49999997f doesn't round up (since 0.49999997f + 0.5f -> 1.0f)
+#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5 - SSMF_EPSILON*0.25)))
 #else
 #	if SSMF_BITS == 32
 #		define SSMF_VF_ROUND_MAGIC 12582912 // 1.5 * 2^23
@@ -326,6 +338,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_BITS
 #	undef SSMF_ACCURACY
 #	undef SSMF_SMALL_LIMIT
+#	undef SSMF_EPSILON
 #	undef SSMF_VF
 #	undef SSMF_VF_0
 #	undef SSMF_VF_F
