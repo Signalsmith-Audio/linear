@@ -1,14 +1,16 @@
 /* Copyright 2026 Geraint Luff / Signalsmith Audio Ltd.
 
-This header defines floating-point functions, given #defines for the basic operations (constants, arithmetic, bitwise).  It is focused on audio DSP use - this means:
+This header defines common floating-point functions, given #defines for the basic operations (constants, arithmetic, bitwise).  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
+
+It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.
+
+It's focused on audio DSP use, which means:
 -	approximate results - you can choose the accuracy/complexity tradeoff with `SSMF_ACCURACY`.
 -	no NaN/Inf support - anything which would produce these outputs will give nonsense
--	inaccurate results for subnormals - they won't be _nonsense_, but should give results anywhere between f(0) and f(smallestNormal)
--	limited range for some functions - results beyond the "small integer" range (±2^21 for float, ±2^50 for double) will be off for rounding functions as well as sin/cos/etc.
+-	limited range - some functions (rounding, sin/cos/etc.) only give proper results for "small number" range (±2^21 for float, ±2^50 for double).  Outside this range their result should still be sensibly bounded, but not necessarily correct.
+-	inaccurate results for subnormals - they won't be _accurate_, but should still be between f(0) and f(smallestNormal)
 
-It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
-
-Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).
+Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).  If you set `SSMF_BITS` to either 32 or 64, then it assumes IEEE floating-point, and can cover more things.
 */
 
 #ifndef SSMF_ACCURACY
@@ -18,6 +20,16 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #		define SSMF_ACCURACY 48
 #	else
 #		error "need SSMF_ACCURACY"
+#	endif
+#endif
+
+#ifndef SSMF_SMALL_LIMIT
+#	if SSMF_BITS == 32
+#		define SSMF_SMALL_LIMIT 4194304 // 2^22
+#	elif SSMF_BITS == 64
+#		define SSMF_SMALL_LIMIT 2251799813685248 // 2^51
+#	else
+#		error "need SSMF_SMALL_LIMIT if it's not 32-/64-bit IEEE"
 #	endif
 #endif
 
@@ -160,7 +172,7 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #ifndef SSMF_NAME
 #	if SSMF_BITS == 32
 #		define SSMF_NAME(name) mathfun_##name##f
-#elif SSMF_BITS == 64
+#	elif SSMF_BITS == 64
 #		define SSMF_NAME(name) mathfun_##name##d
 #	else
 #		define SSMF_NAME(name) mathfun_##name##
@@ -195,30 +207,40 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 	return SSMF_VF_XOR(v, mask);
 }
 
-#if !defined(SSMF_VF_ROUND) && !defined(SSMF_VF_FLOOR)
+// SSMF_VF_ROUND_SMALL - a helper valid in the SSMF_SMALL_LIMIT
+#ifdef SSMF_VF_ROUND_SMALL
+// already exists, great
+#elif SSMF_VF_ROUND
+#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
+#elif defined(SSMF_VF_FLOOR)
+#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5)))
+#else
 #	if SSMF_BITS == 32
-#		define SSMF_VF_ROUND_MAGIC 12582912 //1.5 * 2^22
+#		define SSMF_VF_ROUND_MAGIC 12582912 // 1.5 * 2^23
 #	elif SSMF_BITS == 64
 #		define SSMF_VF_ROUND_MAGIC 6755399441055744 // 1.5 * 2^52
 #	else
 #		error "SSMF_VF_ROUND() or SSMF_VF_FLOOR() required unless it's 32/64-bit IEEE float"
 #	endif
-#endif
-
-// round(): only works in the small-integer range
-SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
-#ifdef SSMF_VF_ROUND
-	return SSMF_VF_ROUND(v);
-#elif defined(SSMF_VF_FLOOR)
-	return SSMF_VF_FLOOR(SSMF_VF_ADD(v, SSMF_VF_F(0.5)))
-#else
 #	ifdef SSMF_VF_BARRIER
-	// Add, barrier, subtract
-	return SSMF_VF_SUB(SSMF_VF_BARRIER(SSMF_VF_ADD(v, SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC));
+			// Add, barrier, subtract, barrier (so the integer result can't be reassociated with whatever comes next, e.g. `v - round(v)`)
+#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER(SSMF_VF_SUB(SSMF_VF_BARRIER(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
 #	else
-	return SSMF_VF_SUB(SSMF_VF_BARRIER_LOWBIT(SSMF_VF_ADD(v, SSMF_VF_F(SSMF_VF_ROUND_MAGIC/2))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC/2));
+			// (v + magic) is always positive, so abs() is a no-op, but the compiler can't prove it, so it stops the add/subtract being folded.
+			// The result is an integer, so its lowest mantissa bit is 0, and BARRIER_LOWBIT fences it from whatever comes next.
+#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(SSMF_NAME(abs)(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
 #	endif
 #endif
+
+// round(): nearest integer, only valid for small values
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
+	return SSMF_VF_ROUND_SMALL(v);
+}
+
+// remainder1(): v - round(v), in [-0.5, 0.5].  Large inputs (which are already integers) give 0.
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(remainder1)(SSMF_VF v) {
+	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-SSMF_SMALL_LIMIT)), SSMF_VF_F(SSMF_SMALL_LIMIT));
+	return SSMF_VF_SUB(v, SSMF_VF_ROUND_SMALL(v));
 }
 
 // pow2(): multiply with itself
@@ -248,7 +270,11 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 
 // log2(): splits into exponent and mantissa using bitwise ops, then applies a curve to the mantissa
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
-#if SSMF_BITS == 32
+#if defined(SSMF_VF_LOG2)
+	return SSMF_VF_LOG2(v);
+#elif defined(SSMF_VF_LOG)
+	return SSMF_VF_MUL(SSMF_VF_LOG(v), SSMF_VF_F(1.4426950408889634));
+#elif SSMF_BITS == 32
 	const int mantissaMaskInt = 0x007FFFFF;
 	const int exponentBits = 8, exponentMagic = 256, exponentRoundingMask = 511;
 	const float exponentBase = 127;
@@ -286,17 +312,20 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	return SSMF_VF_ADD(SSMF_VF_BARRIER_LOWBIT(exponent), curve);
 }
 
-// log(): multiplies log2()
+// log(): multiplies log2() if not otherwise defined
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
-	SSMF_VF resultLog2 = SSMF_NAME(log2)(v);
-	SSMF_VF mult = SSMF_VF_F(0.6931471805599453);
-	return SSMF_VF_MUL(resultLog2, mult);
+#if defined(SSMF_VF_LOG)
+	return SSMF_VF_LOG(v);
+#else
+	return SSMF_VF_MUL(SSMF_NAME(log2)(v), SSMF_VF_F(0.6931471805599453));
+#endif
 }
 
 // Clean up all our arguments unless explicitly told not to
 #ifndef SSMF_NO_CLEANUP
 #	undef SSMF_BITS
 #	undef SSMF_ACCURACY
+#	undef SSMF_SMALL_LIMIT
 #	undef SSMF_VF
 #	undef SSMF_VF_0
 #	undef SSMF_VF_F
@@ -318,10 +347,9 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_FMA
 #	undef SSMF_VF_FMAK
 #	undef SSMF_VF_ROUND
-#	undef SSMF_VF_ROUND_SMALL
 #	undef SSMF_VF_ROUND_MAGIC
+#	undef SSMF_VF_ROUND_SMALL
 #	undef SSMF_VF_FLOOR
-#	undef SSMF_VF_REMAINDER_ROUND
 
 #	undef SSMF_NAME
 #	undef SSMF_INLINE

@@ -160,6 +160,16 @@ static void endCheck() {
 			test(x, roundl(x), T##_test_round(x)); \
 		} \
 		endCheck(); \
+		startCheck("remainder1"); /* exact below 2^22, only bounded above that */ \
+		RANGE_EXP(T, x, 1e-30, 1e30) { \
+			T r = T##_test_remainder1(x); \
+			long double k = (long double)x - r; \
+			assertCheck(T##_test_abs(r) <= 0.5 && (x >= 4194304 || k == roundl(k)), x, x - roundl(x), r); \
+			r = T##_test_remainder1(-x); \
+			k = -(long double)x - r; \
+			assertCheck(T##_test_abs(r) <= 0.5 && (x >= 4194304 || k == roundl(k)), -x, -x - roundl(-x), r); \
+		} \
+		endCheck(); \
 		startCheck("pow2"); \
 		RANGE_EXP(T, x, 1e-15, 1e15) { \
 			test(x, (long double)x*x, T##_test_pow2(x)); \
