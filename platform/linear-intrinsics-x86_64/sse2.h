@@ -178,11 +178,11 @@ namespace sse2 {
 	__m128d getDouble(expression::Name<A> expr, size_t i) { \
 		return mmDouble(getDouble<aligned>(expr.a, i)); \
 	}
-	SIGNALSMITH_EXPR_UNARY(Norm, mathfun_pow2f, mathfun_pow2d)
-	SIGNALSMITH_EXPR_UNARY(Abs, mathfun_absf, mathfun_absd)
-	SIGNALSMITH_EXPR_UNARY(Neg, mathfun_negf, mathfun_negd)
+	SIGNALSMITH_EXPR_UNARY(Norm, ssmf_pow2f, ssmf_pow2d)
+	SIGNALSMITH_EXPR_UNARY(Abs, ssmf_absf, ssmf_absd)
+	SIGNALSMITH_EXPR_UNARY(Neg, ssmf_negf, ssmf_negd)
 	SIGNALSMITH_EXPR_UNARY(Sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
-	SIGNALSMITH_EXPR_UNARY(Log, mathfun_logf, mathfun_logd)
+	SIGNALSMITH_EXPR_UNARY(Log, ssmf_logf, ssmf_logd)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
 	template<bool aligned, class A, class B> \
@@ -199,8 +199,8 @@ namespace sse2 {
 	SIGNALSMITH_EXPR_BINARY(Div, _mm_div_ps, _mm_div_pd)
 	SIGNALSMITH_EXPR_BINARY(Max, _mm_max_ps, _mm_max_pd)
 	SIGNALSMITH_EXPR_BINARY(Min, _mm_min_ps, _mm_min_pd)
-	SIGNALSMITH_EXPR_BINARY(Dim, mathfun_dimf, mathfun_dimd)
-	SIGNALSMITH_EXPR_BINARY(Copysign, mathfun_copysignf, mathfun_copysignd)
+	SIGNALSMITH_EXPR_BINARY(Dim, ssmf_dimf, ssmf_dimd)
+	SIGNALSMITH_EXPR_BINARY(Copysign, ssmf_copysignf, ssmf_copysignd)
 #undef SIGNALSMITH_EXPR_BINARY
 }
 
