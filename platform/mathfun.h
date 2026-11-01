@@ -5,22 +5,26 @@ This header defines common floating-point functions, given #defines for the basi
 It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.
 
 It's focused on audio DSP use, which means:
--	approximate results - you can choose the accuracy/complexity tradeoff with `SSMF_ACCURACY`.
+-	approximate results - you can choose the accuracy/complexity tradeoff with `SSMF_ACCURACY`, up to 50 bits.
 -	no NaN/Inf support - anything which would produce these outputs will give nonsense
 -	limited range - some functions (rounding, sin/cos/etc.) only give proper results for "small number" range (±2^22 for float, ±2^51 for double).  Outside this range their result should still be sensibly bounded, but not necessarily correct.
 -	inaccurate results for subnormals - they won't be _accurate_, but should still be between f(0) and f(smallestNormal)
 
 Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).  If you set `SSMF_BITS` to either 32 or 64, then it assumes IEEE floating-point, and can cover more things.
 
+General config:
+	SSMF_NAME(fn): defaults to ssmf_fn
+	SSMF_NO_CLEANUP: if defined, the arguments don't get #undef'd at the end
+
 Constants and accuracy:
 	SSMF_BITS: if 32 or 64, it can guess values for the others in this group
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
-	SSMF_SMALL_LIMIT: any integer less than this can be accurately represented in floating-point
+	SSMF_SMALL_LIMIT: values below this get accurately rounded
 
 Types and constants:
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
-	SSMF_VF_0: expression which gives a SSMF_VF with vaue 0
+	SSMF_VF_0: expression which gives a SSMF_VF with value 0
 	SSMF_VF_F(c): create a vector from a scalar literal, including converting to the appropriate type (e.g. float) since literals might be in any form, including non-bracketed expressions
 	SSMF_VF_I(c): same as previous, but using an integer literal which gets re-interpreted as a float
 
@@ -55,6 +59,10 @@ Optional:
 	SSMF_VF_LOG(v)
 
 */
+
+#ifndef SSMF_NAME
+#	define SSMF_NAME(name) ssmf_##name##
+#endif
 
 #ifndef SSMF_ACCURACY
 #	if SSMF_BITS == 32
@@ -165,17 +173,6 @@ Optional:
 #		define SSMF_INLINE inline
 #	else
 #		define SSMF_INLINE static inline
-#	endif
-#endif
-
-// Optional
-#ifndef SSMF_NAME
-#	if SSMF_BITS == 32
-#		define SSMF_NAME(name) ssmf_##name##f
-#	elif SSMF_BITS == 64
-#		define SSMF_NAME(name) ssmf_##name##d
-#	else
-#		define SSMF_NAME(name) ssmf_##name##
 #	endif
 #endif
 
@@ -338,8 +335,10 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	// Minimax fits of log2((1+m)/2)/(m-1) for m in [0.5, 2).  We multiply by (m-1) to get good results near 0.
 #if SSMF_ACCURACY <= 2 // 2.3 bits
 	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_F(0.6666666666666666));
-#else // 30.25 bits (29.2 bits measured for double)
+#elif SSMF_ACCURACY <= 30 // 30.25 bits
 	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 615.07015959602082, 560.02796626919764, 97.774089410506336)), SSMF_VF_POLY3(mantissa, 615.07481238180024, 832.27477563489221, 295.01130521376648, 23.600973955242398));
+#else // 53.16 bits
+	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5M(mantissa, 1539.9494490315810, 3012.7926448644623, 1985.4447244334174, 516.40343770651331, 47.614385556181886)), SSMF_VF_POLY6(mantissa, 1539.9494508493095, 3694.5206013958506, 3191.8801514383296, 1211.3930558551092, 197.70059821180519, 11.549109887146420, 0.13957288228854357));
 #endif
 	// Include a barrier so that exponent doesn't get reassociated, which would lose precision in our curve
 	return SSMF_VF_ADD(SSMF_VF_BARRIER_LOWBIT(exponent), curve);
@@ -383,8 +382,6 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_LOG2
 #	undef SSMF_VF_LOG
 #	undef SSMF_VF_ROUND
-#	undef SSMF_VF_ROUND_MAGIC
-#	undef SSMF_VF_ROUND_SMALL
 #	undef SSMF_VF_FLOOR
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
@@ -423,4 +420,5 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #undef SSMF_VF_POLY14M
 #undef SSMF_VF_POLY15M
 #undef SSMF_VF_POLY16M
+#undef SSMF_VF_ROUND_MAGIC
 #undef SSMF_VF_ROUND_SMALL
