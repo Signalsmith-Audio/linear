@@ -25,7 +25,6 @@ Tests mathfun.h using plain scalars, checking each function is no more than 1 bi
 #define SSMF_ACCURACY TEST_ACCURACY
 #define SSMF_NAME(fn) float_test_##fn
 #define SSMF_BITS 32
-#define SSMF_F(v) ((float)(v))
 #define SSMF_VF float
 #define SSMF_VF_0 0.0f
 #define SSMF_VF_F(v) ((float)(v))
@@ -58,7 +57,6 @@ static uint32_t floatAsInt(float f) {
 #define SSMF_ACCURACY TEST_ACCURACY
 #define SSMF_NAME(fn) double_test_##fn
 #define SSMF_BITS 64
-#define SSMF_F(v) ((double)(v))
 #define SSMF_VF double
 #define SSMF_VF_0 0.0
 #define SSMF_VF_F(v) ((double)(v))
@@ -93,6 +91,7 @@ static int returnCode = 0;
 typedef struct {
 	const char *name;
 	double worst, worstX, limit;
+	double expected, actual;
 } Check;
 static Check check;
 
@@ -100,12 +99,22 @@ static void startCheck(const char *name) {
 	Check newCheck = {name, 0, 0, ldexp(1, 1 - TEST_ACCURACY)};
 	check = newCheck;
 }
+static void assertCheck(int success, double x, long double expected, long double actual) {
+	if (!success && check.worst == 0) {
+		check.worst = 1000;
+		check.worstX = x;
+		check.expected = expected;
+		check.actual = actual;
+	}
+}
 static void test(double x, long double expected, long double actual) {
 	long double error = fabsl(actual - expected);
 	if (expected != 0) error /= fabsl(expected);
 	if (!(error <= check.worst)) {
 		check.worst = (double)error;
 		check.worstX = x;
+		check.expected = expected;
+		check.actual = actual;
 	}
 }
 static void endCheck() {
@@ -115,7 +124,7 @@ static void endCheck() {
 	} else if (ok) {
 		printf("- \x1b[32mPASS\x1b[0m \x1b[36m%16s\x1b[0m: worst (%.1f bits at x = %.17g) >= %.0f bits\n", check.name, -log2(check.worst), check.worstX, -log2(check.limit));
 	} else {
-		printf("- \x1b[31mFAIL\x1b[0m \x1b[36m%16s\x1b[0m: worst (%.1f bits at x = %.17g) < %.0f bits\n", check.name, -log2(check.worst), check.worstX, -log2(check.limit));
+		printf("- \x1b[31mFAIL\x1b[0m \x1b[36m%16s\x1b[0m: worst (%.1f bits: x = %.17g, f(x) = %.17g, expected %.17g) < %.0f bits\n", check.name, -log2(check.worst), check.worstX, check.actual, check.expected, -log2(check.limit));
 	}
 	if (!ok) returnCode = 1;
 }
@@ -136,6 +145,19 @@ static void endCheck() {
 		RANGE_EXP(T, x, 1e-30, 1e30) { \
 			test(x, -x, T##_test_neg(x)); \
 			test(-x, x, T##_test_neg(-x)); \
+		} \
+		endCheck(); \
+		startCheck("round"); \
+		RANGE_EXP(T, x, 1e-30, 2097152) { \
+			T y = T##_test_round(x); \
+			assertCheck(T##_test_abs(x - y) <= 0.5, x, roundl(x), y); \
+		} \
+		RANGE_EXP(T, x, 1e-30, 2097152) { \
+			T y = T##_test_round(-x); \
+			assertCheck(T##_test_abs(-x - y) <= 0.5, -x, roundl(-x), y); \
+		} \
+		for (T x = -1000; x <= 1000; ++x) { \
+			test(x, roundl(x), T##_test_round(x)); \
 		} \
 		endCheck(); \
 		startCheck("pow2"); \

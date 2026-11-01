@@ -17,7 +17,7 @@ namespace sse2 {
 #define SSMF_BITS 32
 #define SSMF_VF __m128
 #define SSMF_VF_0 _mm_setzero_ps()
-#define SSMF_VF_F(v) _mm_set1_ps(v)
+#define SSMF_VF_F(v) _mm_set1_ps(float(v))
 #define SSMF_VF_I(v) _mm_castsi128_ps(_mm_set1_epi32(v))
 #define SSMF_VF_AND(a, b) _mm_and_ps(a, b)
 #define SSMF_VF_ANDNOT(a, b) _mm_andnot_ps(a, b)
@@ -43,7 +43,7 @@ namespace sse2 {
 #define SSMF_BITS 64
 #define SSMF_VF __m128d
 #define SSMF_VF_0 _mm_setzero_pd()
-#define SSMF_VF_F(v) _mm_set1_pd(v)
+#define SSMF_VF_F(v) _mm_set1_pd(double(v))
 #define SSMF_VF_I(v) _mm_castsi128_pd(_mm_set1_epi64x(v))
 #define SSMF_VF_AND(a, b) _mm_and_pd(a, b)
 #define SSMF_VF_ANDNOT(a, b) _mm_andnot_pd(a, b)

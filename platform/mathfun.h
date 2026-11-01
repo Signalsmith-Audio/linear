@@ -4,7 +4,7 @@ This header defines floating-point functions, given #defines for the basic opera
 -	approximate results - you can choose the accuracy/complexity tradeoff with `SSMF_ACCURACY`.
 -	no NaN/Inf support - anything which would produce these outputs will give nonsense
 -	inaccurate results for subnormals - they won't be _nonsense_, but should give results anywhere between f(0) and f(smallestNormal)
--	limited range for trig functions - results beyond the "small integer" range (exactly representable as floats, e.g. 2^23) will be off for sin/cos/etc., but they won't be invalid (i.e. sin/cos still in the [-1, 1] range)
+-	limited range for some functions - results beyond the "small integer" range (±2^21 for float, ±2^50 for double) will be off for rounding functions as well as sin/cos/etc.
 
 It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
 
@@ -21,16 +21,6 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #	endif
 #endif
 
-// make constants from scalar literals
-#ifndef SSMF_F
-#if SSMF_BITS == 32
-#	define SSMF_F(v) float(v)
-#elif SSMF_BITS == 64
-#	define SSMF_F(v) double(v)
-#else
-#	error "if SSMF_F() isn't defined, SSMF_BITS must be 32 (float) or 64 (double)"
-#endif
-#endif
 // types for the SIMD vector
 #ifndef SSMF_VF
 #	error "SSMF_VF not defined"
@@ -39,7 +29,7 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #ifndef SSMF_VF_0
 #	error "SSMF_VF_0 not defined"
 #endif
-// create a vector from a (float) scalar
+// create a vector from a scalar - this must include converting to the appropriate type (e.g. float) since literals might be anything
 #ifndef SSMF_VF_F
 #	error "SSMF_VF_F() not defined"
 #endif
@@ -114,11 +104,11 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #endif
 // Optional: a*b + k, for constant literal `k`
 #ifndef SSMF_VF_FMAK
-#	define SSMF_VF_FMAK(a, b, k) SSMF_VF_ADD(SSMF_VF_MUL(a, b), SSMF_VF_F(SSMF_F(k)))
+#	define SSMF_VF_FMAK(a, b, k) SSMF_VF_ADD(SSMF_VF_MUL(a, b), SSMF_VF_F(k))
 #endif
 
 // Polynomials (Horner's method) with constant coefficients
-#define SSMF_VF_POLY0(x, c0) SSMF_VF_F(SSMF_F(c0))
+#define SSMF_VF_POLY0(x, c0) SSMF_VF_F(c0)
 #define SSMF_VF_POLY1(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY0(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY2(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY1(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY3(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY2(x, __VA_ARGS__), x, c0)
@@ -136,7 +126,7 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #define SSMF_VF_POLY15(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY14(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY16(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY15(x, __VA_ARGS__), x, c0)
 // Monic variants, where the highest-order coefficient is 1 (so we can skip the multiplication)
-#define SSMF_VF_POLY1M(x, c0) SSMF_VF_ADD(x, SSMF_VF_F(SSMF_F(c0)))
+#define SSMF_VF_POLY1M(x, c0) SSMF_VF_ADD(x, SSMF_VF_F(c0))
 #define SSMF_VF_POLY2M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY1M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY3M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY2M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY4M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY3M(x, __VA_ARGS__), x, c0)
@@ -203,6 +193,32 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 #	error "need SSMF_VF_NEG() unless it's 32/64-bit IEEE floats"
 #endif
 	return SSMF_VF_XOR(v, mask);
+}
+
+#if !defined(SSMF_VF_ROUND) && !defined(SSMF_VF_FLOOR)
+#	if SSMF_BITS == 32
+#		define SSMF_VF_ROUND_MAGIC 12582912 //1.5 * 2^22
+#	elif SSMF_BITS == 64
+#		define SSMF_VF_ROUND_MAGIC 6755399441055744 // 1.5 * 2^52
+#	else
+#		error "SSMF_VF_ROUND() or SSMF_VF_FLOOR() required unless it's 32/64-bit IEEE float"
+#	endif
+#endif
+
+// round(): only works in the small-integer range
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
+#ifdef SSMF_VF_ROUND
+	return SSMF_VF_ROUND(v);
+#elif defined(SSMF_VF_FLOOR)
+	return SSMF_VF_FLOOR(SSMF_VF_ADD(v, SSMF_VF_F(0.5)))
+#else
+#	ifdef SSMF_VF_BARRIER
+	// Add, barrier, subtract
+	return SSMF_VF_SUB(SSMF_VF_BARRIER(SSMF_VF_ADD(v, SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC));
+#	else
+	return SSMF_VF_SUB(SSMF_VF_BARRIER_LOWBIT(SSMF_VF_ADD(v, SSMF_VF_F(SSMF_VF_ROUND_MAGIC/2))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC/2));
+#	endif
+#endif
 }
 
 // pow2(): multiply with itself
@@ -273,7 +289,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 // log(): multiplies log2()
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 	SSMF_VF resultLog2 = SSMF_NAME(log2)(v);
-	SSMF_VF mult = SSMF_VF_F(SSMF_F(0.6931471805599453));
+	SSMF_VF mult = SSMF_VF_F(0.6931471805599453);
 	return SSMF_VF_MUL(resultLog2, mult);
 }
 
@@ -281,7 +297,6 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #ifndef SSMF_NO_CLEANUP
 #	undef SSMF_BITS
 #	undef SSMF_ACCURACY
-#	undef SSMF_F
 #	undef SSMF_VF
 #	undef SSMF_VF_0
 #	undef SSMF_VF_F
@@ -302,6 +317,11 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_BARRIER_LOWBIT
 #	undef SSMF_VF_FMA
 #	undef SSMF_VF_FMAK
+#	undef SSMF_VF_ROUND
+#	undef SSMF_VF_ROUND_SMALL
+#	undef SSMF_VF_ROUND_MAGIC
+#	undef SSMF_VF_FLOOR
+#	undef SSMF_VF_REMAINDER_ROUND
 
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
