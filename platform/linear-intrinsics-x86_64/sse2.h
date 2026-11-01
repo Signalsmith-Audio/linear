@@ -31,6 +31,8 @@ namespace sse2 {
 #define SSMF_VF_MIN(a, b) _mm_min_ps(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(a), bits))
 #define SSMF_VF_LSHIFT_K(a, bits) _mm_castsi128_ps(_mm_slli_epi32(_mm_castps_si128(a), bits))
+// Round-trip through int32 (round-to-nearest with the default MXCSR), valid for |v| < 2^31.
+#define SSMF_VF_ROUND(v) _mm_cvtepi32_ps(_mm_cvtps_epi32(v))
 #if defined(__clang__) || defined(__GNUC__)
 	inline __m128 asmBarrier(__m128 v) {
 		__asm__("" : "+x"(v)); // empty ASM block which the compiler doesn't re-associate through
