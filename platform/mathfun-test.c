@@ -1,14 +1,40 @@
 /* Copyright 2026 Geraint Luff / Signalsmith Audio Ltd.
 
-Tests mathfun.h using plain scalars, checking each function is no more than 1 bit less accurate than SSMF_ACCURACY.  Only mandatory ops are defined, so fallbacks get tested too.
+Tests mathfun.h using plain scalars, checking each function is no more than 1 bit less accurate than SSMF_ACCURACY.  By default only mandatory ops are defined, so fallbacks get tested too.
 
 	gcc -std=c99 mathfun-test.c -o mathfun-test && ./mathfun-test
+
+Optional ops can be switched on to test their routes too (with or without -ffast-math):
+	-DTEST_ROUND	SSMF_VF_ROUND (rint)
+	-DTEST_FLOOR	SSMF_VF_FLOOR (floor)
+	-DTEST_BARRIER	SSMF_VF_BARRIER (empty `asm` block, GCC/Clang only)
+	-DTEST_FMA	SSMF_VF_FMA (fma)
+
+	for route in "" -DTEST_ROUND -DTEST_FLOOR -DTEST_BARRIER -DTEST_FMA; do for fm in "" -ffast-math; do
+		gcc -std=c99 -O2 $fm $route mathfun-test.c -lm -o mathfun-test && ./mathfun-test || echo "FAILED: $fm $route"
+	done; done
 
 */
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+
+#ifdef TEST_BARRIER
+#	if defined(__GNUC__)
+// Returns the value unchanged, but the compiler can't see through it
+static inline float testBarrierF(float v) {
+	__asm__ volatile("" : "+g"(v));
+	return v;
+}
+static inline double testBarrierD(double v) {
+	__asm__ volatile("" : "+g"(v));
+	return v;
+}
+#	else
+#		error "TEST_BARRIER needs GCC/Clang"
+#	endif
+#endif
 
 #ifndef TEST_ACCURACY
 #	define TEST_ACCURACY 20
@@ -51,6 +77,18 @@ static uint32_t floatAsInt(float f) {
 #define SSMF_VF_MIN(a, b) fminf(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) intAsFloat(floatAsInt(a) >> (bits))
 #define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
+#ifdef TEST_ROUND
+#	define SSMF_VF_ROUND(v) rintf(v)
+#endif
+#ifdef TEST_FLOOR
+#	define SSMF_VF_FLOOR(v) floorf(v)
+#endif
+#ifdef TEST_BARRIER
+#	define SSMF_VF_BARRIER(v) testBarrierF(v)
+#endif
+#ifdef TEST_FMA
+#	define SSMF_VF_FMA(a, b, c) fmaf(a, b, c)
+#endif
 #include "./mathfun.h"
 #endif
 
@@ -83,6 +121,18 @@ static uint64_t doubleAsInt(double d) {
 #define SSMF_VF_MIN(a, b) fmin(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) >> (bits))
 #define SSMF_VF_LSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) << (bits))
+#ifdef TEST_ROUND
+#	define SSMF_VF_ROUND(v) rint(v)
+#endif
+#ifdef TEST_FLOOR
+#	define SSMF_VF_FLOOR(v) floor(v)
+#endif
+#ifdef TEST_BARRIER
+#	define SSMF_VF_BARRIER(v) testBarrierD(v)
+#endif
+#ifdef TEST_FMA
+#	define SSMF_VF_FMA(a, b, c) fma(a, b, c)
+#endif
 #include "./mathfun.h"
 
 static int returnCode = 0;
@@ -129,6 +179,12 @@ static void endCheck() {
 	if (!ok) returnCode = 1;
 }
 
+// Neighbouring values, for testing edge-cases
+static inline float float_nextDown(float x) {return nextafterf(x, -1e30f);}
+static inline float float_nextUp(float x) {return nextafterf(x, 1e30f);}
+static inline double double_nextDown(double x) {return nextafter(x, -1e300);}
+static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
+
 #define RANGE_EXP(T, x, low, high) for (T x = (T)low; x <= (T)high; x *= (T)(1 + TEST_STEP))
 #define RANGE_LINEAR(T, x, low, high) for (T x = low; x <= (T)high; x += (T)(TEST_STEP*(high - low)))
 
@@ -158,6 +214,11 @@ static void endCheck() {
 		} \
 		for (T x = -1000; x <= 1000; ++x) { \
 			test(x, roundl(x), T##_test_round(x)); \
+		} \
+		for (T k = -1000; k <= 1000; ++k) { /* either side of k + 0.5 */ \
+			T below = T##_nextDown(k + (T)0.5), above = T##_nextUp(k + (T)0.5); \
+			test(below, k, T##_test_round(below)); \
+			test(above, k + 1, T##_test_round(above)); \
 		} \
 		endCheck(); \
 		startCheck("remainder1"); /* exact below 2^22, only bounded above that */ \
@@ -216,6 +277,26 @@ static void endCheck() {
 
 int main(void) {
 	printf("TEST_ACCURACY = %d, TEST_STEP = %g\n", TEST_ACCURACY, (double)TEST_STEP);
+	printf("optional ops:"
+#ifdef TEST_ROUND
+		" ROUND"
+#endif
+#ifdef TEST_FLOOR
+		" FLOOR"
+#endif
+#ifdef TEST_BARRIER
+		" BARRIER"
+#endif
+#ifdef TEST_FMA
+		" FMA"
+#endif
+#ifdef __FAST_MATH__
+		" (fast-math)"
+#endif
+#ifdef __OPTIMIZE__
+		" (optimise)"
+#endif
+		"\n");
 #if TEST_FLOAT
 	printf("\n\x1b[4m\x1b[1mFloat:\x1b[0m\n");
 	TEST_TYPE(float)
