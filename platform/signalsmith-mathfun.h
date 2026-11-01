@@ -23,7 +23,7 @@ Constants and accuracy:
 	SSMF_BITS: if 32 or 64, it can guess values for the others in this group
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
-	SSMF_SMALL_LIMIT: values below this get accurately rounded
+	SSMF_ROUND_LIMIT: values below this magnitude get accurately rounded
 
 Types and constants:
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
@@ -87,13 +87,13 @@ Optional:
 #	endif
 #endif
 
-#ifndef SSMF_SMALL_LIMIT
+#ifndef SSMF_ROUND_LIMIT
 #	if SSMF_BITS == 32
-#		define SSMF_SMALL_LIMIT 4194304 // 2^22
+#		define SSMF_ROUND_LIMIT 4194304 // 2^22
 #	elif SSMF_BITS == 64
-#		define SSMF_SMALL_LIMIT 2251799813685248 // 2^51
+#		define SSMF_ROUND_LIMIT 2251799813685248 // 2^51
 #	else
-#		error "need SSMF_SMALL_LIMIT if it's not 32-/64-bit IEEE"
+#		error "need SSMF_ROUND_LIMIT if it's not 32-/64-bit IEEE"
 #	endif
 #endif
 
@@ -214,13 +214,14 @@ Optional:
 #define SSMF_VF_POLY14M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY13M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY15M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY14M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY16M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY15M(x, __VA_ARGS__), x, c0)
-// SSMF_VF_ROUND_SMALL - a helper valid within (at least) the SSMF_SMALL_LIMIT
+// SSMF_VF_ROUND_SMALL - a helper valid within (at least) the SSMF_ROUND_LIMIT
 #if defined(SSMF_VF_ROUND)
 #	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
 #elif defined(SSMF_VF_FLOOR)
 // Add the largest value below 0.5, so that e.g. 0.49999997f doesn't round up (since 0.49999997f + 0.5f -> 1.0f)
 #	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5 - SSMF_EPSILON*0.25)))
 #else
+#error foo
 #	if SSMF_BITS == 32
 #		define SSMF_VF_ROUND_MAGIC 12582912 // 1.5 * 2^23
 #	elif SSMF_BITS == 64
@@ -272,7 +273,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
 
 // remainder1(): v - round(v), in [-0.5, 0.5].  Large inputs (which are already integers) give 0.
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(remainder1)(SSMF_VF v) {
-	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-SSMF_SMALL_LIMIT)), SSMF_VF_F(SSMF_SMALL_LIMIT));
+	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-SSMF_ROUND_LIMIT)), SSMF_VF_F(SSMF_ROUND_LIMIT));
 	return SSMF_VF_SUB(v, SSMF_VF_ROUND_SMALL(v));
 }
 
@@ -360,7 +361,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #ifndef SSMF_NO_CLEANUP
 #	undef SSMF_BITS
 #	undef SSMF_ACCURACY
-#	undef SSMF_SMALL_LIMIT
+#	undef SSMF_ROUND_LIMIT
 #	undef SSMF_EPSILON
 #	undef SSMF_VF
 #	undef SSMF_VF_0
@@ -382,10 +383,13 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_BARRIER_LOWBIT
 #	undef SSMF_VF_FMA
 #	undef SSMF_VF_FMAK
-#	undef SSMF_VF_LOG2
-#	undef SSMF_VF_LOG
+#	undef SSMF_VF_ABS
+#	undef SSMF_VF_NEG
+#	undef SSMF_VF_COPYSIGN
 #	undef SSMF_VF_ROUND
 #	undef SSMF_VF_FLOOR
+#	undef SSMF_VF_LOG2
+#	undef SSMF_VF_LOG
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES

@@ -4,16 +4,12 @@ Tests mathfun.h using plain scalars, checking each function is no more than 1 bi
 
 	gcc -std=c99 mathfun-test.c -o mathfun-test && ./mathfun-test
 
-Optional ops can be switched on to test their routes too (with or without -ffast-math):
-	-DTEST_ROUND	SSMF_VF_ROUND (rint)
-	-DTEST_FLOOR	SSMF_VF_FLOOR (floor)
-	-DTEST_BARRIER	SSMF_VF_BARRIER (empty `asm` block, GCC/Clang only)
-	-DTEST_FMA	SSMF_VF_FMA (fma)
-
-	for route in "" -DTEST_ROUND -DTEST_FLOOR -DTEST_BARRIER -DTEST_FMA; do for fm in "" -ffast-math; do
-		gcc -std=c99 -O2 $fm $route mathfun-test.c -lm -o mathfun-test && ./mathfun-test || echo "FAILED: $fm $route"
-	done; done
-
+Optional ops can be switched on to test their routes:
+	TEST_ROUND: uses rint for SSMF_VF_ROUND
+	TEST_ROUND_INT32: bounces through int32 for SSMF_VF_ROUND (like SSE2's cvtps2dq/cvtdq2ps) - actually only worth using for float, but we test double as well
+	TEST_FLOOR: SSMF_VF_FLOOR (floor)
+	TEST_BARRIER: SSMF_VF_BARRIER (empty `asm` block, GCC/Clang only)
+	TEST_FMA: SSMF_VF_FMA (fma)
 */
 #include <stdio.h>
 #include <stdint.h>
@@ -48,12 +44,12 @@ static inline double testBarrierD(double v) {
 #endif
 
 #if TEST_FLOAT
-#define SSMF_ACCURACY TEST_ACCURACY
-#define SSMF_NAME(fn) float_test_##fn
-#define SSMF_BITS 32
-#define SSMF_VF float
-#define SSMF_VF_0 0.0f
-#define SSMF_VF_F(v) ((float)(v))
+#	define SSMF_ACCURACY TEST_ACCURACY
+#	define SSMF_NAME(fn) float_test_##fn
+#	define SSMF_BITS 32
+#	define SSMF_VF float
+#	define SSMF_VF_0 0.0f
+#	define SSMF_VF_F(v) ((float)(v))
 static float intAsFloat(uint32_t i) {
 	float f;
 	memcpy(&f, &i, 4);
@@ -64,33 +60,36 @@ static uint32_t floatAsInt(float f) {
 	memcpy(&i, &f, 4);
 	return i;
 }
-#define SSMF_VF_I(v) intAsFloat((uint32_t)(v))
-#define SSMF_VF_AND(a, b) intAsFloat(floatAsInt(a)&floatAsInt(b))
-#define SSMF_VF_ANDNOT(a, b) intAsFloat(~floatAsInt(a)&floatAsInt(b))
-#define SSMF_VF_OR(a, b) intAsFloat(floatAsInt(a)|floatAsInt(b))
-#define SSMF_VF_XOR(a, b) intAsFloat(floatAsInt(a)^floatAsInt(b))
-#define SSMF_VF_ADD(a, b) ((a) + (b))
-#define SSMF_VF_SUB(a, b) ((a) - (b))
-#define SSMF_VF_MUL(a, b) ((a)*(b))
-#define SSMF_VF_DIV(a, b) ((a)/(b))
-#define SSMF_VF_MAX(a, b) fmaxf(a, b)
-#define SSMF_VF_MIN(a, b) fminf(a, b)
-#define SSMF_VF_RSHIFT_K(a, bits) intAsFloat(floatAsInt(a) >> (bits))
-#define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
-#ifdef TEST_ROUND
-#	define SSMF_VF_ROUND(v) rintf(v)
-#endif
-#ifdef TEST_FLOOR
-#	define SSMF_VF_FLOOR(v) floorf(v)
-#endif
-#ifdef TEST_BARRIER
-#	define SSMF_VF_BARRIER(v) testBarrierF(v)
-#endif
-#ifdef TEST_FMA
-#	define SSMF_VF_FMA(a, b, c) fmaf(a, b, c)
-#endif
-#include "./signalsmith-mathfun.h"
-#endif
+#	define SSMF_VF_I(v) intAsFloat((uint32_t)(v))
+#	define SSMF_VF_AND(a, b) intAsFloat(floatAsInt(a)&floatAsInt(b))
+#	define SSMF_VF_ANDNOT(a, b) intAsFloat(~floatAsInt(a)&floatAsInt(b))
+#	define SSMF_VF_OR(a, b) intAsFloat(floatAsInt(a)|floatAsInt(b))
+#	define SSMF_VF_XOR(a, b) intAsFloat(floatAsInt(a)^floatAsInt(b))
+#	define SSMF_VF_ADD(a, b) ((a) + (b))
+#	define SSMF_VF_SUB(a, b) ((a) - (b))
+#	define SSMF_VF_MUL(a, b) ((a)*(b))
+#	define SSMF_VF_DIV(a, b) ((a)/(b))
+#	define SSMF_VF_MAX(a, b) fmaxf(a, b)
+#	define SSMF_VF_MIN(a, b) fminf(a, b)
+#	define SSMF_VF_RSHIFT_K(a, bits) intAsFloat(floatAsInt(a) >> (bits))
+#	define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
+#	if defined(TEST_ROUND_INT32)
+#		define SSMF_VF_ROUND(v) ((float)(int32_t)lrintf(v))
+#		define SSMF_ROUND_LIMIT 2147483647
+#	elif TEST_ROUND
+#		define SSMF_VF_ROUND(v) rintf(v)
+#	endif
+#	ifdef TEST_FLOOR
+#		define SSMF_VF_FLOOR(v) floorf(v)
+#	endif
+#	ifdef TEST_BARRIER
+#		define SSMF_VF_BARRIER(v) testBarrierF(v)
+#	endif
+#	ifdef TEST_FMA
+#		define SSMF_VF_FMA(a, b, c) fmaf(a, b, c)
+#	endif
+#	include "./signalsmith-mathfun.h"
+#endif // TEST_FLOAT
 
 #define SSMF_ACCURACY TEST_ACCURACY
 #define SSMF_NAME(fn) double_test_##fn
@@ -121,7 +120,10 @@ static uint64_t doubleAsInt(double d) {
 #define SSMF_VF_MIN(a, b) fmin(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) >> (bits))
 #define SSMF_VF_LSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) << (bits))
-#ifdef TEST_ROUND
+#if defined(TEST_ROUND_INT32)
+#	define SSMF_VF_ROUND(v) ((double)(int32_t)lrint(v))
+#	define SSMF_ROUND_LIMIT 2147483647
+#elif TEST_ROUND
 #	define SSMF_VF_ROUND(v) rint(v)
 #endif
 #ifdef TEST_FLOOR
@@ -278,6 +280,9 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 int main(void) {
 	printf("TEST_ACCURACY = %d, TEST_STEP = %g\n", TEST_ACCURACY, (double)TEST_STEP);
 	printf("optional ops:"
+#ifdef TEST_ROUND_INT32
+		" ROUND_INT32"
+#endif
 #ifdef TEST_ROUND
 		" ROUND"
 #endif
