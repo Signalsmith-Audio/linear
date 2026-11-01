@@ -64,7 +64,7 @@ Optional:
 */
 
 #ifndef SSMF_NAME
-#	define SSMF_NAME(name) ssmf_##name##
+#	define SSMF_NAME(name) ssmf_##name
 #endif
 
 #ifndef SSMF_ACCURACY
