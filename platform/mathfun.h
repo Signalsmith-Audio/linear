@@ -92,20 +92,15 @@ Some of these fundamental operations are required (and they'll error), but other
 #	error "SSMF_VF_LSHIFT_K() not defined"
 #endif
 
-// If we don't have "interpret this as integers, and then convert to float", we can implement it
-#ifndef SSMF_VF_ITOF
-#	if SSMF_BITS == 32
-#		define SSMF_VF_ITOF_MAGIC 8388608.0f // 2^23
+// If we don't have a barrier operation (to prevent reassociation), we wipe the lowest bit as protection
+#ifdef SSMF_VF_BARRIER
+#	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_BARRIER(v)
+#elif SSMF_BITS == 32
+#	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(v, SSMF_VF_I(0xFFFFFFFE))
 #elif SSMF_BITS == 64
-#		define SSMF_VF_ITOF_MAGIC 4503599627370496.0
+#	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(v, SSMF_VF_I(0xFFFFFFFFFFFFFFFE))
 #else
-#		error "SSMF_VF_ITOF is required unless it's 32/64-bit IEEE float"
-#endif
-// The "magic number" is a float such that the mantissa ends up incrementing by integers
-#	define SSMF_VF_ITOF(v) SSMF_VF_SUB( \
-		SSMF_VF_OR(SSMF_VF_F(SSMF_VF_ITOF_MAGIC), v), \
-		SSMF_VF_F(SSMF_VF_ITOF_MAGIC) \
-	)
+#	error "SSMF_VF_BARRIER is required unless it's 32/64-bit IEEE float"
 #endif
 
 // Optional: a*b + c
@@ -268,8 +263,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 #else
 	// 25.35 bits
 	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissa, SSMF_VF_POLY2M(mantissa, 23.333812748272985, 11.403122714939718)), SSMF_VF_POLY3(mantissa, 32.347532621404400, 23.894962279857095, 4.6644215277555199, 0.18577826364333229));
-#endif	
-	return SSMF_VF_ADD(exponent, curve);
+#endif
+	return SSMF_VF_ADD(SSMF_VF_BARRIER_LOWBIT(exponent), curve);
 }
 
 // log(): multiplies log2()
@@ -300,8 +295,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_MIN
 #	undef SSMF_VF_RSHIFT_K
 #	undef SSMF_VF_LSHIFT_K
-#	undef SSMF_VF_ITOF
-#	undef SSMF_VF_ITOF_MAGIC
+#	undef SSMF_VF_BARRIER_LOWBIT
 #	undef SSMF_VF_FMA
 #	undef SSMF_VF_FMAK
 
