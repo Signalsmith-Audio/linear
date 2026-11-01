@@ -11,6 +11,49 @@ It's focused on audio DSP use, which means:
 -	inaccurate results for subnormals - they won't be _accurate_, but should still be between f(0) and f(smallestNormal)
 
 Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).  If you set `SSMF_BITS` to either 32 or 64, then it assumes IEEE floating-point, and can cover more things.
+
+Constants and accuracy:
+	SSMF_BITS: if 32 or 64, it can guess values for the others in this group
+	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
+	SSMF_EPSILON: difference between 1 and the next representable value
+	SSMF_SMALL_LIMIT: any integer less than this can be accurately represented in floating-point
+
+Types and constants:
+	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
+	SSMF_VF_0: expression which gives a SSMF_VF with vaue 0
+	SSMF_VF_F(c): create a vector from a scalar literal, including converting to the appropriate type (e.g. float) since literals might be in any form, including non-bracketed expressions
+	SSMF_VF_I(c): same as previous, but using an integer literal which gets re-interpreted as a float
+
+Mandatory bitwise ops:
+	SSMF_VF_AND(a, b): a & b
+	SSMF_VF_ANDNOT(a, b): ~a & b
+	SSMF_VF_OR(a, b): a | b
+	SSMF_VF_XOR(a, b): a ^ b
+	SSMF_VF_RSHIFT_K(a, k): a >> k, for integer constant k
+	SSMF_VF_LSHIFT_K(a, k): a << k, for integer constant k
+
+Mandatory arithmetic:
+	SSMF_VF_ADD(a, b): a + b
+	SSMF_VF_SUB(a, b): a - b
+	SSMF_VF_MUL(a, b): a * b
+	SSMF_VF_DIV(a, b): a / b
+	SSMF_VF_MAX(a, b): max(a, b)
+	SSMF_VF_MIN(a, b): min(a, b)
+
+Optional:
+	SSMF_VF_BARRIER(v): returns v unchanged, but the compiler can't reassociate maths through it (e.g. an empty `asm` block, with a register constraint for the target)
+	SSMF_ATTRIBUTES: attributes given to every defined function
+	SSMF_INLINE: correct way to specify inline functions
+	SSMF_VF_FMA(a, b, c): a*b + c
+	SSMF_VF_FMAK(a, b, k): a*b + k, for float constant k
+	SSMF_VF_ABS(v)
+	SSMF_VF_NEG(v)
+	SSMF_VF_COPYSIGN(a, b): magnitude of a, sign of b
+	SSMF_VF_ROUND(v)
+	SSMF_VF_FLOOR(v)
+	SSMF_VF_LOG2(v)
+	SSMF_VF_LOG(v)
+
 */
 
 #ifndef SSMF_ACCURACY
@@ -23,7 +66,6 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #	endif
 #endif
 
-// SSMF_EPSILON: difference between 1 and the next representable value
 #ifndef SSMF_EPSILON
 #	if SSMF_BITS == 32
 #		define SSMF_EPSILON 1.1920928955078125e-07 // 2^-23
@@ -44,73 +86,56 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #	endif
 #endif
 
-// types for the SIMD vector
 #ifndef SSMF_VF
 #	error "SSMF_VF not defined"
 #endif
-// evaluates to a vector full of 0s
 #ifndef SSMF_VF_0
 #	error "SSMF_VF_0 not defined"
 #endif
-// create a vector from a scalar - this must include converting to the appropriate type (e.g. float) since literals might be anything
 #ifndef SSMF_VF_F
 #	error "SSMF_VF_F() not defined"
 #endif
-// create a vector from an (int) scalar
 #ifndef SSMF_VF_I
 #	error "SSMF_VF_I() not defined"
 #endif
-// a & b
 #ifndef SSMF_VF_AND
 #	error "SSMF_VF_AND() not defined"
 #endif
-// ~a & b
 #ifndef SSMF_VF_ANDNOT
 #	error "SSMF_VF_ANDNOT() not defined"
 #endif
-// a | b
 #ifndef SSMF_VF_OR
 #	error "SSMF_VF_OR() not defined"
 #endif
-// a ^ b
 #ifndef SSMF_VF_XOR
 #	error "SSMF_VF_XOR() not defined"
 #endif
-// a + b
 #ifndef SSMF_VF_ADD
 #	error "SSMF_VF_ADD() not defined"
 #endif
-// a - b
 #ifndef SSMF_VF_SUB
 #	error "SSMF_VF_SUB() not defined"
 #endif
-// a * b
 #ifndef SSMF_VF_MUL
 #	error "SSMF_VF_MUL() not defined"
 #endif
-// a / b
 #ifndef SSMF_VF_DIV
 #	error "SSMF_VF_DIV() not defined"
 #endif
-// max(a, b)
 #ifndef SSMF_VF_MAX
 #	error "SSMF_VF_MAX() not defined"
 #endif
-// min(a, b)
 #ifndef SSMF_VF_MIN
 #	error "SSMF_VF_MIN() not defined"
 #endif
-// a >> bits
 #ifndef SSMF_VF_RSHIFT_K
 #	error "SSMF_VF_RSHIFT_K() not defined"
 #endif
-// a << bits
 #ifndef SSMF_VF_LSHIFT_K
 #	error "SSMF_VF_LSHIFT_K() not defined"
 #endif
 
-// Optional: SSMF_VF_BARRIER(v) returns v unchanged, but the compiler can't reassociate maths through it (e.g. an empty `asm` block, with a register constraint for the target)
-// If we don't have one, we wipe the lowest bit as protection (only valid for values where that bit is already zero, e.g. small integers)
+// If we don't have a proper barrier, we wipe the lowest bit to prevent reassociation (only valid for values where that bit is already zero, e.g. small integers)
 #ifdef SSMF_VF_BARRIER
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_BARRIER(v)
 #elif SSMF_BITS == 32
@@ -128,6 +153,30 @@ Some fundamental operations are required (and they'll error if missing), but oth
 // Optional: a*b + k, for constant literal `k`
 #ifndef SSMF_VF_FMAK
 #	define SSMF_VF_FMAK(a, b, k) SSMF_VF_ADD(SSMF_VF_MUL(a, b), SSMF_VF_F(k))
+#endif
+
+// Optional: attributes added before every function definition (e.g. `__attribute__((always_inline))`)
+#ifndef SSMF_ATTRIBUTES
+#	define SSMF_ATTRIBUTES
+#endif
+// Optional: how functions are declared (`static` in C, so a single translation unit doesn't need an external definition)
+#ifndef SSMF_INLINE
+#	ifdef __cplusplus
+#		define SSMF_INLINE inline
+#	else
+#		define SSMF_INLINE static inline
+#	endif
+#endif
+
+// Optional
+#ifndef SSMF_NAME
+#	if SSMF_BITS == 32
+#		define SSMF_NAME(name) ssmf_##name##f
+#	elif SSMF_BITS == 64
+#		define SSMF_NAME(name) ssmf_##name##d
+#	else
+#		define SSMF_NAME(name) ssmf_##name##
+#	endif
 #endif
 
 // Polynomials (Horner's method) with constant coefficients
@@ -165,31 +214,29 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #define SSMF_VF_POLY14M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY13M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY15M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY14M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY16M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY15M(x, __VA_ARGS__), x, c0)
-
-// Optional: attributes added before every function definition (e.g. `__attribute__((always_inline))`)
-#ifndef SSMF_ATTRIBUTES
-#	define SSMF_ATTRIBUTES
-#endif
-// Optional: how functions are declared (`static` in C, so a single translation unit doesn't need an external definition)
-#ifndef SSMF_INLINE
-#	ifdef __cplusplus
-#		define SSMF_INLINE inline
-#	else
-#		define SSMF_INLINE static inline
-#	endif
-#endif
-
-// Optional
-#ifndef SSMF_NAME
+// SSMF_VF_ROUND_SMALL - a helper valid within (at least) the SSMF_SMALL_LIMIT
+#if defined(SSMF_VF_ROUND)
+#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
+#elif defined(SSMF_VF_FLOOR)
+// Add the largest value below 0.5, so that e.g. 0.49999997f doesn't round up (since 0.49999997f + 0.5f -> 1.0f)
+#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5 - SSMF_EPSILON*0.25)))
+#else
 #	if SSMF_BITS == 32
-#		define SSMF_NAME(name) mathfun_##name##f
+#		define SSMF_VF_ROUND_MAGIC 12582912 // 1.5 * 2^23
 #	elif SSMF_BITS == 64
-#		define SSMF_NAME(name) mathfun_##name##d
+#		define SSMF_VF_ROUND_MAGIC 6755399441055744 // 1.5 * 2^52
 #	else
-#		define SSMF_NAME(name) mathfun_##name##
+#		error "SSMF_VF_ROUND() or SSMF_VF_FLOOR() required unless it's 32/64-bit IEEE float"
+#	endif
+#	ifdef SSMF_VF_BARRIER
+			// Add, barrier, subtract, barrier (so the integer result can't be reassociated with whatever comes next, e.g. `v - round(v)`)
+#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER(SSMF_VF_SUB(SSMF_VF_BARRIER(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
+#	else
+			// (v + magic) is always positive, so abs() is a no-op which acts as a barrier, but the compiler can't prove it, so it stops the add/subtract being folded.
+			// The result is an integer, so its lowest mantissa bit is 0, and BARRIER_LOWBIT fences it from whatever comes next.
+#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(SSMF_NAME(abs)(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
 #	endif
 #endif
-
 // abs(): bitwise AND to clear the sign bit
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(abs)(SSMF_VF v) {
 #ifdef SSMF_VF_ABS
@@ -217,32 +264,6 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 #endif
 	return SSMF_VF_XOR(v, mask);
 }
-
-// SSMF_VF_ROUND_SMALL - a helper valid in the SSMF_SMALL_LIMIT
-#ifdef SSMF_VF_ROUND_SMALL
-// already exists, great
-#elif defined(SSMF_VF_ROUND)
-#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
-#elif defined(SSMF_VF_FLOOR)
-// Add the largest value below 0.5, so that e.g. 0.49999997f doesn't round up (since 0.49999997f + 0.5f -> 1.0f)
-#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5 - SSMF_EPSILON*0.25)))
-#else
-#	if SSMF_BITS == 32
-#		define SSMF_VF_ROUND_MAGIC 12582912 // 1.5 * 2^23
-#	elif SSMF_BITS == 64
-#		define SSMF_VF_ROUND_MAGIC 6755399441055744 // 1.5 * 2^52
-#	else
-#		error "SSMF_VF_ROUND() or SSMF_VF_FLOOR() required unless it's 32/64-bit IEEE float"
-#	endif
-#	ifdef SSMF_VF_BARRIER
-			// Add, barrier, subtract, barrier (so the integer result can't be reassociated with whatever comes next, e.g. `v - round(v)`)
-#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER(SSMF_VF_SUB(SSMF_VF_BARRIER(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
-#	else
-			// (v + magic) is always positive, so abs() is a no-op, but the compiler can't prove it, so it stops the add/subtract being folded.
-			// The result is an integer, so its lowest mantissa bit is 0, and BARRIER_LOWBIT fences it from whatever comes next.
-#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(SSMF_NAME(abs)(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
-#	endif
-#endif
 
 // round(): nearest integer, only valid for small values
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
@@ -365,7 +386,6 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_ROUND_MAGIC
 #	undef SSMF_VF_ROUND_SMALL
 #	undef SSMF_VF_FLOOR
-
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES
@@ -403,3 +423,4 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #undef SSMF_VF_POLY14M
 #undef SSMF_VF_POLY15M
 #undef SSMF_VF_POLY16M
+#undef SSMF_VF_ROUND_SMALL
