@@ -221,7 +221,6 @@ Optional:
 // Add the largest value below 0.5, so that e.g. 0.49999997f doesn't round up (since 0.49999997f + 0.5f -> 1.0f)
 #	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5 - SSMF_EPSILON*0.25)))
 #else
-#error foo
 #	if SSMF_BITS == 32
 #		define SSMF_VF_ROUND_MAGIC 12582912 // 1.5 * 2^23
 #	elif SSMF_BITS == 64

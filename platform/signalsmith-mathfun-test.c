@@ -75,7 +75,7 @@ static uint32_t floatAsInt(float f) {
 #	define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
 #	if defined(TEST_ROUND_INT32)
 #		define SSMF_VF_ROUND(v) ((float)(int32_t)lrintf(v))
-#		define SSMF_ROUND_LIMIT 2147483647
+#		define SSMF_ROUND_LIMIT 2147483520 // largest float below 2^31 (2^31 - 1 rounds up to 2^31 as a float, which overflows int32)
 #	elif TEST_ROUND
 #		define SSMF_VF_ROUND(v) rintf(v)
 #	endif
