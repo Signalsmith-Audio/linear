@@ -51,6 +51,7 @@ static uint32_t floatAsInt(float f) {
 #define SSMF_VF_MAX(a, b) fmaxf(a, b)
 #define SSMF_VF_MIN(a, b) fminf(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) intAsFloat(floatAsInt(a) >> (bits))
+#define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
 #include "./mathfun.h"
 #endif
 
@@ -83,6 +84,7 @@ static uint64_t doubleAsInt(double d) {
 #define SSMF_VF_MAX(a, b) fmax(a, b)
 #define SSMF_VF_MIN(a, b) fmin(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) >> (bits))
+#define SSMF_VF_LSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) << (bits))
 #include "./mathfun.h"
 
 static int returnCode = 0;

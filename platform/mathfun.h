@@ -87,6 +87,10 @@ Some of these fundamental operations are required (and they'll error), but other
 #ifndef SSMF_VF_RSHIFT_K
 #	error "SSMF_VF_RSHIFT_K() not defined"
 #endif
+// a << bits
+#ifndef SSMF_VF_LSHIFT_K
+#	error "SSMF_VF_LSHIFT_K() not defined"
+#endif
 
 // If we don't have "interpret this as integers, and then convert to float", we can implement it
 #ifndef SSMF_VF_ITOF
@@ -228,76 +232,44 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 
 // log(): Pulls out exponent and mantissa, converting both to float
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
-#ifdef SSMF_VF_GET_EM
-SSMF_VF exponent, mantissa;
-SSMF_VF_GET_EM(v, exponent, mantissa);
-#else
-#	if SSMF_BITS == 32
-	const int mantissaMaskInt = 0x007FFFFF, mantissaBits = 23;
-	const float mantissaScale = 1.1920928955078125e-7f; // 2^-23
+//#ifdef SSMF_VF_GET_EM
+//SSMF_VF exponent, mantissa;
+//SSMF_VF_GET_EM(v, exponent, mantissa);
+//#else
+#if SSMF_BITS == 32
+	const int mantissaMaskInt = 0x007FFFFF;
+	const int exponentBits = 8, exponentMagic = 256, exponentRoundingMask = 511;
 	const float exponentBase = 127;
-#	elif SSMF_BITS == 64
+#elif SSMF_BITS == 64
 	const long long mantissaMaskInt = 0x000FFFFFFFFFFFFFLL;
-	const int mantissaBits = 52;
-	const double mantissaScale = 2.220446049250313e-16; // 2^-52
+	const int exponentBits = 11, exponentMagic = 2048, exponentRoundingMask = 4095;
 	const double exponentBase = 1023;
-#	else
-#		error "SSMF_VF_GET_EM(v, e, m) required unless it's 32/64-bit IEEE"
-#	endif
-	// Get the mantissa by masking, converting to float, and scaling
-	SSMF_VF mantissaMask = SSMF_VF_I(mantissaMaskInt);
-	SSMF_VF mantissaInt = SSMF_VF_ITOF(SSMF_VF_AND(mantissaMask, v));
-	SSMF_VF mantissa = SSMF_VF_MUL(mantissaInt, SSMF_VF_F(mantissaScale));
-	
-	SSMF_VF exponentOffset = SSMF_VF_ITOF(SSMF_VF_RSHIFT_K(v, mantissaBits));
-	SSMF_VF exponent = SSMF_VF_SUB(exponentOffset, SSMF_VF_F(exponentBase));
+#else
+#	error "log2() only currently implemented for 32/64-bit IEEE"
 #endif
+	// Trim to just the mantissa bits
+	SSMF_VF mantissaMasked = SSMF_VF_AND(v, SSMF_VF_I(mantissaMaskInt));
+	// Left-shift by 1 - this moves one bit into the exponent, and doubles the remainder
+	SSMF_VF mantissaShifted = SSMF_VF_LSHIFT_K(mantissaMasked, 1);
+	// Exponent for 2^0 -> 0b0111111, so the shifted bit halves the higher mantissa value essentially centering it on 1
+	SSMF_VF mantissa1 = SSMF_VF_XOR(mantissaShifted, SSMF_VF_F(1));
+	SSMF_VF mantissa = SSMF_VF_SUB(mantissa1, SSMF_VF_F(1)); // -0.5 to 1
+	
+	SSMF_VF exponentShifted = SSMF_VF_RSHIFT_K(v, exponentBits);
+	SSMF_VF exponentOffset = SSMF_VF_OR(exponentShifted, SSMF_VF_F(exponentMagic));
+	SSMF_VF exponentRounded = SSMF_VF_AND(SSMF_VF_ADD(exponentOffset, SSMF_VF_F(0.5)), SSMF_VF_F(exponentRoundingMask));
+	SSMF_VF exponent = SSMF_VF_SUB(exponentRounded, SSMF_VF_F(exponentBase + exponentMagic));
+//#endif
 
-	// Minimax fits of log2(1 + x) on [0, 1], with relative error, since it passes through (0, 0)
+	// Minimax fits of log2(1+x/2) on [-0.5, 1], with relative error, since it passes through (0, 0).
 #if SSMF_ACCURACY <= 2
 	// 1.7 bits
-	SSMF_VF curve = mantissa;
-#elif SSMF_ACCURACY <= 6
-	// 5.2 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_POLY1(mantissa, 1.40284708138686, -0.40284708138686015));
-#elif SSMF_ACCURACY <= 9
-	// 8.2 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_POLY2(mantissa, 1.437907097573697, -0.632288225018458, 0.1943811274447612));
-#elif SSMF_ACCURACY <= 12
-	// 11.1 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_POLY3(mantissa, 1.4420568158435028, -0.7001075467817148, 0.36118973101190066, -0.10313900007368867));
-#elif SSMF_ACCURACY <= 14
-	// 14.0 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_POLY4(mantissa, 1.442605180900105, -0.7166753272258335, 0.44006828983482676, -0.22376892590948255, 0.05777078240038419));
-#elif SSMF_ACCURACY <= 17
-	// 16.7 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_POLY5(mantissa, 1.4426819457470073, -0.720368921663955, 0.46864874228752906, -0.30137974806503814, 0.1439313799137711, -0.033513398219314185));
-#elif SSMF_ACCURACY <= 21
-	// 20.7 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY2M(mantissa, 52.940112296839175, 31.417871392488177), SSMF_VF_POLY2(mantissa, 36.69531093891793, 40.1233976204252, 8.539275129984224)));
-#elif SSMF_ACCURACY <= 26
-	// 25.5 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY2M(mantissa, 8.139581261783208, 7.039958806751733), SSMF_VF_POLY3(mantissa, 5.641927921297033, 7.70067959317588, 2.6630383802596174, 0.17389417380241037)));
-#elif SSMF_ACCURACY <= 30
-	// 29.9 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY3M(mantissa, 295.5483426799958, 314.56888567679255, 70.06537865918303), SSMF_VF_POLY3(mantissa, 204.85850065805658, 320.47175770570755, 140.51596951559216, 15.336379136615063)));
-#elif SSMF_ACCURACY <= 35
-	// 34.6 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY3M(mantissa, 30.243854450251835, 40.025064217078885, 13.769831477949054), SSMF_VF_POLY4(mantissa, 20.963442442273042, 38.224981487539054, 21.66920077103305, 4.026898855566918, 0.15422658886771418)));
-#elif SSMF_ACCURACY <= 39
-	// 39.0 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY4M(mantissa, 1595.0806204318492, 2439.0020100209417, 1068.383285258221, 126.60372926443013), SSMF_VF_POLY4(mantissa, 1105.6256348201953, 2243.4001835675954, 1493.7050928077551, 363.2136618696486, 24.125071910247318)));
-#elif SSMF_ACCURACY <= 44
-	// 43.7 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY4M(mantissa, 119.74289340140004, 213.29408659875025, 119.49328117018479, 22.69550774381113), SSMF_VF_POLY5(mantissa, 82.99944895327651, 189.34391923096965, 149.83190764842223, 48.28250211613345, 5.6265321930894485, 0.14145877225492806)));
-#elif SSMF_ACCURACY <= 49
-	// 48.1 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY5M(mantissa, 8426.336808061997, 16776.60921143971, 11072.581396939431, 2741.4654742215916, 202.35511756573848), SSMF_VF_POLY5(mantissa, 5840.691600956682, 14549.005174736994, 13002.533964237698, 5012.010546583294, 781.2022317764904, 34.90448993731307)));
+	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_F(0.6666666666666666));
 #else
-	// 52.7 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_DIV(SSMF_VF_POLY5M(mantissa, 492.99263760776006, 1103.7172303574434, 862.7345277878262, 278.8257574322056, 33.8438837714279), SSMF_VF_POLY6(mantissa, 341.7164567946298, 935.8967147549896, 952.0448772883889, 442.75326885669534, 93.1180223914255, 7.45235088709869, 0.1323459834352492)));
+	// 25.35 bits
+	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissa, SSMF_VF_POLY2M(mantissa, 23.333812748272985, 11.403122714939718)), SSMF_VF_POLY3(mantissa, 32.347532621404400, 23.894962279857095, 4.6644215277555199, 0.18577826364333229));
 #endif	
-	return SSMF_VF_ADD(curve, exponent);
+	return SSMF_VF_ADD(exponent, curve);
 }
 
 // log(): multiplies log2()
@@ -327,6 +299,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_MAX
 #	undef SSMF_VF_MIN
 #	undef SSMF_VF_RSHIFT_K
+#	undef SSMF_VF_LSHIFT_K
 #	undef SSMF_VF_ITOF
 #	undef SSMF_VF_ITOF_MAGIC
 #	undef SSMF_VF_FMA
