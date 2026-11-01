@@ -148,11 +148,11 @@ static void endCheck() {
 		} \
 		endCheck(); \
 		startCheck("round"); \
-		RANGE_EXP(T, x, 1e-30, 2097152) { \
+		RANGE_EXP(T, x, 1e-30, 4194304) { \
 			T y = T##_test_round(x); \
 			assertCheck(T##_test_abs(x - y) <= 0.5, x, roundl(x), y); \
 		} \
-		RANGE_EXP(T, x, 1e-30, 2097152) { \
+		RANGE_EXP(T, x, 1e-30, 4194304) { \
 			T y = T##_test_round(-x); \
 			assertCheck(T##_test_abs(-x - y) <= 0.5, -x, roundl(-x), y); \
 		} \

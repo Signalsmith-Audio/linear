@@ -7,7 +7,7 @@ It's a "function header" - explicitly designed to be included multiple times if 
 It's focused on audio DSP use, which means:
 -	approximate results - you can choose the accuracy/complexity tradeoff with `SSMF_ACCURACY`.
 -	no NaN/Inf support - anything which would produce these outputs will give nonsense
--	limited range - some functions (rounding, sin/cos/etc.) only give proper results for "small number" range (±2^21 for float, ±2^50 for double).  Outside this range their result should still be sensibly bounded, but not necessarily correct.
+-	limited range - some functions (rounding, sin/cos/etc.) only give proper results for "small number" range (±2^22 for float, ±2^51 for double).  Outside this range their result should still be sensibly bounded, but not necessarily correct.
 -	inaccurate results for subnormals - they won't be _accurate_, but should still be between f(0) and f(smallestNormal)
 
 Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).  If you set `SSMF_BITS` to either 32 or 64, then it assumes IEEE floating-point, and can cover more things.
@@ -210,7 +210,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 // SSMF_VF_ROUND_SMALL - a helper valid in the SSMF_SMALL_LIMIT
 #ifdef SSMF_VF_ROUND_SMALL
 // already exists, great
-#elif SSMF_VF_ROUND
+#elif defined(SSMF_VF_ROUND)
 #	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
 #elif defined(SSMF_VF_FLOOR)
 #	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5)))
@@ -346,6 +346,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_BARRIER_LOWBIT
 #	undef SSMF_VF_FMA
 #	undef SSMF_VF_FMAK
+#	undef SSMF_VF_LOG2
+#	undef SSMF_VF_LOG
 #	undef SSMF_VF_ROUND
 #	undef SSMF_VF_ROUND_MAGIC
 #	undef SSMF_VF_ROUND_SMALL
