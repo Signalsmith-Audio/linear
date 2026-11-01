@@ -31,6 +31,13 @@ namespace sse2 {
 #define SSMF_VF_MIN(a, b) _mm_min_ps(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(a), bits))
 #define SSMF_VF_LSHIFT_K(a, bits) _mm_castsi128_ps(_mm_slli_epi32(_mm_castps_si128(a), bits))
+#if defined(__clang__) || defined(__GNUC__)
+	inline __m128 asmBarrier(__m128 v) {
+		__asm__("" : "+x"(v)); // empty ASM block which the compiler doesn't re-associate through
+		return v;
+	}
+#	define SSMF_VF_BARRIER(v) asmBarrier(v)
+#endif
 #include "../mathfun.h"
 
 #define SSMF_BITS 64
@@ -50,6 +57,13 @@ namespace sse2 {
 #define SSMF_VF_MIN(a, b) _mm_min_pd(a, b)
 #define SSMF_VF_RSHIFT_K(a, b) _mm_castsi128_pd(_mm_srli_epi64(_mm_castpd_si128(a), b))
 #define SSMF_VF_LSHIFT_K(a, b) _mm_castsi128_pd(_mm_slli_epi64(_mm_castpd_si128(a), b))
+#if defined(__clang__) || defined(__GNUC__)
+	inline __m128d asmBarrier(__m128d v) {
+		__asm__("" : "+x"(v));
+		return v;
+	}
+#	define SSMF_VF_BARRIER(v) asmBarrier(v)
+#endif
 #include "../mathfun.h"
 
 //#ifndef DEV_NO_FALLBACK

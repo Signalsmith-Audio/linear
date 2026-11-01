@@ -96,12 +96,10 @@ Some fundamental operations are required (and they'll error if missing), but oth
 #	error "SSMF_VF_LSHIFT_K() not defined"
 #endif
 
-// If we don't have a barrier operation (to prevent reassociation), we wipe the lowest bit as protection
+// Optional: SSMF_VF_BARRIER(v) returns v unchanged, but the compiler can't reassociate maths through it (e.g. an empty `asm` block, with a register constraint for the target)
+// If we don't have one, we wipe the lowest bit as protection (only valid for values where that bit is already zero, e.g. small integers)
 #ifdef SSMF_VF_BARRIER
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_BARRIER(v)
-#elif (defined(__clang__) || defined(__GNUC__)) && !defined(SSMF_NO_ASM)
-// The compiler doesn't track maths through assembly blocks, even if they do nothing it back out.
-#	define SSMF_VF_BARRIER_LOWBIT(v) __asm__ volatile("" : "+r"(v));
 #elif SSMF_BITS == 32
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(v, SSMF_VF_I(0xFFFFFFFE))
 #elif SSMF_BITS == 64
@@ -254,7 +252,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	SSMF_VF mantissa = SSMF_VF_XOR(mantissaShifted, SSMF_VF_F(1));
 	SSMF_VF mantissaM1 = SSMF_VF_SUB(mantissa, SSMF_VF_F(1)); // We multiply by this to get exact results near 0
 	
-	// Shift everything so the is in the mantissa, and mask in an exponent which puts the exponent at an integer position.
+	// Shift everything so the exponent is in the mantissa, and mask in an exponent which puts the exponent at an integer position.
 	SSMF_VF exponentShifted = SSMF_VF_RSHIFT_K(v, exponentBits);
 	SSMF_VF exponentOffset = SSMF_VF_OR(exponentShifted, SSMF_VF_F(exponentMagic));
 	// Add 0.5 and then truncate to an integer value (with a bit-mask)
@@ -262,10 +260,10 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	// Subtract the 'magic offset' and the exponent base at the same time
 	SSMF_VF exponent = SSMF_VF_SUB(exponentRounded, SSMF_VF_F(exponentBase + exponentMagic));
 
-	// Minimax fits of log2((1+x)/2) on [-0.5, 1], with relative error, since it passes through (0, 0).
+	// Minimax fits of log2((1+m)/2)/(m-1) for m in [0.5, 2).  We multiply by (m-1) to get good results near 0.
 #if SSMF_ACCURACY <= 2 // 2.3 bits
 	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_F(0.6666666666666666));
-#else // 30.25 bits
+#else // 30.25 bits (29.2 bits measured for double)
 	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 615.07015959602082, 560.02796626919764, 97.774089410506336)), SSMF_VF_POLY3(mantissa, 615.07481238180024, 832.27477563489221, 295.01130521376648, 23.600973955242398));
 #endif
 	// Include a barrier so that exponent doesn't get reassociated, which would lose precision in our curve
@@ -300,6 +298,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_MIN
 #	undef SSMF_VF_RSHIFT_K
 #	undef SSMF_VF_LSHIFT_K
+#	undef SSMF_VF_BARRIER
 #	undef SSMF_VF_BARRIER_LOWBIT
 #	undef SSMF_VF_FMA
 #	undef SSMF_VF_FMAK
