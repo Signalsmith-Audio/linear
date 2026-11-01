@@ -60,15 +60,15 @@ private:
 			++i;
 		}
 		size_t simdEndI = i + (size - i)/4*4;
-		if (sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
+		if (sse2::Sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
 			while (i < simdEndI) {
-				__m128 v = sse2::getFloat<true>(expr, i);
+				__m128 v = sse2::Sse2::getFloat<true>(expr, i);
 				_mm_store_ps(pointer + i, v);
 				i += 4;
 			}
 		} else {
 			while (i < simdEndI) {
-				__m128 v = sse2::getFloat<false>(expr, i);
+				__m128 v = sse2::Sse2::getFloat<false>(expr, i);
 				_mm_store_ps(pointer + i, v);
 				i += 4;
 			}
@@ -88,15 +88,15 @@ private:
 			++i;
 		}
 		size_t simdEndI = i + (size - i)/2*2;
-		if (sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
+		if (sse2::Sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
 			while (i < simdEndI) {
-				__m128d v = sse2::getDouble<true>(expr, i);
+				__m128d v = sse2::Sse2::getDouble<true>(expr, i);
 				_mm_store_pd(pointer + i, v);
 				i += 2;
 			}
 		} else {
 			while (i < simdEndI) {
-				__m128d v = sse2::getDouble<false>(expr, i);
+				__m128d v = sse2::Sse2::getDouble<false>(expr, i);
 				_mm_store_pd(pointer + i, v);
 				i += 2;
 			}

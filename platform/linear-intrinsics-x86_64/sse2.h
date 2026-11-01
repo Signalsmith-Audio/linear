@@ -70,142 +70,114 @@ namespace sse2 {
 #define SSMF_NAME(fn) ssmf_##fn##d
 #include "../signalsmith-mathfun.h"
 
+	struct Sse2 {
 //#ifndef DEV_NO_FALLBACK
-	// Fallback
-	template<class Expr>
-	bool isAligned(Expr, size_t) {
-		return false;
-	}
-	template<bool aligned, class Expr>
-	__m128 getFloat(Expr expr, size_t i) {
-		return _mm_setr_ps(expr.get(i), expr.get(i + 1), expr.get(i + 2), expr.get(i + 3));
-	}
-	template<bool aligned, class Expr>
-	__m128d getDouble(Expr expr, size_t i) {
-		return _mm_setr_pd(expr.get(i), expr.get(i + 1));
-	}
+		// Fallback
+		template<class Expr>
+		static bool isAligned(Expr, size_t) {
+			return false;
+		}
+		template<bool aligned, class Expr>
+		static __m128 getFloat(Expr expr, size_t i) {
+			return _mm_setr_ps(expr.get(i), expr.get(i + 1), expr.get(i + 2), expr.get(i + 3));
+		}
+		template<bool aligned, class Expr>
+		static __m128d getDouble(Expr expr, size_t i) {
+			return _mm_setr_pd(expr.get(i), expr.get(i + 1));
+		}
 //#endif
 
-	// ReadableReal
-	template<class V>
-	bool isAligned(expression::ReadableReal<V> expr, size_t i) {
-		return (size_t(expr.pointer + i)&15) == 0;
-	}
-	template<bool aligned>
-	__m128 getFloat(expression::ReadableReal<float> expr, size_t i) {
-		if (aligned) {
-			return _mm_load_ps(expr.pointer + i);
-		} else {
-			return _mm_loadu_ps(expr.pointer + i);
+		// ReadableReal
+		template<class V>
+		static bool isAligned(expression::ReadableReal<V> expr, size_t i) {
+			return (size_t(expr.pointer + i)&15) == 0;
 		}
-	}
-	template<bool aligned>
-	__m128d getDouble(expression::ReadableReal<double> expr, size_t i) {
-		if (aligned) {
-			return _mm_load_pd(expr.pointer + i);
-		} else {
-			return _mm_loadu_pd(expr.pointer + i);
+		template<bool aligned>
+		static __m128 getFloat(expression::ReadableReal<float> expr, size_t i) {
+			if (aligned) {
+				return _mm_load_ps(expr.pointer + i);
+			} else {
+				return _mm_loadu_ps(expr.pointer + i);
+			}
 		}
-	}
-	
-	// Constant
-	template<class V>
-	bool isAligned(expression::ConstantExpr<V>, size_t) {
-		return true;
-	}
-	template<bool aligned, class V>
-	__m128 getFloat(expression::ConstantExpr<V> expr, size_t) {
-		return _mm_set1_ps(float(expr.value));
-	}
-	template<bool aligned, class V>
-	__m128d getDouble(expression::ConstantExpr<V> expr, size_t) {
-		return _mm_set1_pd(double(expr.value));
-	}
+		template<bool aligned>
+		static __m128d getDouble(expression::ReadableReal<double> expr, size_t i) {
+			if (aligned) {
+				return _mm_load_pd(expr.pointer + i);
+			} else {
+				return _mm_loadu_pd(expr.pointer + i);
+			}
+		}
+		
+		// Constant
+		template<class V>
+		static bool isAligned(expression::ConstantExpr<V>, size_t) {
+			return true;
+		}
+		template<bool aligned, class V>
+		static __m128 getFloat(expression::ConstantExpr<V> expr, size_t) {
+			return _mm_set1_ps(float(expr.value));
+		}
+		template<bool aligned, class V>
+		static __m128d getDouble(expression::ConstantExpr<V> expr, size_t) {
+			return _mm_set1_pd(double(expr.value));
+		}
 
-	// Pre-declare expressions so the implementations can reference each other
-#define SIGNALSMITH_EXPR_UNARY(Name) \
-	template<class A> \
-	bool isAligned(expression::Name<A> expr, size_t i); \
-	template<bool aligned, class A, class=ItemTypeF<A>> \
-	__m128 getFloat(expression::Name<A> expr, size_t i); \
-	template<bool aligned, class A, class=ItemTypeD<A>> \
-	__m128d getDouble(expression::Name<A> expr, size_t i);
-	SIGNALSMITH_EXPR_UNARY(Abs)
-	SIGNALSMITH_EXPR_UNARY(Norm)
-	SIGNALSMITH_EXPR_UNARY(Neg)
-	SIGNALSMITH_EXPR_UNARY(Sqrt)
-	SIGNALSMITH_EXPR_UNARY(Log)
-#undef SIGNALSMITH_EXPR_UNARY
+		// Binary expressions are aligned if both sides are
 #define SIGNALSMITH_EXPR_BINARY(Name) \
-	template<class A, class B> \
-	bool isAligned(expression::Name<A, B> expr, size_t i); \
-	template<bool aligned, class A, class B> \
-	__m128 getFloat(expression::Name<A, B> expr, size_t i); \
-	template<bool aligned, class A, class B> \
-	__m128d getDouble(expression::Name<A, B> expr, size_t i);
-	SIGNALSMITH_EXPR_BINARY(Add)
-	SIGNALSMITH_EXPR_BINARY(Sub)
-	SIGNALSMITH_EXPR_BINARY(Mul)
-	SIGNALSMITH_EXPR_BINARY(Div)
-	SIGNALSMITH_EXPR_BINARY(Max)
-	SIGNALSMITH_EXPR_BINARY(Min)
-	SIGNALSMITH_EXPR_BINARY(Dim)
-	SIGNALSMITH_EXPR_BINARY(Copysign)
+		template<class A, class B> \
+		static bool isAligned(expression::Name<A, B> expr, size_t i) { \
+			return isAligned(expr.a, i) && isAligned(expr.b, i); \
+		}
+		SIGNALSMITH_EXPR_BINARY(Add)
+		SIGNALSMITH_EXPR_BINARY(Sub)
+		SIGNALSMITH_EXPR_BINARY(Mul)
+		SIGNALSMITH_EXPR_BINARY(Div)
+		SIGNALSMITH_EXPR_BINARY(Max)
+		SIGNALSMITH_EXPR_BINARY(Min)
+		SIGNALSMITH_EXPR_BINARY(Dim)
+		SIGNALSMITH_EXPR_BINARY(Copysign)
 #undef SIGNALSMITH_EXPR_BINARY
 
-#define SIGNALSMITH_EXPR_BINARY(Name) \
-	template<class A, class B> \
-	bool isAligned(expression::Name<A, B> expr, size_t i) { \
-		return isAligned(expr.a, i) && isAligned(expr.b, i); \
-	}
-	SIGNALSMITH_EXPR_BINARY(Add)
-	SIGNALSMITH_EXPR_BINARY(Sub)
-	SIGNALSMITH_EXPR_BINARY(Mul)
-	SIGNALSMITH_EXPR_BINARY(Div)
-	SIGNALSMITH_EXPR_BINARY(Max)
-	SIGNALSMITH_EXPR_BINARY(Min)
-	SIGNALSMITH_EXPR_BINARY(Dim)
-	SIGNALSMITH_EXPR_BINARY(Copysign)
-#undef SIGNALSMITH_EXPR_BINARY
-
-	// Expressions which map neatly to a single intrinsic
+		// Expressions which map neatly to a single intrinsic
 #define SIGNALSMITH_EXPR_UNARY(Name, mmFloat, mmDouble) \
-	template<class A> \
-	bool isAligned(expression::Name<A> expr, size_t i) { \
-		return isAligned(expr.a, i); \
-	} \
-	template<bool aligned, class A, class> \
-	__m128 getFloat(expression::Name<A> expr, size_t i) { \
-		return mmFloat(getFloat<aligned>(expr.a, i)); \
-	} \
-	template<bool aligned, class A, class B> \
-	__m128d getDouble(expression::Name<A> expr, size_t i) { \
-		return mmDouble(getDouble<aligned>(expr.a, i)); \
-	}
-	SIGNALSMITH_EXPR_UNARY(Norm, ssmf_pow2f, ssmf_pow2d)
-	SIGNALSMITH_EXPR_UNARY(Abs, ssmf_absf, ssmf_absd)
-	SIGNALSMITH_EXPR_UNARY(Neg, ssmf_negf, ssmf_negd)
-	SIGNALSMITH_EXPR_UNARY(Sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
-	SIGNALSMITH_EXPR_UNARY(Log, ssmf_logf, ssmf_logd)
+		template<class A> \
+		static bool isAligned(expression::Name<A> expr, size_t i) { \
+			return isAligned(expr.a, i); \
+		} \
+		template<bool aligned, class A, class=ItemTypeF<A>> \
+		static __m128 getFloat(expression::Name<A> expr, size_t i) { \
+			return mmFloat(getFloat<aligned>(expr.a, i)); \
+		} \
+		template<bool aligned, class A, class=ItemTypeD<A>> \
+		static __m128d getDouble(expression::Name<A> expr, size_t i) { \
+			return mmDouble(getDouble<aligned>(expr.a, i)); \
+		}
+		SIGNALSMITH_EXPR_UNARY(Norm, ssmf_pow2f, ssmf_pow2d)
+		SIGNALSMITH_EXPR_UNARY(Abs, ssmf_absf, ssmf_absd)
+		SIGNALSMITH_EXPR_UNARY(Neg, ssmf_negf, ssmf_negd)
+		SIGNALSMITH_EXPR_UNARY(Sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
+		SIGNALSMITH_EXPR_UNARY(Log, ssmf_logf, ssmf_logd)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
-	template<bool aligned, class A, class B> \
-	__m128 getFloat(expression::Name<A, B> expr, size_t i) { \
-		return mmFloat(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i)); \
-	} \
-	template<bool aligned, class A, class B> \
-	__m128d getDouble(expression::Name<A, B> expr, size_t i) { \
-		return mmDouble(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i)); \
-	}
-	SIGNALSMITH_EXPR_BINARY(Add, _mm_add_ps, _mm_add_pd)
-	SIGNALSMITH_EXPR_BINARY(Sub, _mm_sub_ps, _mm_sub_pd)
-	SIGNALSMITH_EXPR_BINARY(Mul, _mm_mul_ps, _mm_mul_pd)
-	SIGNALSMITH_EXPR_BINARY(Div, _mm_div_ps, _mm_div_pd)
-	SIGNALSMITH_EXPR_BINARY(Max, _mm_max_ps, _mm_max_pd)
-	SIGNALSMITH_EXPR_BINARY(Min, _mm_min_ps, _mm_min_pd)
-	SIGNALSMITH_EXPR_BINARY(Dim, ssmf_dimf, ssmf_dimd)
-	SIGNALSMITH_EXPR_BINARY(Copysign, ssmf_copysignf, ssmf_copysignd)
+		template<bool aligned, class A, class B> \
+		static __m128 getFloat(expression::Name<A, B> expr, size_t i) { \
+			return mmFloat(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i)); \
+		} \
+		template<bool aligned, class A, class B> \
+		static __m128d getDouble(expression::Name<A, B> expr, size_t i) { \
+			return mmDouble(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i)); \
+		}
+		SIGNALSMITH_EXPR_BINARY(Add, _mm_add_ps, _mm_add_pd)
+		SIGNALSMITH_EXPR_BINARY(Sub, _mm_sub_ps, _mm_sub_pd)
+		SIGNALSMITH_EXPR_BINARY(Mul, _mm_mul_ps, _mm_mul_pd)
+		SIGNALSMITH_EXPR_BINARY(Div, _mm_div_ps, _mm_div_pd)
+		SIGNALSMITH_EXPR_BINARY(Max, _mm_max_ps, _mm_max_pd)
+		SIGNALSMITH_EXPR_BINARY(Min, _mm_min_ps, _mm_min_pd)
+		SIGNALSMITH_EXPR_BINARY(Dim, ssmf_dimf, ssmf_dimd)
+		SIGNALSMITH_EXPR_BINARY(Copysign, ssmf_copysignf, ssmf_copysignd)
 #undef SIGNALSMITH_EXPR_BINARY
+	};
 }
 
 }}; // namespace
