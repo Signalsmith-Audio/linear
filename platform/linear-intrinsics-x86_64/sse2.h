@@ -38,7 +38,7 @@ namespace sse2 {
 	}
 #	define SSMF_VF_BARRIER(v) asmBarrier(v)
 #endif
-#include "../mathfun.h"
+#include "../signalsmith-mathfun.h"
 
 #define SSMF_BITS 64
 #define SSMF_VF __m128d
@@ -64,7 +64,7 @@ namespace sse2 {
 	}
 #	define SSMF_VF_BARRIER(v) asmBarrier(v)
 #endif
-#include "../mathfun.h"
+#include "../signalsmith-mathfun.h"
 
 //#ifndef DEV_NO_FALLBACK
 	// Fallback
