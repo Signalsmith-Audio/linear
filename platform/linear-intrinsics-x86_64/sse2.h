@@ -30,7 +30,7 @@ namespace sse2 {
 #define SSMF_VF_MAX(a, b) _mm_max_ps(a, b)
 #define SSMF_VF_MIN(a, b) _mm_min_ps(a, b)
 #define SSMF_VF_RSHIFT_K(a, bits) _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(a), bits))
-#define SSMF_VF_ITOF(a) _mm_cvtepi32_ps(_mm_castps_si128(a))
+#define SSMF_VF_LSHIFT_K(a, bits) _mm_castsi128_ps(_mm_slli_epi32(_mm_castps_si128(a), bits))
 #include "../mathfun.h"
 
 #define SSMF_BITS 64
@@ -49,6 +49,7 @@ namespace sse2 {
 #define SSMF_VF_MAX(a, b) _mm_max_pd(a, b)
 #define SSMF_VF_MIN(a, b) _mm_min_pd(a, b)
 #define SSMF_VF_RSHIFT_K(a, b) _mm_castsi128_pd(_mm_srli_epi64(_mm_castpd_si128(a), b))
+#define SSMF_VF_LSHIFT_K(a, b) _mm_castsi128_pd(_mm_slli_epi64(_mm_castpd_si128(a), b))
 #include "../mathfun.h"
 
 //#ifndef DEV_NO_FALLBACK

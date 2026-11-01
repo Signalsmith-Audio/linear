@@ -21,6 +21,8 @@ Tests mathfun.h using plain scalars, checking each function is no more than 1 bi
 #	define TEST_FLOAT (TEST_ACCURACY <= 22)
 #endif
 
+#define SSMF_NO_ASM // This disables `__asm__` blocks used for anti-reassociation barriers on GCC/Clang, since the fallback has some (hopefully harmless) side-effects we should test
+
 #if TEST_FLOAT
 #define SSMF_ACCURACY TEST_ACCURACY
 #define SSMF_NAME(fn) float_test_##fn
@@ -165,12 +167,18 @@ static void endCheck() {
 		RANGE_LINEAR(T, x, 0.9, 1.1) { \
 			test(x, log2l(x), T##_test_log2(x)); \
 		} \
+		RANGE_LINEAR(T, x, 0.999, 1.111) { \
+			test(x, log2l(x), T##_test_log2(x)); \
+		} \
 		endCheck(); \
 		startCheck("log"); \
 		RANGE_EXP(T, x, 1e-30, 1e30) { \
 			test(x, logl(x), T##_test_log(x)); \
 		} \
 		RANGE_LINEAR(T, x, 0.9, 1.1) { \
+			test(x, logl(x), T##_test_log(x)); \
+		} \
+		RANGE_LINEAR(T, x, 0.999, 1.111) { \
 			test(x, logl(x), T##_test_log(x)); \
 		} \
 		endCheck(); \

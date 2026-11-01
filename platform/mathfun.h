@@ -1,10 +1,14 @@
 /* Copyright 2026 Geraint Luff / Signalsmith Audio Ltd.
 
-This header defines floating-point functions, given #defines for the basic operations (constants, arithmetic, bitwise).
+This header defines floating-point functions, given #defines for the basic operations (constants, arithmetic, bitwise).  It is focused on audio DSP use - this means:
+-	approximate results - you can choose the accuracy/complexity tradeoff with `SSMF_ACCURACY`.
+-	no NaN/Inf support - anything which would produce these outputs will give nonsense
+-	inaccurate results for subnormals - they won't be _nonsense_, but should give results anywhere between f(0) and f(smallestNormal)
+-	limited range for trig functions - results beyond the "small integer" range (exactly representable as floats, e.g. 2^23) will be off for sin/cos/etc., but they won't be invalid (i.e. sin/cos still in the [-1, 1] range)
 
-It's a "function header" - explicitly designed to be included multiple times if needed.  You define various `SSMF_...` macros, and these are un-defined by this header.  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
+It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
 
-Some of these fundamental operations are required (and they'll error), but others are optional and the implementation will work around that.
+Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).
 */
 
 #ifndef SSMF_ACCURACY
@@ -95,6 +99,9 @@ Some of these fundamental operations are required (and they'll error), but other
 // If we don't have a barrier operation (to prevent reassociation), we wipe the lowest bit as protection
 #ifdef SSMF_VF_BARRIER
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_BARRIER(v)
+#elif (defined(__clang__) || defined(__GNUC__)) && !defined(SSMF_NO_ASM)
+// The compiler doesn't track maths through assembly blocks, even if they do nothing it back out.
+#	define SSMF_VF_BARRIER_LOWBIT(v) __asm__ volatile("" : "+r"(v));
 #elif SSMF_BITS == 32
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(v, SSMF_VF_I(0xFFFFFFFE))
 #elif SSMF_BITS == 64
@@ -225,12 +232,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 	return SSMF_VF_OR(SSMF_VF_ANDNOT(mask, a), SSMF_VF_AND(mask, b));
 }
 
-// log(): Pulls out exponent and mantissa, converting both to float
+// log2(): splits into exponent and mantissa using bitwise ops, then applies a curve to the mantissa
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
-//#ifdef SSMF_VF_GET_EM
-//SSMF_VF exponent, mantissa;
-//SSMF_VF_GET_EM(v, exponent, mantissa);
-//#else
 #if SSMF_BITS == 32
 	const int mantissaMaskInt = 0x007FFFFF;
 	const int exponentBits = 8, exponentMagic = 256, exponentRoundingMask = 511;
@@ -246,24 +249,26 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	SSMF_VF mantissaMasked = SSMF_VF_AND(v, SSMF_VF_I(mantissaMaskInt));
 	// Left-shift by 1 - this moves one bit into the exponent, and doubles the remainder
 	SSMF_VF mantissaShifted = SSMF_VF_LSHIFT_K(mantissaMasked, 1);
-	// Exponent for 2^0 -> 0b0111111, so the shifted bit halves the higher mantissa value essentially centering it on 1
-	SSMF_VF mantissa1 = SSMF_VF_XOR(mantissaShifted, SSMF_VF_F(1));
-	SSMF_VF mantissa = SSMF_VF_SUB(mantissa1, SSMF_VF_F(1)); // -0.5 to 1
+	// XOR with 1.0 sets the exponent to 0b011...11 (2^0), or 0b011...10 (2^-1) depending on the top mantissa bit
+	// This maps [1.5, 2) -> [0.5, 1), and [1, 1.5) -> [1, 2), so it's centered(-ish) on 1
+	SSMF_VF mantissa = SSMF_VF_XOR(mantissaShifted, SSMF_VF_F(1));
+	SSMF_VF mantissaM1 = SSMF_VF_SUB(mantissa, SSMF_VF_F(1)); // We multiply by this to get exact results near 0
 	
+	// Shift everything so the is in the mantissa, and mask in an exponent which puts the exponent at an integer position.
 	SSMF_VF exponentShifted = SSMF_VF_RSHIFT_K(v, exponentBits);
 	SSMF_VF exponentOffset = SSMF_VF_OR(exponentShifted, SSMF_VF_F(exponentMagic));
+	// Add 0.5 and then truncate to an integer value (with a bit-mask)
 	SSMF_VF exponentRounded = SSMF_VF_AND(SSMF_VF_ADD(exponentOffset, SSMF_VF_F(0.5)), SSMF_VF_F(exponentRoundingMask));
+	// Subtract the 'magic offset' and the exponent base at the same time
 	SSMF_VF exponent = SSMF_VF_SUB(exponentRounded, SSMF_VF_F(exponentBase + exponentMagic));
-//#endif
 
-	// Minimax fits of log2(1+x/2) on [-0.5, 1], with relative error, since it passes through (0, 0).
-#if SSMF_ACCURACY <= 2
-	// 1.7 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissa, SSMF_VF_F(0.6666666666666666));
-#else
-	// 25.35 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissa, SSMF_VF_POLY2M(mantissa, 23.333812748272985, 11.403122714939718)), SSMF_VF_POLY3(mantissa, 32.347532621404400, 23.894962279857095, 4.6644215277555199, 0.18577826364333229));
+	// Minimax fits of log2((1+x)/2) on [-0.5, 1], with relative error, since it passes through (0, 0).
+#if SSMF_ACCURACY <= 2 // 2.3 bits
+	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_F(0.6666666666666666));
+#else // 30.25 bits
+	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 615.07015959602082, 560.02796626919764, 97.774089410506336)), SSMF_VF_POLY3(mantissa, 615.07481238180024, 832.27477563489221, 295.01130521376648, 23.600973955242398));
 #endif
+	// Include a barrier so that exponent doesn't get reassociated, which would lose precision in our curve
 	return SSMF_VF_ADD(SSMF_VF_BARRIER_LOWBIT(exponent), curve);
 }
 
