@@ -89,7 +89,7 @@ static uint32_t floatAsInt(float f) {
 #ifdef TEST_FMA
 #	define SSMF_VF_FMA(a, b, c) fmaf(a, b, c)
 #endif
-#include "./mathfun.h"
+#include "./signalsmith-mathfun.h"
 #endif
 
 #define SSMF_ACCURACY TEST_ACCURACY
@@ -133,7 +133,7 @@ static uint64_t doubleAsInt(double d) {
 #ifdef TEST_FMA
 #	define SSMF_VF_FMA(a, b, c) fma(a, b, c)
 #endif
-#include "./mathfun.h"
+#include "./signalsmith-mathfun.h"
 
 static int returnCode = 0;
 

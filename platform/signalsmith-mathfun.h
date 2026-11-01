@@ -1,5 +1,8 @@
 /* Copyright 2026 Geraint Luff / Signalsmith Audio Ltd.
 
+SIGNALSMITH MATHFUN
+-------------------
+
 This header defines common floating-point functions, given #defines for the basic operations (constants, arithmetic, bitwise).  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
 
 It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.
