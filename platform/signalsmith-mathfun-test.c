@@ -199,6 +199,23 @@ static void endCheck() {
 }
 
 // Neighbouring values, for testing edge-cases
+#define SSMF_TEST_PI 3.141592653589793238462643383279502884L
+// x/pi rounded to T (volatile so fast-math can't keep extra precision), which is what sin()/cos() are accurate for
+static inline float float_halfTurns(float x) {volatile float t = x*0.31830988618379067f; return t;}
+static inline double double_halfTurns(double x) {volatile double t = x*0.31830988618379067; return t;}
+// sin(pi*t) and cos(pi*t), reduced exactly first so that integer/half-integer t gives exact zeros
+// (volatile steps, so fast-math can't reassociate the exact reduction)
+static long double refSinPi(long double t) {
+	volatile long double k = roundl(t), f = t - k;
+	long double r = sinl(SSMF_TEST_PI*f);
+	return (fmodl(k, 2) == 0) ? r : -r;
+}
+static long double refCosPi(long double t) {
+	volatile long double k = roundl(t), f = t - k;
+	volatile long double fCos = 0.5L - fabsl(f); // cosl() near pi/2 would lose relative accuracy
+	long double r = sinl(SSMF_TEST_PI*fCos);
+	return (fmodl(k, 2) == 0) ? r : -r;
+}
 static inline float float_nextDown(float x) {return nextafterf(x, -1e30f);}
 static inline float float_nextUp(float x) {return nextafterf(x, 1e30f);}
 static inline double double_nextDown(double x) {return nextafter(x, -1e300);}
@@ -309,6 +326,40 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		startCheck("exp"); /* small (epsilon-level) errors when scaling the argument compound into large relative errors in the result very quickly. */ \
 		RANGE_LINEAR(T, x, -4, 4) { \
 			test(x, expl(x), T##_test_exp(x)); \
+		} \
+		endCheck(); \
+		/* sin/cos are backward-accurate: compared against the exact value for (x/pi rounded to T) */ \
+		startCheck("sin"); \
+		RANGE_LINEAR(T, x, -10, 10) { \
+			test(x, refSinPi(T##_halfTurns(x)), T##_test_sin(x)); \
+		} \
+		RANGE_EXP(T, x, 1e-30, 1e6) { \
+			test(x, refSinPi(T##_halfTurns(x)), T##_test_sin(x)); \
+			test(-x, refSinPi(T##_halfTurns(-x)), T##_test_sin(-x)); \
+		} \
+		endCheck(); \
+		startCheck("cos"); \
+		RANGE_LINEAR(T, x, -10, 10) { \
+			test(x, refCosPi(T##_halfTurns(x)), T##_test_cos(x)); \
+		} \
+		RANGE_EXP(T, x, 1e-30, 1e6) { \
+			test(x, refCosPi(T##_halfTurns(x)), T##_test_cos(x)); \
+			test(-x, refCosPi(T##_halfTurns(-x)), T##_test_cos(-x)); \
+		} \
+		for (T k = -100; k <= 100; ++k) { /* either side of cos()'s zeros */ \
+			T edge = (T)((k + 0.5L)*SSMF_TEST_PI); \
+			T below = T##_nextDown(edge), above = T##_nextUp(edge); \
+			test(below, refCosPi(T##_halfTurns(below)), T##_test_cos(below)); \
+			test(above, refCosPi(T##_halfTurns(above)), T##_test_cos(above)); \
+		} \
+		endCheck(); \
+		startCheck("sincos"); /* same as sin() and cos(), and bounded for all inputs */ \
+		RANGE_EXP(T, x, 1e-30, 1e30) { \
+			T s, c; \
+			T##_test_sincos(x, &s, &c); \
+			assertCheck(s == T##_test_sin(x) && c == T##_test_cos(x) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, x, sinl(x), s); \
+			T##_test_sincos(-x, &s, &c); \
+			assertCheck(s == T##_test_sin(-x) && c == T##_test_cos(-x) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, -x, sinl(-x), s); \
 		} \
 		endCheck(); \
 	}

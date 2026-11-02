@@ -338,7 +338,7 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_BINARY(Copysign)
 #undef SIGNALSMITH_EXPR_BINARY
 
-		// Expressions which map neatly to a single intrinsic
+		// Expressions which map neatly to a single intrinsic or SSMF function
 #define SIGNALSMITH_EXPR_UNARY(Name, mmFloat, mmDouble) \
 		template<class A> \
 		static bool isAligned(expression::Name<A> expr) { \
@@ -360,6 +360,8 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_UNARY(Log2, ssmf_log2f, ssmf_log2d)
 		SIGNALSMITH_EXPR_UNARY(Exp, ssmf_expf, ssmf_expd)
 		SIGNALSMITH_EXPR_UNARY(Exp2, ssmf_exp2f, ssmf_exp2d)
+		SIGNALSMITH_EXPR_UNARY(Sin, ssmf_sinf, ssmf_sind)
+		SIGNALSMITH_EXPR_UNARY(Cos, ssmf_cosf, ssmf_cosd)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
 		template<bool aligned, class A, class B> \

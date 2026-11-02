@@ -425,7 +425,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 	const double minInput = -1022, maxInput = 1023.4990234375; // 1023.5 - 2^-10
 	const double exponentMagic = 6755399441056767LL; // 1.5 * 2^52 + 1023
 #	else
-#		error "exp2() only currently implemented for 32/64-bit IEEE"
+#		error "Need SSMF_VF_EXP2 (or SSMF_VF_EXP) if it's not 32/64-bit IEEE"
 #	endif
 	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(minInput)), SSMF_VF_F(maxInput));
 #	if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
@@ -451,6 +451,78 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
 	return SSMF_VF_EXP(v);
 #else
 	return SSMF_NAME(exp2)(SSMF_VF_MUL(v, SSMF_VF_F(1.4426950408889634)));
+#endif
+}
+
+// Minimax fits (relative error, exact at 0 and 0.5) of sin(pi*x) for x in [-0.5, 0.5], as x*R(x^2)
+#if SSMF_ACCURACY <= 12 // 12.90 bits
+#	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY2(SSMF_NAME(pow2)(x), 3.1411817285078589, -5.1429482766351837, 2.3128854504149916))
+#elif SSMF_ACCURACY <= 19 // 19.81 bits
+#	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY3(SSMF_NAME(pow2)(x), 3.1415892427046948, -5.1673288792131951, 2.5431271472385792, -0.55695805464366632))
+#elif SSMF_ACCURACY <= 27 // 27.32 bits
+#	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY4(SSMF_NAME(pow2)(x), 3.1415926348152059, -5.1677093833321717, 2.5500629779986133, -0.59819434984554865, 0.077455771970641532))
+#elif SSMF_ACCURACY <= 35 // 35.32 bits
+#	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY5(SSMF_NAME(pow2)(x), 3.1415926535164558, -5.1677127605906739, 2.5501631866993848, -0.59925067544734356, 0.082043239676703253, -0.0070165899481767621))
+#elif SSMF_ACCURACY <= 43 // 43.74 bits
+#	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY6(SSMF_NAME(pow2)(x), 3.1415926535895795, -5.1677127799718461, 2.5501640351428065, -0.59926442064757834, 0.082144690016877714, -0.00736362525866892, 0.0004469739032907512))
+#else // 52.54 bits
+#	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY7(SSMF_NAME(pow2)(x), 3.1415926535897927, -5.1677127800497376, 2.5501640398587706, -0.59926452874991076, 0.082145877942630272, -0.0073703591181299528, 0.00046597160939952696, -2.1115717814228518e-05))
+#endif
+
+// sincos(): reduces to half-turns t = k + f (k an integer, |f| <= 0.5), so sin(pi*t) = (-1)^k sin(pi*f) and cos(pi*t) = (-1)^k sin(pi*(0.5 - |f|))
+// This is only backward-accurate: it computes sin/cos of (v/pi rounded), so e.g. sin(float(pi)) = 0
+SSMF_ATTRIBUTES SSMF_INLINE void SSMF_NAME(sincos)(SSMF_VF v, SSMF_VF *sinOut, SSMF_VF *cosOut) {
+#if defined(SSMF_VF_SINCOS)
+	SSMF_VF_SINCOS(v, sinOut, cosOut);
+#elif defined(SSMF_VF_SIN) && defined(SSMF_VF_COS)
+	*sinOut = SSMF_VF_SIN(v);
+	*cosOut = SSMF_VF_COS(v);
+#else
+#	if SSMF_BITS == 32
+	const int signShift = 31;
+	const float parityMagic = 12582912; // 1.5 * 2^23
+#	elif SSMF_BITS == 64
+	const int signShift = 63;
+	const double parityMagic = 6755399441055744; // 1.5 * 2^52
+#	else
+#		error "need SSMF_VF_SINCOS (or _SIN/_COS pair) if not 32/64-bit IEEE"
+#	endif
+	SSMF_VF t = SSMF_VF_MUL(v, SSMF_VF_F(0.31830988618379067)); // 1/pi
+	// Clamp to the "small" range
+	t = SSMF_VF_MIN(SSMF_VF_MAX(t, SSMF_VF_F(-SSMF_ROUND_LIMIT)), SSMF_VF_F(SSMF_ROUND_LIMIT));
+	SSMF_VF k = SSMF_VF_ROUND_SMALL(t);
+	SSMF_VF f = SSMF_VF_SUB(t, k); // exact
+	// Add to a magic constant, then bit-shift to move final mantissa bit (1s unit) -> sign bit
+	SSMF_VF sign = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(k, SSMF_VF_F(parityMagic)), signShift);
+	// Intermediate rounding can push it slightly outside the correct range, so we clamp again
+	SSMF_VF sinCurve = SSMF_VF_SINPI_SMALL(f);
+	*sinOut = SSMF_VF_XOR(SSMF_VF_MIN(SSMF_VF_MAX(sinCurve, SSMF_VF_F(-1)), SSMF_VF_F(1)), sign);
+	// 0.5 - |f| is exact near cos()'s zeros (|f| near 0.5), so cos() keeps its relative accuracy there
+	SSMF_VF fCos = SSMF_VF_SUB(SSMF_VF_F(0.5), SSMF_NAME(abs)(f));
+	SSMF_VF cosCurve = SSMF_VF_SINPI_SMALL(fCos); // fCos >= 0, so this can't be below 0
+	*cosOut = SSMF_VF_XOR(SSMF_VF_MIN(cosCurve, SSMF_VF_F(1)), sign);
+#endif
+}
+
+// sin(): sincos() with the cosine part unused (and optimised away)
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sin)(SSMF_VF v) {
+#if defined(SSMF_VF_SIN)
+	return SSMF_VF_SIN(v);
+#else
+	SSMF_VF s, c;
+	SSMF_NAME(sincos)(v, &s, &c);
+	return s;
+#endif
+}
+
+// cos(): sincos() with the sine part unused (and optimised away)
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
+#if defined(SSMF_VF_COS)
+	return SSMF_VF_COS(v);
+#else
+	SSMF_VF s, c;
+	SSMF_NAME(sincos)(v, &s, &c);
+	return c;
 #endif
 }
 
@@ -489,6 +561,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
 #	undef SSMF_VF_LOG
 #	undef SSMF_VF_EXP2
 #	undef SSMF_VF_EXP
+#	undef SSMF_VF_SIN
+#	undef SSMF_VF_COS
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES
@@ -529,3 +603,4 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
 #undef SSMF_VF_ROUND_MAGIC
 #undef SSMF_VF_ROUND_SMALL
 #undef SSMF_VF_EXP2_SMALL
+#undef SSMF_VF_SINPI_SMALL
