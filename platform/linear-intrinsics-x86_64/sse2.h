@@ -266,7 +266,7 @@ namespace sse2 {
 		template<bool aligned>
 		static ComplexFloat getCFloat(expression::ReadableComplex<float> expr, size_t i) {
 			// Two interleaved sets
-			const float *fPtr = reinterpret_cast<float *>(expr.pointer + i);
+			const float *fPtr = reinterpret_cast<const float *>(expr.pointer + i);
 			__m128 a = aligned ? _mm_load_ps(fPtr) : _mm_loadu_ps(fPtr);
 			__m128 b = aligned ? _mm_load_ps(fPtr + 4) : _mm_loadu_ps(fPtr + 4);
 			// de-interleave
@@ -275,24 +275,24 @@ namespace sse2 {
 			return {re, im};
 		}
 		template<bool aligned>
-		static ComplexDouble getDouble(expression::ReadableComplex<double> expr, size_t i) {
+		static ComplexDouble getCDouble(expression::ReadableComplex<double> expr, size_t i) {
 			// Two interleaved sets
-			const double *fPtr = reinterpret_cast<double *>(expr.pointer + i);
-			__m128d a = aligned ? _mm_load_pd(fPtr) : _mm_loadu_pd(fPtr);
-			__m128d b = aligned ? _mm_load_pd(fPtr + 2) : _mm_loadu_pd(fPtr + 2);
+			const double *dPtr = reinterpret_cast<const double *>(expr.pointer + i);
+			__m128d a = aligned ? _mm_load_pd(dPtr) : _mm_loadu_pd(dPtr);
+			__m128d b = aligned ? _mm_load_pd(dPtr + 2) : _mm_loadu_pd(dPtr + 2);
 			// de-interleave
-			__m128d re = _mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0)); // r0 r1 r2 r3
-			__m128d im = _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1)); // i0 i1 i2 i3
+			__m128d re = _mm_unpacklo_pd(a, b); // r0 r1
+			__m128d im = _mm_unpackhi_pd(a, b); // i0 i1
 			return {re, im};
 		}
 
 		// ReadableSplit
 		template<class V>
-		static bool isAligned(expression::ReadableReal<V> expr) {
+		static bool isAligned(expression::ReadableSplit<V> expr) {
 			return pointerAligned(expr.pointer.real) && pointerAligned(expr.pointer.imag);
 		}
 		template<bool aligned>
-		static ComplexFloat getFloat(expression::ReadableSplit<float> expr, size_t i) {
+		static ComplexFloat getCFloat(expression::ReadableSplit<float> expr, size_t i) {
 			if (aligned) {
 				return {_mm_load_ps(expr.pointer.real + i), _mm_load_ps(expr.pointer.imag + i)};
 			} else {
@@ -300,7 +300,7 @@ namespace sse2 {
 			}
 		}
 		template<bool aligned>
-		static ComplexDouble getDouble(expression::ReadableSplit<double> expr, size_t i) {
+		static ComplexDouble getCDouble(expression::ReadableSplit<double> expr, size_t i) {
 			if (aligned) {
 				return {_mm_load_pd(expr.pointer.real + i), _mm_load_pd(expr.pointer.imag + i)};
 			} else {
