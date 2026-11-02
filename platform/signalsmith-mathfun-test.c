@@ -10,6 +10,7 @@ Optional ops can be switched on to test their routes:
 	TEST_FLOOR: SSMF_VF_FLOOR (floor)
 	TEST_BARRIER: SSMF_VF_BARRIER (empty `asm` block, GCC/Clang only)
 	TEST_FMA: SSMF_VF_FMA (fma)
+	TEST_LOGEXP / TEST_LOGEXP2: uses a reference log/exp, to test conversion between bases
 */
 #include <stdio.h>
 #include <stdint.h>
@@ -85,6 +86,14 @@ static uint32_t floatAsInt(float f) {
 #	ifdef TEST_BARRIER
 #		define SSMF_VF_BARRIER(v) testBarrierF(v)
 #	endif
+#	ifdef TEST_LOGEXP2
+#		define SSMF_VF_LOG2(v) log2f(v)
+#		define SSMF_VF_EXP2(v) exp2f(v)
+#	endif
+#	ifdef TEST_LOGEXP
+#		define SSMF_VF_LOG(v) logf(v)
+#		define SSMF_VF_EXP(v) expf(v)
+#	endif
 #	ifdef TEST_FMA
 #		define SSMF_VF_FMA(a, b, c) fmaf(a, b, c)
 #	endif
@@ -131,6 +140,17 @@ static uint64_t doubleAsInt(double d) {
 #endif
 #ifdef TEST_BARRIER
 #	define SSMF_VF_BARRIER(v) testBarrierD(v)
+#endif
+#ifdef TEST_LOGEXP2
+#	define SSMF_VF_LOG2(v) log2l(v)
+#	define SSMF_VF_EXP2(v) exp2l(v)
+#	define SMALL_LOG2_RANGE 0
+#else
+#	define SMALL_LOG2_RANGE 1
+#endif
+#ifdef TEST_LOGEXP
+#	define SSMF_VF_LOG(v) logl(v)
+#	define SSMF_VF_EXP(v) expl(v)
 #endif
 #ifdef TEST_FMA
 #	define SSMF_VF_FMA(a, b, c) fma(a, b, c)
@@ -276,13 +296,13 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("exp2"); \
-		RANGE_LINEAR(T, x, (sizeof(T) == 4 ? -126 : -1022), (sizeof(T) == 4 ? 127 : 1023)) { \
+		RANGE_LINEAR(T, x, (SMALL_LOG2_RANGE ? -3 : sizeof(T) == 4 ? -126 : -1022), (SMALL_LOG2_RANGE ? 3 : sizeof(T) == 4 ? 127 : 1023)) { \
 			test(x, exp2l(x), T##_test_exp2(x)); \
 		} \
 		RANGE_LINEAR(T, x, -2, 2) { \
 			test(x, exp2l(x), T##_test_exp2(x)); \
 		} \
-		for (T k = -100; k <= 100; ++k) { \
+		if (!SMALL_LOG2_RANGE) for (T k = -100; k <= 100; ++k) { \
 			test(k, exp2l(k), T##_test_exp2(k)); \
 			T below = T##_nextDown(k + (T)0.5), above = T##_nextUp(k + (T)0.5); \
 			test(below, exp2l(below), T##_test_exp2(below)); \
@@ -313,6 +333,12 @@ int main(void) {
 #endif
 #ifdef TEST_FMA
 		" FMA"
+#endif
+#ifdef TEST_LOGEXP
+		" LOG/EXP"
+#endif
+#ifdef TEST_LOGEXP2
+		" LOG2/EXP2"
 #endif
 #ifdef __FAST_MATH__
 		" (fast-math)"

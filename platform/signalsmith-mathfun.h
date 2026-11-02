@@ -309,17 +309,18 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	return SSMF_VF_LOG2(v);
 #elif defined(SSMF_VF_LOG)
 	return SSMF_VF_MUL(SSMF_VF_LOG(v), SSMF_VF_F(1.4426950408889634));
-#elif SSMF_BITS == 32
+#else
+#	if SSMF_BITS == 32
 	const int mantissaMaskInt = 0x007FFFFF;
 	const int exponentBits = 8, exponentMagic = 256, exponentRoundingMask = 511;
 	const float exponentBase = 127;
-#elif SSMF_BITS == 64
+#	elif SSMF_BITS == 64
 	const long long mantissaMaskInt = 0x000FFFFFFFFFFFFFLL;
 	const int exponentBits = 11, exponentMagic = 2048, exponentRoundingMask = 4095;
 	const double exponentBase = 1023;
-#else
-#	error "log2() only currently implemented for 32/64-bit IEEE"
-#endif
+#	else
+#		error "log2() only currently implemented for 32/64-bit IEEE"
+#	endif
 	// Trim to just the mantissa bits
 	SSMF_VF mantissaMasked = SSMF_VF_AND(v, SSMF_VF_I(mantissaMaskInt));
 	// Left-shift by 1 - this moves one bit into the exponent, and doubles the remainder
@@ -338,15 +339,16 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	SSMF_VF exponent = SSMF_VF_SUB(exponentRounded, SSMF_VF_F(exponentBase + exponentMagic));
 
 	// Minimax fits of log2((1+m)/2)/(m-1) for m in [0.5, 2).  We multiply by (m-1) to get good results near 0.
-#if SSMF_ACCURACY <= 2 // 2.3 bits
+#	if SSMF_ACCURACY <= 2 // 2.3 bits
 	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_F(0.6666666666666666));
-#elif SSMF_ACCURACY <= 30 // 30.25 bits
+#	elif SSMF_ACCURACY <= 30 // 30.25 bits
 	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 615.07015959602082, 560.02796626919764, 97.774089410506336)), SSMF_VF_POLY3(mantissa, 615.07481238180024, 832.27477563489221, 295.01130521376648, 23.600973955242398));
-#else // 53.16 bits
+#	else // 53.16 bits
 	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5M(mantissa, 1539.9494490315810, 3012.7926448644623, 1985.4447244334174, 516.40343770651331, 47.614385556181886)), SSMF_VF_POLY6(mantissa, 1539.9494508493095, 3694.5206013958506, 3191.8801514383296, 1211.3930558551092, 197.70059821180519, 11.549109887146420, 0.13957288228854357));
-#endif
+#	endif
 	// Include a barrier so that exponent doesn't get reassociated, which would lose precision in our curve
 	return SSMF_VF_ADD(SSMF_VF_BARRIER_LOWBIT(exponent), curve);
+#endif
 }
 
 // log(): multiplies log2() if not otherwise defined
@@ -392,31 +394,31 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 	SSMF_VF fraction = SSMF_VF_SUB(v, integer);
 
 	// Minimax fits (relative error, exact at 0) of 2^x for x in [-0.5, 0.5], some of which are R(x)^2
-#if SSMF_ACCURACY <= 4 // 4.13 bits
+#	if SSMF_ACCURACY <= 4 // 4.13 bits
 	SSMF_VF curve = SSMF_VF_POLY1(fraction, 1, 0.66666666666666663);
-#elif SSMF_ACCURACY <= 8 // 8.99 bits
+#	elif SSMF_ACCURACY <= 8 // 8.99 bits
 	SSMF_VF curve = SSMF_VF_POLY2(fraction, 1, 0.70294179397838641, 0.23986402898051107);
-#elif SSMF_ACCURACY <= 13 // 13.27 bits
+#	elif SSMF_ACCURACY <= 13 // 13.27 bits
 	SSMF_VF curve = SSMF_VF_POLY3(fraction, 1, 0.69328292709619788, 0.24221095927271177, 0.055008931130349735);
-#elif SSMF_ACCURACY <= 18 // 18.44 bits
+#	elif SSMF_ACCURACY <= 18 // 18.44 bits
 	SSMF_VF curve = SSMF_VF_POLY4(fraction, 1, 0.69312419341797848, 0.24024098609879685, 0.0559064245957012, 0.0095828530962366633);
-#elif SSMF_ACCURACY <= 23 // 23.38 bits
+#	elif SSMF_ACCURACY <= 23 // 23.38 bits
 	SSMF_VF curve = SSMF_VF_POLY5(fraction, 1, 0.6931469775991671, 0.2402224208537713, 0.055507337432473138, 0.0096715126395556482, 0.0013264727198609666);
-#elif SSMF_ACCURACY <= 28 // 28.92 bits
+#	elif SSMF_ACCURACY <= 28 // 28.92 bits
 	SSMF_VF curve = SSMF_VF_POLY6(fraction, 1, 0.69314720285504527, 0.24022647913632003, 0.055503324711590182, 0.0096184373574484706, 0.0013398874403644236, 0.00015353361944104771);
-#elif SSMF_ACCURACY <= 34 // 34.95 bits
+#	elif SSMF_ACCURACY <= 34 // 34.95 bits
 	SSMF_VF curveSqrt = SSMF_VF_POLY6(fraction, 1, 0.34657359046976205, 0.060056626631417712, 0.0069380072448574932, 0.00060113425550469848, 4.1719000831718447e-05, 2.4049139025015073e-06);
 	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
-#elif SSMF_ACCURACY <= 41 // 41.31 bits
+#	elif SSMF_ACCURACY <= 41 // 41.31 bits
 	SSMF_VF curveSqrt = SSMF_VF_POLY7(fraction, 1, 0.34657359028025697, 0.060056626754494323, 0.0069380135732753376, 0.00060113271094624718, 4.1667443127800065e-05, 2.4092783208205937e-06, 1.1905096297808618e-07);
 	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
-#elif SSMF_ACCURACY <= 48 // 48.19 bits
+#	elif SSMF_ACCURACY <= 48 // 48.19 bits
 	SSMF_VF curveSqrt = SSMF_VF_POLY8(fraction, 1, 0.34657359027994744, 0.060056626739796927, 0.0069380135845075594, 0.00060113306874660336, 4.1667348593792191e-05, 2.4068044831461723e-06, 1.1927308276889719e-07, 5.1588071720172589e-09);
 	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
-#else // 54.90 bits
+#	else // 54.90 bits
 	SSMF_VF curveSqrt = SSMF_VF_POLY9(fraction, 1, 0.34657359027997264, 0.060056626739773314, 0.0069380135831044612, 0.00060113306929947643, 4.1667369182049283e-05, 2.4068007441213058e-06, 1.1916210833453763e-07, 5.1664940928876514e-09, 1.9864502507589705e-10);
 	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
-#endif
+#	endif
 	return SSMF_VF_MUL(curve, scale);
 #endif
 }
