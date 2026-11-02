@@ -7,13 +7,6 @@ namespace signalsmith { namespace linear {
 
 namespace sse2 {
 
-	struct ComplexFloat {
-		__m128 real, imag;
-	};
-	struct ComplexDouble {
-		__m128d real, imag;
-	};
-
 #define SSMF_BITS 32
 #define SSMF_VF __m128
 #define SSMF_VF_0 _mm_setzero_ps()
@@ -71,10 +64,107 @@ namespace sse2 {
 #include "../signalsmith-mathfun.h"
 
 	struct Sse2 {
+		struct ComplexFloat {
+			__m128 real, imag;
+		};
+		struct ComplexDouble {
+			__m128d real, imag;
+		};
+
+		static constexpr size_t alignmentSize = 16;
+		template<class V>
+		static bool pointerAligned(const V *ptr) {
+			return (size_t(ptr)&(alignmentSize - 1)) == 0;
+		}
+
+		template<class Expr>
+		static void fillFloat(float *pointer, Expr expr, size_t size) {
+			static constexpr size_t simdStep = alignmentSize/4;
+			size_t simdSize = size&~(simdStep - 1);
+			// Don't explode the code-paths - have one for "everything is aligned", one otherwise
+			if (pointerAligned(pointer) && isAligned(expr)) {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					_mm_store_ps(pointer + i, getFloat<true>(expr, i));
+				}
+			} else {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					_mm_storeu_ps(pointer + i, getFloat<false>(expr, i));
+				}
+			}
+			for (size_t i = simdSize; i < size; ++i) {
+				pointer[i] = expr.get(i);
+			}
+		}
+		template<class Expr>
+		static void fillDouble(double *pointer, Expr expr, size_t size) {
+			static constexpr size_t simdStep = alignmentSize/8;
+			size_t simdSize = size&~(simdStep - 1);
+			// Don't explode the code-paths - have one for "everything is aligned", one otherwise
+			if (pointerAligned(pointer) && isAligned(expr)) {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					_mm_store_pd(pointer + i, getDouble<true>(expr, i));
+				}
+			} else {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					_mm_storeu_pd(pointer + i, getDouble<false>(expr, i));
+				}
+			}
+			for (size_t i = simdSize; i < size; ++i) {
+				pointer[i] = expr.get(i);
+			}
+		}
+		template<class Expr>
+		static void fillCFloat(std::complex<float> *pointer, Expr expr, size_t size) {
+			static constexpr size_t simdStep = alignmentSize/4;
+			size_t simdSize = size&~(simdStep - 1);
+			// Don't explode the code-paths - have one for "everything is aligned", one otherwise
+			if (pointerAligned(pointer) && isAligned(expr)) {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexFloat c = getCFloat<true>(expr, i);
+					float *f = reinterpret_cast<float *>(pointer + i);
+					_mm_store_ps(f, _mm_unpacklo_ps(c.real, c.imag));
+					_mm_store_ps(f + simdStep, _mm_unpackhi_ps(c.real, c.imag));
+				}
+			} else {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexFloat c = getCFloat<false>(expr, i);
+					float *f = reinterpret_cast<float *>(pointer + i);
+					_mm_storeu_ps(f, _mm_unpacklo_ps(c.real, c.imag));
+					_mm_storeu_ps(f + simdStep, _mm_unpackhi_ps(c.real, c.imag));
+				}
+			}
+			for (size_t i = simdSize; i < size; ++i) {
+				pointer[i] = expr.get(i);
+			}
+		}
+		template<class Expr>
+		static void fillCDouble(std::complex<double> *pointer, Expr expr, size_t size) {
+			static constexpr size_t simdStep = alignmentSize/8;
+			size_t simdSize = size&~(simdStep - 1);
+			if (pointerAligned(pointer) && isAligned(expr)) {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexDouble c = getCDouble<true>(expr, i);
+					double *f = reinterpret_cast<double *>(pointer + i);
+					_mm_store_pd(f, _mm_unpacklo_pd(c.real, c.imag));
+					_mm_store_pd(f + simdStep, _mm_unpackhi_pd(c.real, c.imag));
+				}
+			} else {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexDouble c = getCDouble<false>(expr, i);
+					double *f = reinterpret_cast<double *>(pointer + i);
+					_mm_storeu_pd(f, _mm_unpacklo_pd(c.real, c.imag));
+					_mm_storeu_pd(f + simdStep, _mm_unpackhi_pd(c.real, c.imag));
+				}
+			}
+			for (size_t i = simdSize; i < size; ++i) {
+				pointer[i] = expr.get(i);
+			}
+		}
+
 //#ifndef DEV_NO_FALLBACK
 		// Fallback
 		template<class Expr>
-		static bool isAligned(Expr, size_t) {
+		static bool isAligned(Expr) {
 			return false;
 		}
 		template<bool aligned, class Expr>
@@ -85,12 +175,25 @@ namespace sse2 {
 		static __m128d getDouble(Expr expr, size_t i) {
 			return _mm_setr_pd(expr.get(i), expr.get(i + 1));
 		}
+		template<bool aligned, class Expr>
+		static ComplexFloat getCFloat(Expr expr, size_t i) {
+			std::complex<float> c0 = expr.get(i), c1 = expr.get(i + 1), c2 = expr.get(i + 2), c3 = expr.get(i + 3);
+			return {
+				_mm_setr_ps(c0.real(), c1.real(), c2.real(), c3.real()),
+				_mm_setr_ps(c0.imag(), c1.imag(), c2.imag(), c3.imag())
+			};
+		}
+		template<bool aligned, class Expr>
+		static ComplexDouble getCDouble(Expr expr, size_t i) {
+			std::complex<double> c0 = expr.get(i), c1 = expr.get(i + 1);
+			return {_mm_setr_pd(c0.real(), c1.real()), _mm_setr_pd(c0.imag(), c1.imag())};
+		}
 //#endif
 
 		// ReadableReal
 		template<class V>
-		static bool isAligned(expression::ReadableReal<V> expr, size_t i) {
-			return (size_t(expr.pointer + i)&15) == 0;
+		static bool isAligned(expression::ReadableReal<V> expr) {
+			return (size_t(expr.pointer)&15) == 0;
 		}
 		template<bool aligned>
 		static __m128 getFloat(expression::ReadableReal<float> expr, size_t i) {
@@ -111,7 +214,7 @@ namespace sse2 {
 		
 		// Constant
 		template<class V>
-		static bool isAligned(expression::ConstantExpr<V>, size_t) {
+		static bool isAligned(expression::ConstantExpr<V>) {
 			return true;
 		}
 		template<bool aligned, class V>
@@ -126,8 +229,8 @@ namespace sse2 {
 		// Binary expressions are aligned if both sides are
 #define SIGNALSMITH_EXPR_BINARY(Name) \
 		template<class A, class B> \
-		static bool isAligned(expression::Name<A, B> expr, size_t i) { \
-			return isAligned(expr.a, i) && isAligned(expr.b, i); \
+		static bool isAligned(expression::Name<A, B> expr) { \
+			return isAligned(expr.a) && isAligned(expr.b); \
 		}
 		SIGNALSMITH_EXPR_BINARY(Add)
 		SIGNALSMITH_EXPR_BINARY(Sub)
@@ -142,8 +245,8 @@ namespace sse2 {
 		// Expressions which map neatly to a single intrinsic
 #define SIGNALSMITH_EXPR_UNARY(Name, mmFloat, mmDouble) \
 		template<class A> \
-		static bool isAligned(expression::Name<A> expr, size_t i) { \
-			return isAligned(expr.a, i); \
+		static bool isAligned(expression::Name<A> expr) { \
+			return isAligned(expr.a); \
 		} \
 		template<bool aligned, class A, class=ItemTypeF<A>> \
 		static __m128 getFloat(expression::Name<A> expr, size_t i) { \

@@ -50,63 +50,70 @@ private:
 			pointer[i] = expr.get(i);
 		}
 	}
+
 	template<class Expr>
 	void fillBasic(RealPointer<float> pointer, Expr expr, size_t size) {
-		// SSE2: width 4
-		size_t i = 0;
-		// scalar until the output is aligned
-		while (i < size && (size_t(pointer + i)&15)) {
-			pointer[i] = expr.get(i);
-			++i;
-		}
-		size_t simdEndI = i + (size - i)/4*4;
-		if (sse2::Sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
-			while (i < simdEndI) {
-				__m128 v = sse2::Sse2::getFloat<true>(expr, i);
-				_mm_store_ps(pointer + i, v);
-				i += 4;
-			}
-		} else {
-			while (i < simdEndI) {
-				__m128 v = sse2::Sse2::getFloat<false>(expr, i);
-				_mm_store_ps(pointer + i, v);
-				i += 4;
-			}
-		}
-		while (i < size) {
-			pointer[i] = expr.get(i);
-			++i;
-		}
+		sse2::Sse2::fillFloat(pointer, expr, size);
 	}
 	template<class Expr>
 	void fillBasic(RealPointer<double> pointer, Expr expr, size_t size) {
-		// SSE2: width 2
-		size_t i = 0;
-		// scalar until the output is aligned
-		while (i < size && (size_t(pointer + i)&15)) {
-			pointer[i] = expr.get(i);
-			++i;
-		}
-		size_t simdEndI = i + (size - i)/2*2;
-		if (sse2::Sse2::isAligned(expr, i)) { // Don't explode the code-paths - have one for "everything is aligned", one otherwise
-			while (i < simdEndI) {
-				__m128d v = sse2::Sse2::getDouble<true>(expr, i);
-				_mm_store_pd(pointer + i, v);
-				i += 2;
-			}
-		} else {
-			while (i < simdEndI) {
-				__m128d v = sse2::Sse2::getDouble<false>(expr, i);
-				_mm_store_pd(pointer + i, v);
-				i += 2;
-			}
-		}
-		while (i < size) {
-			pointer[i] = expr.get(i);
-			++i;
-		}
+		sse2::Sse2::fillDouble(pointer, expr, size);
 	}
 	
+	template<class Expr>
+	ItemTypeCF<Expr> fillBasic(ComplexPointer<float> pointer, Expr expr, size_t size) {
+		sse2::Sse2::fillCFloat(pointer, expr, size);
+	}
+	template<class Expr>
+	ItemTypeCD<Expr> fillBasic(ComplexPointer<double> pointer, Expr expr, size_t size) {
+		sse2::Sse2::fillCDouble(pointer, expr, size);
+	}
+	template<class Expr>
+	ItemTypeCF<Expr> fillBasic(SplitPointer<float> pointer, Expr expr, size_t size) {
+		// SSE2: width 4 (real/imag can have different alignments, so unaligned stores)
+		size_t i = 0, simdEndI = size/4*4;
+		if (sse2::Sse2::isAligned(expr) && sse2::Sse2::pointerAligned(pointer.real) && sse2::Sse2::pointerAligned(pointer.imag)) {
+			for (; i < simdEndI; i += 4) {
+				sse2::Sse2::ComplexFloat c = sse2::Sse2::getCFloat<true>(expr, i);
+				_mm_store_ps(pointer.real + i, c.real);
+				_mm_store_ps(pointer.imag + i, c.imag);
+			}
+		} else {
+			for (; i < simdEndI; i += 4) {
+				sse2::Sse2::ComplexFloat c = sse2::Sse2::getCFloat<false>(expr, i);
+				_mm_storeu_ps(pointer.real + i, c.real);
+				_mm_storeu_ps(pointer.imag + i, c.imag);
+			}
+		}
+		for (; i < size; ++i) {
+			std::complex<float> c = expr.get(i);
+			pointer.real[i] = c.real();
+			pointer.imag[i] = c.imag();
+		}
+	}
+	template<class Expr>
+	ItemTypeCD<Expr> fillBasic(SplitPointer<double> pointer, Expr expr, size_t size) {
+		// SSE2: width 2
+		size_t i = 0, simdEndI = size/2*2;
+		if (sse2::Sse2::isAligned(expr) && sse2::Sse2::pointerAligned(pointer.real) && sse2::Sse2::pointerAligned(pointer.imag)) {
+			for (; i < simdEndI; i += 2) {
+				sse2::Sse2::ComplexDouble c = sse2::Sse2::getCDouble<true>(expr, i);
+				_mm_storeu_pd(pointer.real + i, c.real);
+				_mm_storeu_pd(pointer.imag + i, c.imag);
+			}
+		} else {
+			for (; i < simdEndI; i += 2) {
+				sse2::Sse2::ComplexDouble c = sse2::Sse2::getCDouble<false>(expr, i);
+				_mm_storeu_pd(pointer.real + i, c.real);
+				_mm_storeu_pd(pointer.imag + i, c.imag);
+			}
+		}
+		for (; i < size; ++i) {
+			std::complex<double> c = expr.get(i);
+			pointer.real[i] = c.real();
+			pointer.imag[i] = c.imag();
+		}
+	}
 	template<class V, class Expr>
 	void fillBasic(ComplexPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
