@@ -1,5 +1,7 @@
-/* Copyright 2026 Geraint Luff / Signalsmith Audio Ltd.
+// Copyright 2026 Geraint Luff / Signalsmith Audio Ltd.
+// SPDX-License-Identifier: 0BSD
 
+/*
 SIGNALSMITH MATHFUN
 -------------------
 
