@@ -275,6 +275,25 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 			test(x, logl(x), T##_test_log(x)); \
 		} \
 		endCheck(); \
+		startCheck("exp2"); \
+		RANGE_LINEAR(T, x, (sizeof(T) == 4 ? -126 : -1022), (sizeof(T) == 4 ? 127 : 1023)) { \
+			test(x, exp2l(x), T##_test_exp2(x)); \
+		} \
+		RANGE_LINEAR(T, x, -2, 2) { \
+			test(x, exp2l(x), T##_test_exp2(x)); \
+		} \
+		for (T k = -100; k <= 100; ++k) { \
+			test(k, exp2l(k), T##_test_exp2(k)); \
+			T below = T##_nextDown(k + (T)0.5), above = T##_nextUp(k + (T)0.5); \
+			test(below, exp2l(below), T##_test_exp2(below)); \
+			test(above, exp2l(above), T##_test_exp2(above)); \
+		} \
+		endCheck(); \
+		startCheck("exp"); /* small (epsilon-level) errors when scaling the argument compound into large relative errors in the result very quickly. */ \
+		RANGE_LINEAR(T, x, -4, 4) { \
+			test(x, expl(x), T##_test_exp(x)); \
+		} \
+		endCheck(); \
 	}
 
 int main(void) {

@@ -60,6 +60,8 @@ Optional:
 	SSMF_VF_FLOOR(v)
 	SSMF_VF_LOG2(v)
 	SSMF_VF_LOG(v)
+	SSMF_VF_EXP2(v)
+	SSMF_VF_EXP(v)
 
 */
 
@@ -356,6 +358,78 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #endif
 }
 
+// exp2(): splits into an integer part (which becomes the exponent bits) and a fractional part in [-0.5, 0.5], which is curve-fitted
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
+#if defined(SSMF_VF_EXP2)
+	return SSMF_VF_EXP2(v);
+#elif defined(SSMF_VF_EXP)
+	return SSMF_VF_EXP(SSMF_VF_MUL(v, SSMF_VF_F(0.6931471805599453)));
+#else
+#	if SSMF_BITS == 32
+	const int mantissaBits = 23;
+	// round(v) must stay within the normal exponent range, so it doesn't wrap around the exponent bits
+	const float minInput = -126, maxInput = 127.49609375; // 127.5 - 2^-8
+	// When added to an integer, the lowest mantissa bits hold that integer plus the exponent bias (127)
+	const float exponentMagic = 12582912 + 127; // 1.5 * 2^23 + 127
+#	elif SSMF_BITS == 64
+	const int mantissaBits = 52;
+	const double minInput = -1022, maxInput = 1023.4990234375; // 1023.5 - 2^-10
+	const double exponentMagic = 6755399441056767LL; // 1.5 * 2^52 + 1023
+#	else
+#		error "exp2() only currently implemented for 32/64-bit IEEE"
+#	endif
+	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(minInput)), SSMF_VF_F(maxInput));
+#	if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
+	SSMF_VF integer = SSMF_VF_ROUND_SMALL(v);
+	SSMF_VF scale = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(integer, SSMF_VF_F(exponentMagic)), mantissaBits);
+#	else
+	// Our magic number includes the exponent bias, and we've clamped so that abs() is a no-op (but still a barrier)
+	SSMF_VF withMagic = SSMF_NAME(abs)(SSMF_VF_ADD(v, SSMF_VF_F(exponentMagic)));
+	SSMF_VF scale = SSMF_VF_LSHIFT_K(withMagic, mantissaBits);
+	// The integer's lowest mantissa bit is 0, so BARRIER_LOWBIT fences it from the subtraction below
+	SSMF_VF integer = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(withMagic, SSMF_VF_F(exponentMagic)));
+#	endif
+	SSMF_VF fraction = SSMF_VF_SUB(v, integer);
+
+	// Minimax fits (relative error, exact at 0) of 2^x for x in [-0.5, 0.5], some of which are R(x)^2
+#if SSMF_ACCURACY <= 4 // 4.13 bits
+	SSMF_VF curve = SSMF_VF_POLY1(fraction, 1, 0.66666666666666663);
+#elif SSMF_ACCURACY <= 8 // 8.99 bits
+	SSMF_VF curve = SSMF_VF_POLY2(fraction, 1, 0.70294179397838641, 0.23986402898051107);
+#elif SSMF_ACCURACY <= 13 // 13.27 bits
+	SSMF_VF curve = SSMF_VF_POLY3(fraction, 1, 0.69328292709619788, 0.24221095927271177, 0.055008931130349735);
+#elif SSMF_ACCURACY <= 18 // 18.44 bits
+	SSMF_VF curve = SSMF_VF_POLY4(fraction, 1, 0.69312419341797848, 0.24024098609879685, 0.0559064245957012, 0.0095828530962366633);
+#elif SSMF_ACCURACY <= 23 // 23.38 bits
+	SSMF_VF curve = SSMF_VF_POLY5(fraction, 1, 0.6931469775991671, 0.2402224208537713, 0.055507337432473138, 0.0096715126395556482, 0.0013264727198609666);
+#elif SSMF_ACCURACY <= 28 // 28.92 bits
+	SSMF_VF curve = SSMF_VF_POLY6(fraction, 1, 0.69314720285504527, 0.24022647913632003, 0.055503324711590182, 0.0096184373574484706, 0.0013398874403644236, 0.00015353361944104771);
+#elif SSMF_ACCURACY <= 34 // 34.95 bits
+	SSMF_VF curveSqrt = SSMF_VF_POLY6(fraction, 1, 0.34657359046976205, 0.060056626631417712, 0.0069380072448574932, 0.00060113425550469848, 4.1719000831718447e-05, 2.4049139025015073e-06);
+	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
+#elif SSMF_ACCURACY <= 41 // 41.31 bits
+	SSMF_VF curveSqrt = SSMF_VF_POLY7(fraction, 1, 0.34657359028025697, 0.060056626754494323, 0.0069380135732753376, 0.00060113271094624718, 4.1667443127800065e-05, 2.4092783208205937e-06, 1.1905096297808618e-07);
+	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
+#elif SSMF_ACCURACY <= 48 // 48.19 bits
+	SSMF_VF curveSqrt = SSMF_VF_POLY8(fraction, 1, 0.34657359027994744, 0.060056626739796927, 0.0069380135845075594, 0.00060113306874660336, 4.1667348593792191e-05, 2.4068044831461723e-06, 1.1927308276889719e-07, 5.1588071720172589e-09);
+	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
+#else // 54.90 bits
+	SSMF_VF curveSqrt = SSMF_VF_POLY9(fraction, 1, 0.34657359027997264, 0.060056626739773314, 0.0069380135831044612, 0.00060113306929947643, 4.1667369182049283e-05, 2.4068007441213058e-06, 1.1916210833453763e-07, 5.1664940928876514e-09, 1.9864502507589705e-10);
+	SSMF_VF curve = SSMF_VF_MUL(curveSqrt, curveSqrt);
+#endif
+	return SSMF_VF_MUL(curve, scale);
+#endif
+}
+
+// exp(): multiplies exp2() if not otherwise defined
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
+#if defined(SSMF_VF_EXP)
+	return SSMF_VF_EXP(v);
+#else
+	return SSMF_NAME(exp2)(SSMF_VF_MUL(v, SSMF_VF_F(1.4426950408889634)));
+#endif
+}
+
 // Clean up all our arguments unless explicitly told not to
 #ifndef SSMF_NO_CLEANUP
 #	undef SSMF_BITS
@@ -389,6 +463,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 #	undef SSMF_VF_FLOOR
 #	undef SSMF_VF_LOG2
 #	undef SSMF_VF_LOG
+#	undef SSMF_VF_EXP2
+#	undef SSMF_VF_EXP
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES

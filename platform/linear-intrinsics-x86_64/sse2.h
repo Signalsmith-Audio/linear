@@ -358,6 +358,8 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_UNARY(Sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
 		SIGNALSMITH_EXPR_UNARY(Log, ssmf_logf, ssmf_logd)
 		SIGNALSMITH_EXPR_UNARY(Log2, ssmf_log2f, ssmf_log2d)
+		SIGNALSMITH_EXPR_UNARY(Exp, ssmf_expf, ssmf_expd)
+		SIGNALSMITH_EXPR_UNARY(Exp2, ssmf_exp2f, ssmf_exp2d)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
 		template<bool aligned, class A, class B> \
