@@ -37,17 +37,34 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 
 private:
 
-	// Most generic fill
 	template<class Pointer, class Expr>
 	void fillExpr(Pointer pointer, Expr expr, size_t size) {
 		fillBasic(pointer, expr, size);
 	}
 
+	// Most generic fill
 	template<class V, class Expr>
 	void fillBasic(RealPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
 		for (size_t i = 0; i < size; ++i) {
 			pointer[i] = expr.get(i);
+		}
+	}
+	template<class V, class Expr>
+	void fillBasic(ComplexPointer<V> pointer, Expr expr, size_t size) {
+		basicFillWarning<Expr>();
+		for (size_t i = 0; i < size; ++i) {
+			pointer[i] = expr.get(i);
+		}
+	}
+	template<class V, class Expr>
+	void fillBasic(SplitPointer<V> pointer, Expr expr, size_t size) {
+		basicFillWarning<Expr>();
+		using Complex = typename SplitPointer<V>::Complex;
+		for (size_t i = 0; i < size; ++i) {
+			Complex c = expr.get(i);
+			pointer.real[i] = c.real();
+			pointer.imag[i] = c.imag();
 		}
 	}
 
@@ -70,66 +87,11 @@ private:
 	}
 	template<class Expr>
 	ItemTypeCF<Expr> fillBasic(SplitPointer<float> pointer, Expr expr, size_t size) {
-		// SSE2: width 4 (real/imag can have different alignments, so unaligned stores)
-		size_t i = 0, simdEndI = size/4*4;
-		if (sse2::Sse2::isAligned(expr) && sse2::Sse2::pointerAligned(pointer.real) && sse2::Sse2::pointerAligned(pointer.imag)) {
-			for (; i < simdEndI; i += 4) {
-				sse2::Sse2::ComplexFloat c = sse2::Sse2::getCFloat<true>(expr, i);
-				_mm_store_ps(pointer.real + i, c.real);
-				_mm_store_ps(pointer.imag + i, c.imag);
-			}
-		} else {
-			for (; i < simdEndI; i += 4) {
-				sse2::Sse2::ComplexFloat c = sse2::Sse2::getCFloat<false>(expr, i);
-				_mm_storeu_ps(pointer.real + i, c.real);
-				_mm_storeu_ps(pointer.imag + i, c.imag);
-			}
-		}
-		for (; i < size; ++i) {
-			std::complex<float> c = expr.get(i);
-			pointer.real[i] = c.real();
-			pointer.imag[i] = c.imag();
-		}
+		sse2::Sse2::fillCFloat(pointer.real, pointer.imag, expr, size);
 	}
 	template<class Expr>
 	ItemTypeCD<Expr> fillBasic(SplitPointer<double> pointer, Expr expr, size_t size) {
-		// SSE2: width 2
-		size_t i = 0, simdEndI = size/2*2;
-		if (sse2::Sse2::isAligned(expr) && sse2::Sse2::pointerAligned(pointer.real) && sse2::Sse2::pointerAligned(pointer.imag)) {
-			for (; i < simdEndI; i += 2) {
-				sse2::Sse2::ComplexDouble c = sse2::Sse2::getCDouble<true>(expr, i);
-				_mm_storeu_pd(pointer.real + i, c.real);
-				_mm_storeu_pd(pointer.imag + i, c.imag);
-			}
-		} else {
-			for (; i < simdEndI; i += 2) {
-				sse2::Sse2::ComplexDouble c = sse2::Sse2::getCDouble<false>(expr, i);
-				_mm_storeu_pd(pointer.real + i, c.real);
-				_mm_storeu_pd(pointer.imag + i, c.imag);
-			}
-		}
-		for (; i < size; ++i) {
-			std::complex<double> c = expr.get(i);
-			pointer.real[i] = c.real();
-			pointer.imag[i] = c.imag();
-		}
-	}
-	template<class V, class Expr>
-	void fillBasic(ComplexPointer<V> pointer, Expr expr, size_t size) {
-		basicFillWarning<Expr>();
-		for (size_t i = 0; i < size; ++i) {
-			pointer[i] = expr.get(i);
-		}
-	}
-	template<class V, class Expr>
-	void fillBasic(SplitPointer<V> pointer, Expr expr, size_t size) {
-		basicFillWarning<Expr>();
-		using Complex = typename SplitPointer<V>::Complex;
-		for (size_t i = 0; i < size; ++i) {
-			Complex c = expr.get(i);
-			pointer.real[i] = c.real();
-			pointer.imag[i] = c.imag();
-		}
+		sse2::Sse2::fillCDouble(pointer.real, pointer.imag, expr, size);
 	}
 	
 	template<typename V>

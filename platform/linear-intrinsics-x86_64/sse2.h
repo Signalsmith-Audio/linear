@@ -160,7 +160,53 @@ namespace sse2 {
 				pointer[i] = expr.get(i);
 			}
 		}
-
+		template<class Expr>
+		static void fillCFloat(float *real, float *imag, Expr expr, size_t size) {
+			static constexpr size_t simdStep = alignmentSize/4;
+			size_t simdSize = size&~(simdStep - 1);
+			// Don't explode the code-paths - have one for "everything is aligned", one otherwise
+			if (pointerAligned(real) && pointerAligned(imag) && isAligned(expr)) {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexFloat c = getCFloat<true>(expr, i);
+					_mm_store_ps(real + i, c.real);
+					_mm_store_ps(imag + i, c.imag);
+				}
+			} else {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexFloat c = getCFloat<false>(expr, i);
+					_mm_storeu_ps(real + i, c.real);
+					_mm_storeu_ps(imag + i, c.imag);
+				}
+			}
+			for (size_t i = simdSize; i < size; ++i) {
+				std::complex<float> c = expr.get(i);
+				real[i] = c.real();
+				imag[i] = c.imag();
+			}
+		}
+		template<class Expr>
+		static void fillCDouble(double *real, double *imag, Expr expr, size_t size) {
+			static constexpr size_t simdStep = alignmentSize/8;
+			size_t simdSize = size&~(simdStep - 1);
+			if (pointerAligned(real) && pointerAligned(imag) && isAligned(expr)) {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexDouble c = getCDouble<true>(expr, i);
+					_mm_store_pd(real + i, c.real);
+					_mm_store_pd(imag + i, c.imag);
+				}
+			} else {
+				for (size_t i = 0; i < simdSize; i += simdStep) {
+					ComplexDouble c = getCDouble<false>(expr, i);
+					_mm_storeu_pd(real + i, c.real);
+					_mm_storeu_pd(imag + i, c.imag);
+				}
+			}
+			for (size_t i = simdSize; i < size; ++i) {
+				std::complex<double> c = expr.get(i);
+				real[i] = c.real();
+				imag[i] = c.imag();
+			}
+		}
 //#ifndef DEV_NO_FALLBACK
 		// Fallback
 		template<class Expr>
