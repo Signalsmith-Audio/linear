@@ -239,7 +239,7 @@ namespace sse2 {
 		// ReadableReal
 		template<class V>
 		static bool isAligned(expression::ReadableReal<V> expr) {
-			return (size_t(expr.pointer)&15) == 0;
+			return pointerAligned(expr.pointer);
 		}
 		template<bool aligned>
 		static __m128 getFloat(expression::ReadableReal<float> expr, size_t i) {
@@ -257,7 +257,57 @@ namespace sse2 {
 				return _mm_loadu_pd(expr.pointer + i);
 			}
 		}
-		
+
+		// ReadableComplex
+		template<class V>
+		static bool isAligned(expression::ReadableComplex<V> expr) {
+			return pointerAligned(expr.pointer);
+		}
+		template<bool aligned>
+		static ComplexFloat getCFloat(expression::ReadableComplex<float> expr, size_t i) {
+			// Two interleaved sets
+			const float *fPtr = reinterpret_cast<float *>(expr.pointer + i);
+			__m128 a = aligned ? _mm_load_ps(fPtr) : _mm_loadu_ps(fPtr);
+			__m128 b = aligned ? _mm_load_ps(fPtr + 4) : _mm_loadu_ps(fPtr + 4);
+			// de-interleave
+			__m128 re = _mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0)); // r0 r1 r2 r3
+			__m128 im = _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1)); // i0 i1 i2 i3
+			return {re, im};
+		}
+		template<bool aligned>
+		static ComplexDouble getDouble(expression::ReadableComplex<double> expr, size_t i) {
+			// Two interleaved sets
+			const double *fPtr = reinterpret_cast<double *>(expr.pointer + i);
+			__m128d a = aligned ? _mm_load_pd(fPtr) : _mm_loadu_pd(fPtr);
+			__m128d b = aligned ? _mm_load_pd(fPtr + 2) : _mm_loadu_pd(fPtr + 2);
+			// de-interleave
+			__m128d re = _mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0)); // r0 r1 r2 r3
+			__m128d im = _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1)); // i0 i1 i2 i3
+			return {re, im};
+		}
+
+		// ReadableSplit
+		template<class V>
+		static bool isAligned(expression::ReadableReal<V> expr) {
+			return pointerAligned(expr.pointer.real) && pointerAligned(expr.pointer.imag);
+		}
+		template<bool aligned>
+		static ComplexFloat getFloat(expression::ReadableSplit<float> expr, size_t i) {
+			if (aligned) {
+				return {_mm_load_ps(expr.pointer.real + i), _mm_load_ps(expr.pointer.imag + i)};
+			} else {
+				return {_mm_loadu_ps(expr.pointer.real + i), _mm_loadu_ps(expr.pointer.imag + i)};
+			}
+		}
+		template<bool aligned>
+		static ComplexDouble getDouble(expression::ReadableSplit<double> expr, size_t i) {
+			if (aligned) {
+				return {_mm_load_pd(expr.pointer.real + i), _mm_load_pd(expr.pointer.imag + i)};
+			} else {
+				return {_mm_loadu_pd(expr.pointer.real + i), _mm_loadu_pd(expr.pointer.imag + i)};
+			}
+		}
+
 		// Constant
 		template<class V>
 		static bool isAligned(expression::ConstantExpr<V>) {
@@ -307,6 +357,7 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_UNARY(Neg, ssmf_negf, ssmf_negd)
 		SIGNALSMITH_EXPR_UNARY(Sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
 		SIGNALSMITH_EXPR_UNARY(Log, ssmf_logf, ssmf_logd)
+		SIGNALSMITH_EXPR_UNARY(Log2, ssmf_log2f, ssmf_log2d)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
 		template<bool aligned, class A, class B> \
