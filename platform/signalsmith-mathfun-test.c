@@ -144,9 +144,6 @@ static uint64_t doubleAsInt(double d) {
 #ifdef TEST_LOGEXP2
 #	define SSMF_VF_LOG2(v) log2l(v)
 #	define SSMF_VF_EXP2(v) exp2l(v)
-#	define SMALL_LOG2_RANGE 0
-#else
-#	define SMALL_LOG2_RANGE 1
 #endif
 #ifdef TEST_LOGEXP
 #	define SSMF_VF_LOG(v) logl(v)
@@ -296,13 +293,13 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("exp2"); \
-		RANGE_LINEAR(T, x, (SMALL_LOG2_RANGE ? -3 : sizeof(T) == 4 ? -126 : -1022), (SMALL_LOG2_RANGE ? 3 : sizeof(T) == 4 ? 127 : 1023)) { \
+		RANGE_LINEAR(T, x, (sizeof(T) == 4 ? -126 : -1022), (sizeof(T) == 4 ? 127 : 1023)) { \
 			test(x, exp2l(x), T##_test_exp2(x)); \
 		} \
 		RANGE_LINEAR(T, x, -2, 2) { \
 			test(x, exp2l(x), T##_test_exp2(x)); \
 		} \
-		if (!SMALL_LOG2_RANGE) for (T k = -100; k <= 100; ++k) { \
+		for (T k = -100; k <= 100; ++k) { \
 			test(k, exp2l(k), T##_test_exp2(k)); \
 			T below = T##_nextDown(k + (T)0.5), above = T##_nextUp(k + (T)0.5); \
 			test(below, exp2l(below), T##_test_exp2(below)); \
