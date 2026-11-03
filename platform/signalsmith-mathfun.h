@@ -149,10 +149,13 @@ Optional:
 // If we don't have a proper barrier, we wipe the lowest bit to prevent reassociation (only valid for values where that bit is already zero, e.g. small integers)
 #ifdef SSMF_VF_BARRIER
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_BARRIER(v)
+#	define SSMF_VF_BARRIER_HIGHBIT(v) SSMF_VF_BARRIER(v)
 #elif SSMF_BITS == 32
-#	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(v, SSMF_VF_I(0xFFFFFFFE))
+#	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFE), v) // For small integers
+#	define SSMF_VF_BARRIER_HIGHBIT(v) SSMF_VF_ANDNOT(SSMF_VF_I(0x40000000), v) // For things with magnitude < 2
 #elif SSMF_BITS == 64
-#	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(v, SSMF_VF_I(0xFFFFFFFFFFFFFFFE))
+#	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFFFFFFFFFELL), v)
+#	define SSMF_VF_BARRIER_HIGHBIT(v) SSMF_VF_ANDNOT(SSMF_VF_I(0x4000000000000000LL), v)
 #else
 #	error "SSMF_VF_BARRIER is required unless it's 32/64-bit IEEE float"
 #endif
@@ -351,12 +354,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(ceil)(SSMF_VF v) {
 #	endif
 	SSMF_VF remainder = SSMF_NAME(remainder1)(v);
 	SSMF_VF roundedDown = SSMF_VF_MIN(SSMF_VF_MUL(SSMF_VF_MAX(remainder, SSMF_VF_0), huge), SSMF_VF_F(1));
-#	ifdef SSMF_VF_BARRIER
-	return SSMF_VF_ADD(SSMF_VF_BARRIER(SSMF_VF_SUB(v, remainder)), roundedDown);
-#	else
-	// TODO: this doesn't seem right, even though it kinda works
-	return SSMF_VF_ADD(SSMF_NAME(round)(v), roundedDown);
-#	endif
+	return SSMF_VF_ADD(SSMF_VF_SUB(v, SSMF_VF_BARRIER_HIGHBIT(remainder)), roundedDown);
 #endif
 }
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(floor)(SSMF_VF v) {
@@ -627,7 +625,6 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
 #	undef SSMF_VF_RSHIFT_K
 #	undef SSMF_VF_LSHIFT_K
 #	undef SSMF_VF_BARRIER
-#	undef SSMF_VF_BARRIER_LOWBIT
 #	undef SSMF_VF_FMA
 #	undef SSMF_VF_FMAK
 #	undef SSMF_VF_ABS
@@ -646,6 +643,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES
 #endif
+#undef SSMF_VF_BARRIER_LOWBIT
+#undef SSMF_VF_BARRIER_HIGHBIT
 #undef SSMF_VF_POLY0
 #undef SSMF_VF_POLY1
 #undef SSMF_VF_POLY2
