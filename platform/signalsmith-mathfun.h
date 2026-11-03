@@ -19,7 +19,7 @@ It's a "function header" - explicitly designed to be included multiple times if 
 
 Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).  If you set `SSMF_BITS` to either 32 or 64, then it assumes IEEE floating-point, and can cover more things.
 
-If you supply a rounding method (SSMF_VF_ROUND/SSMF_VF_FLOOR) which only works within a given range (e.g. by casting to a fixed-size integer and back), then various rounding functions and periodic functions (sin/cos/etc.) will produce nonsense values outside of that range.
+If you supply a rounding method (SSMF_VF_ROUND/SSMF_VF_FLOOR) which only works within a given range (e.g. by casting to a fixed-size integer and back), then various rounding functions and periodic functions (sin/cos/etc.) can return nonsense values outside of that range.
 
 ARGUMENTS
 ---------
@@ -268,7 +268,13 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 // remainder1(): v - round(v), in [-0.5, 0.5].  Large inputs (which are already integers) give 0.
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(remainder1)(SSMF_VF v) {
 #if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
-	return SSMF_VF_SUB(v, SSMF_VF_ROUND_SMALL(v));
+#	ifdef SSMF_VF_BARRIER
+	return SSMF_VF_SUB(SSMF_VF_BARRIER(v), SSMF_VF_ROUND_SMALL(v));
+#	else
+	SSMF_VF sign = SSMF_VF_AND(v, SSMF_VF_F(-0.0));
+	SSMF_VF absV = SSMF_VF_XOR(v, sign);
+	return SSMF_VF_XOR(sign, SSMF_VF_SUB(absV, SSMF_VF_ROUND_SMALL(absV)));
+#	endif
 #else
 #	if SSMF_BITS == 32
 #		define SSMF_ROUNDING_K 8388608 // 2^23
@@ -516,7 +522,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
 #endif
 }
 
-// Minimax fits (relative error, exact at 0 and 0.5) of sin(pi*x) for x in [-0.5, 0.5], as x*R(x^2)
+// Minimax fits (relative error, exact at 0 and 0.5) of sin(πx) for x in [-0.5, 0.5], as x*R(x^2)
 #if SSMF_ACCURACY <= 12 // 12.90 bits
 #	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY2(SSMF_NAME(pow2)(x), 3.1411817285078589, -5.1429482766351837, 2.3128854504149916))
 #elif SSMF_ACCURACY <= 19 // 19.81 bits
@@ -531,8 +537,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
 #	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY7(SSMF_NAME(pow2)(x), 3.1415926535897927, -5.1677127800497376, 2.5501640398587706, -0.59926452874991076, 0.082145877942630272, -0.0073703591181299528, 0.00046597160939952696, -2.1115717814228518e-05))
 #endif
 
-// sincos(): reduces to half-turns t = k + f (k an integer, |f| <= 0.5), so sin(pi*t) = (-1)^k sin(pi*f) and cos(pi*t) = (-1)^k sin(pi*(0.5 - |f|))
-// This is only backward-accurate: it computes sin/cos of (v/pi rounded), so e.g. sin(float(pi)) = 0
+// sincos(): reduces to half-turns t = k + f (k an integer, |f| <= 0.5), so sin(πt) = (-1)^k sin(πf) and cos(πt) = (-1)^k sin(π(0.5 - |f|))
+// This is only backward-accurate: it computes sin/cos of (v/π rounded), so e.g. sin(float(π)) = 0
 SSMF_ATTRIBUTES SSMF_INLINE void SSMF_NAME(sincos)(SSMF_VF v, SSMF_VF *sinOut, SSMF_VF *cosOut) {
 #if defined(SSMF_VF_SINCOS)
 	SSMF_VF_SINCOS(v, sinOut, cosOut);
@@ -549,7 +555,7 @@ SSMF_ATTRIBUTES SSMF_INLINE void SSMF_NAME(sincos)(SSMF_VF v, SSMF_VF *sinOut, S
 #	else
 #		error "need SSMF_VF_SINCOS (or _SIN/_COS pair) if not 32/64-bit IEEE"
 #	endif
-	SSMF_VF halfTurns = SSMF_VF_MUL(v, SSMF_VF_F(0.31830988618379067)); // 1/pi
+	SSMF_VF halfTurns = SSMF_VF_MUL(v, SSMF_VF_F(0.31830988618379067)); // 1/π
 	SSMF_VF frac = SSMF_NAME(remainder1)(halfTurns);
 	SSMF_VF rounded = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(halfTurns, frac));
 	// Add to a magic constant, then bit-shift to move final mantissa bit (1s unit) -> sign bit
@@ -557,7 +563,7 @@ SSMF_ATTRIBUTES SSMF_INLINE void SSMF_NAME(sincos)(SSMF_VF v, SSMF_VF *sinOut, S
 	// Intermediate rounding can push it slightly outside the correct range, so we clamp again
 	SSMF_VF sinCurve = SSMF_VF_SINPI_SMALL(frac);
 	*sinOut = SSMF_VF_XOR(SSMF_VF_MIN(SSMF_VF_MAX(sinCurve, SSMF_VF_F(-1)), SSMF_VF_F(1)), sign);
-	// 0.5 - |f| is exact near cos()'s zeros (|f| near 0.5), so cos() keeps its relative accuracy there
+	// 0.5 - |f| keeps relative accuracy for cos()
 	SSMF_VF fCos = SSMF_VF_SUB(SSMF_VF_F(0.5), SSMF_NAME(abs)(frac));
 	SSMF_VF cosCurve = SSMF_VF_SINPI_SMALL(fCos); // fCos >= 0, so this can't be below 0
 	*cosOut = SSMF_VF_XOR(SSMF_VF_MIN(cosCurve, SSMF_VF_F(1)), sign);

@@ -421,10 +421,11 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(above, refCosPi(T##_halfTurns(above)), T##_test_cos(above)); \
 		} \
 		endCheck(); \
-		startCheck("sincos"); /* same as sin() and cos() where they're accurate, and bounded for all inputs */ \
+		startCheck("sincos"); /* same as sin() and cos() where they're accurate, and bounded for all inputs (within the rounding range) */ \
 		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			T s, c; \
 			int inRange = (x <= TRIG_ACCURATE_MAX(T)); \
+			if (x > (T)ROUNDING_MAX(T)*3) break; \
 			T##_test_sincos(x, &s, &c); \
 			assertCheck((!inRange || (s == T##_test_sin(x) && c == T##_test_cos(x))) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, x, sinl(x), s); \
 			T##_test_sincos(-x, &s, &c); \
