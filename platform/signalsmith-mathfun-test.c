@@ -46,6 +46,8 @@ static inline double testBarrierD(double v) {
 #define SWEEP_MIN(T) ((T)(sizeof(T) == 4 ? 1e-30 : 1e-300))
 #define SWEEP_MAX(T) ((T)(sizeof(T) == 4 ? 1e30 : 1e300))
 #define TRIG_MAX(T) ((T)(sizeof(T) == 4 ? 1e6 : 1e60))
+// A limited SSMF_VF_ROUND also limits the periodic functions (approximately, since the limit applies to x/pi)
+#define TRIG_ACCURATE_MAX(T) (TRIG_MAX(T) < (T)ROUNDING_MAX(T)*3 ? TRIG_MAX(T) : (T)ROUNDING_MAX(T)*3)
 #ifdef TEST_ROUND_INT32
 #	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
 #else
@@ -398,7 +400,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		RANGE_LINEAR(T, x, -10, 10) { \
 			test(x, refSinPi(T##_halfTurns(x)), T##_test_sin(x)); \
 		} \
-		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_MAX(T)) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_ACCURATE_MAX(T)) { \
 			test(x, refSinPi(T##_halfTurns(x)), T##_test_sin(x)); \
 			test(-x, refSinPi(T##_halfTurns(-x)), T##_test_sin(-x)); \
 		} \
@@ -407,7 +409,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		RANGE_LINEAR(T, x, -10, 10) { \
 			test(x, refCosPi(T##_halfTurns(x)), T##_test_cos(x)); \
 		} \
-		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_MAX(T)) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_ACCURATE_MAX(T)) { \
 			test(x, refCosPi(T##_halfTurns(x)), T##_test_cos(x)); \
 			test(-x, refCosPi(T##_halfTurns(-x)), T##_test_cos(-x)); \
 		} \
@@ -418,13 +420,14 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(above, refCosPi(T##_halfTurns(above)), T##_test_cos(above)); \
 		} \
 		endCheck(); \
-		startCheck("sincos"); /* same as sin() and cos(), and bounded for all inputs */ \
+		startCheck("sincos"); /* same as sin() and cos() where they're accurate, and bounded for all inputs */ \
 		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_MAX(T)) { \
 			T s, c; \
+			int inRange = (x <= TRIG_ACCURATE_MAX(T)); \
 			T##_test_sincos(x, &s, &c); \
-			assertCheck(s == T##_test_sin(x) && c == T##_test_cos(x) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, x, sinl(x), s); \
+			assertCheck((!inRange || (s == T##_test_sin(x) && c == T##_test_cos(x))) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, x, sinl(x), s); \
 			T##_test_sincos(-x, &s, &c); \
-			assertCheck(s == T##_test_sin(-x) && c == T##_test_cos(-x) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, -x, sinl(-x), s); \
+			assertCheck((!inRange || (s == T##_test_sin(-x) && c == T##_test_cos(-x))) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, -x, sinl(-x), s); \
 		} \
 		endCheck(); \
 	}
