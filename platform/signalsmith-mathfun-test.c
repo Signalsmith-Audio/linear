@@ -224,9 +224,9 @@ static long double refCosPi(long double t) {
 }
 static inline int float_isSubnormal(float x) {uint32_t i; memcpy(&i, &x, 4); return (i & 0x7F800000u) == 0 && (i & 0x007FFFFFu) != 0;}
 static inline int double_isSubnormal(double x) {uint64_t i; memcpy(&i, &x, 8); return (i & 0x7FF0000000000000ull) == 0 && (i & 0x000FFFFFFFFFFFFFull) != 0;}
-static inline float float_nextDown(float x) {return nextafterf(x, SWEEP_MIN(float));}
+static inline float float_nextDown(float x) {return nextafterf(x, -SWEEP_MAX(float));}
 static inline float float_nextUp(float x) {return nextafterf(x, SWEEP_MAX(float));}
-static inline double double_nextDown(double x) {return nextafter(x, SWEEP_MIN(double));}
+static inline double double_nextDown(double x) {return nextafter(x, -SWEEP_MAX(double));}
 static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(double));}
 
 #define RANGE_EXP(T, x, low, high) for (T x = (T)low; x <= (T)high; x *= (T)(1 + TEST_STEP))
@@ -431,7 +431,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 
 int main(void) {
 	printf("TEST_ACCURACY = %d, TEST_STEP = %g\n", TEST_ACCURACY, (double)TEST_STEP);
-	printf("optional ops:"
+	printf("config:"
 #ifdef TEST_ROUND_INT32
 		" ROUND_INT32"
 #endif
