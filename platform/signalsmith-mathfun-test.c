@@ -45,7 +45,8 @@ static inline double testBarrierD(double v) {
 #endif
 #define SWEEP_MIN(T) ((T)(sizeof(T) == 4 ? 1e-30 : 1e-300))
 #define SWEEP_MAX(T) ((T)(sizeof(T) == 4 ? 1e30 : 1e300))
-#define TRIG_MAX(T) ((T)(sizeof(T) == 4 ? 1e6 : 1e60))
+// Past this, the ULP of x/pi approaches 1, so sin/cos accuracy is meaningless (but results should still be bounded)
+#define TRIG_MAX(T) ((T)(sizeof(T) == 4 ? 1e6 : 1e15))
 // A limited SSMF_VF_ROUND also limits the periodic functions (approximately, since the limit applies to x/pi)
 #define TRIG_ACCURATE_MAX(T) (TRIG_MAX(T) < (T)ROUNDING_MAX(T)*3 ? TRIG_MAX(T) : (T)ROUNDING_MAX(T)*3)
 #ifdef TEST_ROUND_INT32
@@ -421,7 +422,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		} \
 		endCheck(); \
 		startCheck("sincos"); /* same as sin() and cos() where they're accurate, and bounded for all inputs */ \
-		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_MAX(T)) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			T s, c; \
 			int inRange = (x <= TRIG_ACCURATE_MAX(T)); \
 			T##_test_sincos(x, &s, &c); \
