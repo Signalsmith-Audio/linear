@@ -542,10 +542,10 @@ SSMF_ATTRIBUTES SSMF_INLINE void SSMF_NAME(sincos)(SSMF_VF v, SSMF_VF *sinOut, S
 #else
 #	if SSMF_BITS == 32
 	const int signShift = 31;
-	const float parityMagic = 12582912; // 1.5 * 2^23
+	const float parityMagic = 8388608; // 2^23
 #	elif SSMF_BITS == 64
 	const int signShift = 63;
-	const double parityMagic = 6755399441055744; // 1.5 * 2^52
+	const double parityMagic = 4503599627370496; // 2^52
 #	else
 #		error "need SSMF_VF_SINCOS (or _SIN/_COS pair) if not 32/64-bit IEEE"
 #	endif
@@ -553,7 +553,7 @@ SSMF_ATTRIBUTES SSMF_INLINE void SSMF_NAME(sincos)(SSMF_VF v, SSMF_VF *sinOut, S
 	SSMF_VF frac = SSMF_NAME(remainder1)(halfTurns);
 	SSMF_VF rounded = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(halfTurns, frac));
 	// Add to a magic constant, then bit-shift to move final mantissa bit (1s unit) -> sign bit
-	SSMF_VF sign = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(rounded, SSMF_VF_F(parityMagic)), signShift);
+	SSMF_VF sign = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(SSMF_NAME(abs)(rounded), SSMF_VF_F(parityMagic)), signShift);
 	// Intermediate rounding can push it slightly outside the correct range, so we clamp again
 	SSMF_VF sinCurve = SSMF_VF_SINPI_SMALL(frac);
 	*sinOut = SSMF_VF_XOR(SSMF_VF_MIN(SSMF_VF_MAX(sinCurve, SSMF_VF_F(-1)), SSMF_VF_F(1)), sign);

@@ -28,8 +28,8 @@ ACCURACY=1
 while [ $ACCURACY -le 50 ]; do
 	for FAST in "" "-ffast-math"; do
 		run -DTEST_ACCURACY=$ACCURACY $FAST
-		ACCURACY=$((ACCURACY + 1))
 	done
+	ACCURACY=$((ACCURACY + 1))
 done
 
 rm -f "$OUT" "$OUT.log"
