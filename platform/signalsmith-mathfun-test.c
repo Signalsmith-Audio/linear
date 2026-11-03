@@ -73,6 +73,7 @@ static uint32_t floatAsInt(float f) {
 	return i;
 }
 #	define SSMF_VF_I(v) intAsFloat((uint32_t)(v))
+#	define SSMF_VF_NOT(a) intAsFloat(~floatAsInt(a))
 #	define SSMF_VF_AND(a, b) intAsFloat(floatAsInt(a)&floatAsInt(b))
 #	define SSMF_VF_ANDNOT(a, b) intAsFloat(~floatAsInt(a)&floatAsInt(b))
 #	define SSMF_VF_OR(a, b) intAsFloat(floatAsInt(a)|floatAsInt(b))
@@ -107,6 +108,9 @@ static uint32_t floatAsInt(float f) {
 #	ifdef TEST_FMA
 #		define SSMF_VF_FMA(a, b, c) fmaf(a, b, c)
 #	endif
+#	ifdef TEST_SQRT
+#		define SSMF_VF_SQRT(v) sqrtf(v)
+#	endif
 #	include "./signalsmith-mathfun.h"
 #endif // TEST_FLOAT
 
@@ -127,6 +131,7 @@ static uint64_t doubleAsInt(double d) {
 	return i;
 }
 #define SSMF_VF_I(v) intAsDouble((uint64_t)(v))
+#define SSMF_VF_NOT(a) intAsDouble(~doubleAsInt(a))
 #define SSMF_VF_AND(a, b) intAsDouble(doubleAsInt(a)&doubleAsInt(b))
 #define SSMF_VF_ANDNOT(a, b) intAsDouble(~doubleAsInt(a)&doubleAsInt(b))
 #define SSMF_VF_OR(a, b) intAsDouble(doubleAsInt(a)|doubleAsInt(b))
@@ -160,6 +165,9 @@ static uint64_t doubleAsInt(double d) {
 #endif
 #ifdef TEST_FMA
 #	define SSMF_VF_FMA(a, b, c) fma(a, b, c)
+#endif
+#ifdef TEST_SQRT
+#	define SSMF_VF_SQRT(v) sqrtl(v)
 #endif
 #include "./signalsmith-mathfun.h"
 
@@ -345,6 +353,12 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(x, -x, T##_test_copysign(x, (T)-1)); \
 			test(-x, x, T##_test_copysign(-x, (T)2)); \
 			test(x, x, T##_test_copysign(x, (T)0)); \
+		} \
+		endCheck(); \
+		startCheck("sqrt"); \
+		test(0, 0, T##_test_sqrt(0)); \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
+			test(x, sqrtl(x), T##_test_sqrt(x)); \
 		} \
 		endCheck(); \
 		startCheck("log2"); \

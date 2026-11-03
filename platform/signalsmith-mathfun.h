@@ -66,6 +66,7 @@ Optional:
 	SSMF_VF_COPYSIGN(a, b): magnitude of a, sign of b
 	SSMF_VF_ROUND(v)
 	SSMF_VF_FLOOR(v)
+	SSMF_VF_SQRT(v)
 	SSMF_VF_LOG2(v)
 	SSMF_VF_LOG(v)
 	SSMF_VF_EXP2(v)
@@ -109,6 +110,9 @@ Optional:
 #ifndef SSMF_VF_I
 #	error "SSMF_VF_I() not defined"
 #endif
+#ifndef SSMF_VF_NOT
+#	error "SSMF_VF_NOT() not defined"
+#endif
 #ifndef SSMF_VF_AND
 #	error "SSMF_VF_AND() not defined"
 #endif
@@ -149,13 +153,13 @@ Optional:
 // If we don't have a proper barrier, we wipe the lowest bit to prevent reassociation (only valid for values where that bit is already zero, e.g. small integers)
 #ifdef SSMF_VF_BARRIER
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_BARRIER(v)
-#	define SSMF_VF_BARRIER_HIGHBIT(v) SSMF_VF_BARRIER(v)
+#	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_BARRIER(v)
 #elif SSMF_BITS == 32
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFE), v) // For small integers
-#	define SSMF_VF_BARRIER_HIGHBIT(v) SSMF_VF_ANDNOT(SSMF_VF_I(0x40000000), v) // For things with magnitude < 2
+#	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_AND(SSMF_VF_I(0x40000000), v) // Always 0 for things with magnitude < 2
 #elif SSMF_BITS == 64
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFFFFFFFFFELL), v)
-#	define SSMF_VF_BARRIER_HIGHBIT(v) SSMF_VF_ANDNOT(SSMF_VF_I(0x4000000000000000LL), v)
+#	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_AND(SSMF_VF_I(0x4000000000000000LL), v)
 #else
 #	error "SSMF_VF_BARRIER is required unless it's 32/64-bit IEEE float"
 #endif
@@ -354,7 +358,12 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(ceil)(SSMF_VF v) {
 #	endif
 	SSMF_VF remainder = SSMF_NAME(remainder1)(v);
 	SSMF_VF roundedDown = SSMF_VF_MIN(SSMF_VF_MUL(SSMF_VF_MAX(remainder, SSMF_VF_0), huge), SSMF_VF_F(1));
-	return SSMF_VF_ADD(SSMF_VF_SUB(v, SSMF_VF_BARRIER_HIGHBIT(remainder)), roundedDown);
+#	ifdef SSMF_VF_BARRIER
+	return SSMF_VF_ADD(SSMF_VF_BARRIER(SSMF_VF_SUB(v, SSMF_VF_BARRIER(remainder))), roundedDown);
+#	else
+	SSMF_VF zeroBit = SSMF_VF_BARRIER_HIGHBIT_MASK(remainder); // always zero because remainder is small
+	return SSMF_VF_ADD(SSMF_VF_XOR(zeroBit, SSMF_VF_SUB(v, SSMF_VF_XOR(zeroBit, remainder))), roundedDown);
+#	endif
 #endif
 }
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(floor)(SSMF_VF v) {
@@ -367,6 +376,31 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(floor)(SSMF_VF v) {
 }
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(trunc)(SSMF_VF v) {
 	return SSMF_NAME(copysign)(SSMF_NAME(floor)(SSMF_NAME(abs)(v)), v);
+}
+
+// sqrt()
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
+#ifdef SSMF_VF_SQRT
+	return SSMF_VF_SQRT(v);
+#else
+#	if SSMF_BITS == 32
+	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(2.3509887e-38))), 1);
+	// exponent bias is 127, right-shift approximately halves that (but with truncation)
+	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(1.9166167708542177e-20)); // 2^-65.5
+#	elif SSMF_BITS == 64
+	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(4.450147717014403e-308))), 1);
+	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(2.63692165371575e-155)); // 2^-513.5
+#	else
+#		error "need SSMF_VF_SQRT() unless it's 32/64-bit IEEE floats"
+#	endif
+	// Tuned by seeing where the worst-case error lands
+	const int stepCount = (SSMF_ACCURACY > 3) + (SSMF_ACCURACY > 6) + (SSMF_ACCURACY > 12) + (SSMF_ACCURACY > 22) + (SSMF_ACCURACY > 46);
+	for (int step = 0; step < stepCount; ++step) {
+		SSMF_VF adj2 = SSMF_VF_MUL(v, SSMF_VF_MUL(invSqrt, invSqrt)); // How wrong we are, squared
+		invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_SUB(SSMF_VF_F(1.5), SSMF_VF_MUL(SSMF_VF_F(0.5), adj2))); // close to 1, 1/sqrt(x) ~= 3/2 - x/2
+	}
+	return SSMF_VF_MUL(v, invSqrt);
+#endif
 }
 
 // log2(): splits into exponent and mantissa using bitwise ops, then applies a curve to the mantissa
@@ -612,6 +646,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
 #	undef SSMF_VF_0
 #	undef SSMF_VF_F
 #	undef SSMF_VF_I
+#	undef SSMF_VF_NOT
 #	undef SSMF_VF_AND
 #	undef SSMF_VF_ANDNOT
 #	undef SSMF_VF_OR
@@ -644,7 +679,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
 #	undef SSMF_ATTRIBUTES
 #endif
 #undef SSMF_VF_BARRIER_LOWBIT
-#undef SSMF_VF_BARRIER_HIGHBIT
+#undef SSMF_VF_BARRIER_HIGHBIT_MASK
 #undef SSMF_VF_POLY0
 #undef SSMF_VF_POLY1
 #undef SSMF_VF_POLY2
