@@ -216,6 +216,8 @@ static long double refCosPi(long double t) {
 	long double r = sinl(SSMF_TEST_PI*fCos);
 	return (fmodl(k, 2) == 0) ? r : -r;
 }
+static inline int float_isSubnormal(float x) {uint32_t i; memcpy(&i, &x, 4); return (i & 0x7F800000u) == 0 && (i & 0x007FFFFFu) != 0;}
+static inline int double_isSubnormal(double x) {uint64_t i; memcpy(&i, &x, 8); return (i & 0x7FF0000000000000ull) == 0 && (i & 0x000FFFFFFFFFFFFFull) != 0;}
 static inline float float_nextDown(float x) {return nextafterf(x, -1e30f);}
 static inline float float_nextUp(float x) {return nextafterf(x, 1e30f);}
 static inline double double_nextDown(double x) {return nextafter(x, -1e300);}
@@ -240,13 +242,11 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("round"); \
-		RANGE_EXP(T, x, 1e-30, 4194304) { \
+		RANGE_EXP(T, x, 1e-30, 1e30) { \
 			T y = T##_test_round(x); \
 			assertCheck(T##_test_abs(x - y) <= 0.5, x, roundl(x), y); \
-		} \
-		RANGE_EXP(T, x, 1e-30, 4194304) { \
-			T y = T##_test_round(-x); \
-			assertCheck(T##_test_abs(-x - y) <= 0.5, -x, roundl(-x), y); \
+			T yN = T##_test_round(-x); \
+			assertCheck(T##_test_abs(-x - yN) <= 0.5, -x, roundl(-x), yN); \
 		} \
 		for (T x = -1000; x <= 1000; ++x) { \
 			test(x, roundl(x), T##_test_round(x)); \
@@ -257,14 +257,65 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 			test(above, k + 1, T##_test_round(above)); \
 		} \
 		endCheck(); \
+		startCheck("floor"); \
+		for (T k = -1000; k <= 1000; k += (T)0.25) { \
+			T xs[5] = {k, T##_nextDown(k), T##_nextUp(k), k + (T)0.125, (T)-0.0}; \
+			for (int i = 0; i < 5; ++i) { \
+				T x = xs[i]; \
+				if (T##_isSubnormal(x)) continue; /* fast-math may flush these to 0 */ \
+				assertCheck(T##_test_floor(x) == floorl(x), x, floorl(x), T##_test_floor(x)); \
+			} \
+		} \
+		RANGE_EXP(T, x, 1e-30, 1e30) { \
+			T xs[2] = {x, -x}; \
+			for (int i = 0; i < 2; ++i) { \
+				T y = xs[i]; \
+				assertCheck(T##_test_floor(y) == floorl(y), y, floorl(y), T##_test_floor(y)); \
+			} \
+		} \
+		endCheck(); \
+		startCheck("ceil"); \
+		for (T k = -1000; k <= 1000; k += (T)0.25) { \
+			T xs[5] = {k, T##_nextDown(k), T##_nextUp(k), k + (T)0.125, (T)-0.0}; \
+			for (int i = 0; i < 5; ++i) { \
+				T x = xs[i]; \
+				if (T##_isSubnormal(x)) continue; /* fast-math may flush these to 0 */ \
+				assertCheck(T##_test_ceil(x) == ceill(x), x, ceill(x), T##_test_ceil(x)); \
+			} \
+		} \
+		RANGE_EXP(T, x, 1e-30, 1e30) { \
+			T xs[2] = {x, -x}; \
+			for (int i = 0; i < 2; ++i) { \
+				T y = xs[i]; \
+				assertCheck(T##_test_ceil(y) == ceill(y), y, ceill(y), T##_test_ceil(y)); \
+			} \
+		} \
+		endCheck(); \
+		startCheck("trunc"); \
+		for (T k = -1000; k <= 1000; k += (T)0.25) { \
+			T xs[5] = {k, T##_nextDown(k), T##_nextUp(k), k + (T)0.125, (T)-0.0}; \
+			for (int i = 0; i < 5; ++i) { \
+				T x = xs[i]; \
+				if (T##_isSubnormal(x)) continue; /* fast-math may flush these to 0 */ \
+				assertCheck(T##_test_trunc(x) == truncl(x), x, truncl(x), T##_test_trunc(x)); \
+			} \
+		} \
+		RANGE_EXP(T, x, 1e-30, 1e30) { \
+			T xs[2] = {x, -x}; \
+			for (int i = 0; i < 2; ++i) { \
+				T y = xs[i]; \
+				assertCheck(T##_test_trunc(y) == truncl(y), y, truncl(y), T##_test_trunc(y)); \
+			} \
+		} \
+		endCheck(); \
 		startCheck("remainder1"); /* exact below 2^22, only bounded above that */ \
 		RANGE_EXP(T, x, 1e-30, 1e30) { \
 			T r = T##_test_remainder1(x); \
 			long double k = (long double)x - r; \
-			assertCheck(T##_test_abs(r) <= 0.5 && (x >= 4194304 || k == roundl(k)), x, x - roundl(x), r); \
+			assertCheck(T##_test_abs(r) <= 0.5 && k == roundl(k), x, x - roundl(x), r); \
 			r = T##_test_remainder1(-x); \
 			k = -(long double)x - r; \
-			assertCheck(T##_test_abs(r) <= 0.5 && (x >= 4194304 || k == roundl(k)), -x, -x - roundl(-x), r); \
+			assertCheck(T##_test_abs(r) <= 0.5 && k == roundl(k), -x, -x - roundl(-x), r); \
 		} \
 		endCheck(); \
 		startCheck("pow2"); \
@@ -307,6 +358,14 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		RANGE_LINEAR(T, x, 0.999, 1.111) { \
 			test(x, logl(x), T##_test_log(x)); \
+		} \
+		endCheck(); \
+		startCheck("log10"); \
+		RANGE_EXP(T, x, 1e-30, 1e30) { \
+			test(x, log10l(x), T##_test_log10(x)); \
+		} \
+		RANGE_LINEAR(T, x, 0.999, 1.111) { \
+			test(x, log10l(x), T##_test_log10(x)); \
 		} \
 		endCheck(); \
 		startCheck("exp2"); \

@@ -269,15 +269,33 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 	return SSMF_VF_XOR(v, mask);
 }
 
-// round(): nearest integer, only valid for small values
-SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
-	return SSMF_VF_ROUND_SMALL(v);
-}
-
 // remainder1(): v - round(v), in [-0.5, 0.5].  Large inputs (which are already integers) give 0.
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(remainder1)(SSMF_VF v) {
-	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-SSMF_ROUND_LIMIT)), SSMF_VF_F(SSMF_ROUND_LIMIT));
+#if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
 	return SSMF_VF_SUB(v, SSMF_VF_ROUND_SMALL(v));
+#else
+#	if SSMF_BITS == 32
+#		define SSMF_ROUNDING_K 8388608 // 2^23
+#		define SSMF_ROUNDING_SAFEBIT 0x20000000 // never set for values in the clamped+offset range
+#	elif SSMF_BITS == 64
+#		define SSMF_ROUNDING_K 4503599627370496LL // 2^52
+#		define SSMF_ROUNDING_SAFEBIT 0x2000000000000000LL
+#	else
+#		error "need SSMF_VF_ROUND() or SSMF_VF_FLOOR() unless it's 32/64-bit IEEE float"
+#	endif
+	SSMF_VF sign = SSMF_VF_AND(v, SSMF_VF_F(-0.0));
+	SSMF_VF absV = SSMF_VF_MIN(SSMF_VF_XOR(v, sign), SSMF_VF_F(SSMF_ROUNDING_K));
+	SSMF_VF absVOffset = SSMF_VF_ADD(absV, SSMF_VF_F(SSMF_ROUNDING_K));
+#	ifdef SSMF_VF_BARRIER
+	absVOffset = SSMF_VF_BARRIER(absVOffset);
+#	else
+	absVOffset = SSMF_VF_ANDNOT(SSMF_VF_I(SSMF_ROUNDING_SAFEBIT), absVOffset);
+#	endif
+	SSMF_VF absVRounded = SSMF_VF_SUB(absVOffset, SSMF_VF_F(SSMF_ROUNDING_K));
+	return SSMF_VF_XOR(SSMF_VF_SUB(absV, absVRounded), sign);
+#	undef SSMF_ROUNDING_K
+#	undef SSMF_ROUNDING_SAFEBIT
+#endif
 }
 
 // pow2(): multiply with itself
@@ -303,6 +321,36 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 #	error "need SSMF_VF_COPYSIGN() unless it's 32/64-bit IEEE floats"
 #endif
 	return SSMF_VF_OR(SSMF_VF_ANDNOT(mask, a), SSMF_VF_AND(mask, b));
+}
+
+// round(): nearest integer
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
+#if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
+	return SSMF_VF_ROUND_SMALL(v);
+#else
+	return SSMF_VF_SUB(v, SSMF_NAME(remainder1)(v));
+#endif
+}
+
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(ceil)(SSMF_VF v) {
+#if defined(SSMF_VF_FLOOR)
+	return SSMF_NAME(neg)(SSMF_VF_FLOOR(SSMF_NAME(neg)(v)));
+#else
+	SSMF_VF remainder = SSMF_NAME(remainder1)(v);
+	SSMF_VF roundedDown = SSMF_VF_SUB(SSMF_VF_F(0.5), SSMF_NAME(copysign)(SSMF_VF_F(0.5), remainder));
+	return SSMF_VF_ADD(SSMF_VF_SUB(v, remainder), roundedDown);
+#endif
+}
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(floor)(SSMF_VF v) {
+#if defined(SSMF_VF_FLOOR)
+	return SSMF_VF_FLOOR(v);
+#else
+	// Using ceil() avoids (v - rounded) being -0 when v = -0, which would give -1
+	return SSMF_NAME(neg)(SSMF_NAME(ceil)(SSMF_NAME(neg)(v)));
+#endif
+}
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(trunc)(SSMF_VF v) {
+	return SSMF_NAME(copysign)(SSMF_NAME(floor)(SSMF_NAME(abs)(v)), v);
 }
 
 // log2(): splits into exponent and mantissa using bitwise ops, then applies a curve to the mantissa
@@ -381,6 +429,15 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log)(SSMF_VF v) {
 	return SSMF_VF_LOG(v);
 #else
 	return SSMF_VF_MUL(SSMF_NAME(log2)(v), SSMF_VF_F(0.6931471805599453));
+#endif
+}
+
+// log10(): multiplies log2() if not otherwise defined
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log10)(SSMF_VF v) {
+#if defined(SSMF_VF_LOG10)
+	return SSMF_VF_LOG10(v);
+#else
+	return SSMF_VF_MUL(SSMF_NAME(log2)(v), SSMF_VF_F(0.30102999566398120)); // log10(2)
 #endif
 }
 
@@ -559,6 +616,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
 #	undef SSMF_VF_FLOOR
 #	undef SSMF_VF_LOG2
 #	undef SSMF_VF_LOG
+#	undef SSMF_VF_LOG10
 #	undef SSMF_VF_EXP2
 #	undef SSMF_VF_EXP
 #	undef SSMF_VF_SIN
@@ -604,3 +662,4 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
 #undef SSMF_VF_ROUND_SMALL
 #undef SSMF_VF_EXP2_SMALL
 #undef SSMF_VF_SINPI_SMALL
+#undef SSMF_VF_SIGN_TO_ONE
