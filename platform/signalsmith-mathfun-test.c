@@ -43,6 +43,14 @@ static inline double testBarrierD(double v) {
 #ifndef TEST_FLOAT
 #	define TEST_FLOAT (TEST_ACCURACY <= 22)
 #endif
+#define SWEEP_MIN(T) ((T)(sizeof(T) == 4 ? 1e-30 : 1e-300))
+#define SWEEP_MAX(T) ((T)(sizeof(T) == 4 ? 1e30 : 1e300))
+#define TRIG_MAX(T) ((T)(sizeof(T) == 4 ? 1e6 : 1e60))
+#ifdef TEST_ROUND_INT32
+#	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
+#else
+#	define ROUNDING_MAX(T) SWEEP_MAX(T)
+#endif
 
 #if TEST_FLOAT
 #	define SSMF_ACCURACY TEST_ACCURACY
@@ -76,7 +84,6 @@ static uint32_t floatAsInt(float f) {
 #	define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
 #	if defined(TEST_ROUND_INT32)
 #		define SSMF_VF_ROUND(v) ((float)(int32_t)lrintf(v))
-#		define SSMF_ROUND_LIMIT 1073741824 // largest float below 2^31 (otherwise it rounds up)
 #	elif TEST_ROUND
 #		define SSMF_VF_ROUND(v) rintf(v)
 #	endif
@@ -131,7 +138,6 @@ static uint64_t doubleAsInt(double d) {
 #define SSMF_VF_LSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) << (bits))
 #if defined(TEST_ROUND_INT32)
 #	define SSMF_VF_ROUND(v) ((double)(int32_t)lrint(v))
-#	define SSMF_ROUND_LIMIT 2147483647
 #elif TEST_ROUND
 #	define SSMF_VF_ROUND(v) rint(v)
 #endif
@@ -218,37 +224,31 @@ static long double refCosPi(long double t) {
 }
 static inline int float_isSubnormal(float x) {uint32_t i; memcpy(&i, &x, 4); return (i & 0x7F800000u) == 0 && (i & 0x007FFFFFu) != 0;}
 static inline int double_isSubnormal(double x) {uint64_t i; memcpy(&i, &x, 8); return (i & 0x7FF0000000000000ull) == 0 && (i & 0x000FFFFFFFFFFFFFull) != 0;}
-static inline float float_nextDown(float x) {return nextafterf(x, -1e30f);}
-static inline float float_nextUp(float x) {return nextafterf(x, 1e30f);}
-static inline double double_nextDown(double x) {return nextafter(x, -1e300);}
-static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
+static inline float float_nextDown(float x) {return nextafterf(x, SWEEP_MIN(float));}
+static inline float float_nextUp(float x) {return nextafterf(x, SWEEP_MAX(float));}
+static inline double double_nextDown(double x) {return nextafter(x, SWEEP_MIN(double));}
+static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(double));}
 
 #define RANGE_EXP(T, x, low, high) for (T x = (T)low; x <= (T)high; x *= (T)(1 + TEST_STEP))
 #define RANGE_LINEAR(T, x, low, high) for (T x = low; x <= (T)high; x += (T)(TEST_STEP*(high - low)))
-
-#ifdef SSMF_ROUND_LIMIT
-#	define ROUNDING_MAX SSMF_ROUND_LIMIT
-#else
-#	define ROUNDING_MAX 1e30
-#endif
 
 // Same tests for both types
 #define TEST_TYPE(T) \
 	{ \
 		startCheck("abs"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			test(x, x, T##_test_abs(x)); \
 			test(-x, x, T##_test_abs(-x)); \
 		} \
 		endCheck(); \
 		startCheck("neg"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			test(x, -x, T##_test_neg(x)); \
 			test(-x, x, T##_test_neg(-x)); \
 		} \
 		endCheck(); \
 		startCheck("round"); \
-		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), ROUNDING_MAX(T)) { \
 			T y = T##_test_round(x); \
 			assertCheck(T##_test_abs(x - y) <= 0.5, x, roundl(x), y); \
 			T yN = T##_test_round(-x); \
@@ -272,7 +272,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 				assertCheck(T##_test_floor(x) == floorl(x), x, floorl(x), T##_test_floor(x)); \
 			} \
 		} \
-		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), ROUNDING_MAX(T)) { \
 			T xs[2] = {x, -x}; \
 			for (int i = 0; i < 2; ++i) { \
 				T y = xs[i]; \
@@ -289,7 +289,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 				assertCheck(T##_test_ceil(x) == ceill(x), x, ceill(x), T##_test_ceil(x)); \
 			} \
 		} \
-		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), ROUNDING_MAX(T)) { \
 			T xs[2] = {x, -x}; \
 			for (int i = 0; i < 2; ++i) { \
 				T y = xs[i]; \
@@ -306,7 +306,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 				assertCheck(T##_test_trunc(x) == truncl(x), x, truncl(x), T##_test_trunc(x)); \
 			} \
 		} \
-		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), ROUNDING_MAX(T)) { \
 			T xs[2] = {x, -x}; \
 			for (int i = 0; i < 2; ++i) { \
 				T y = xs[i]; \
@@ -315,7 +315,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("remainder1"); \
-		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), ROUNDING_MAX(T)) { \
 			T r = T##_test_remainder1(x); \
 			long double k = (long double)x - r; \
 			assertCheck(T##_test_abs(r) <= 0.5 && k == roundl(k), x, x - roundl(x), r); \
@@ -325,27 +325,27 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("pow2"); \
-		RANGE_EXP(T, x, 1e-15, 1e15) { \
+		RANGE_EXP(T, x, sqrtl(SWEEP_MIN(T)), sqrtl(SWEEP_MAX(T))) { \
 			test(x, (long double)x*x, T##_test_pow2(x)); \
 			test(-x, (long double)x*x, T##_test_pow2(-x)); \
 		} \
 		endCheck(); \
 		startCheck("dim"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			T y = x*(T)0.75; \
 			test(x, x - y, T##_test_dim(x, y)); \
 			test(y, 0, T##_test_dim(y, x)); \
 		} \
 		endCheck(); \
 		startCheck("copysign"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			test(x, -x, T##_test_copysign(x, (T)-1)); \
 			test(-x, x, T##_test_copysign(-x, (T)2)); \
 			test(x, x, T##_test_copysign(x, (T)0)); \
 		} \
 		endCheck(); \
 		startCheck("log2"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			test(x, log2l(x), T##_test_log2(x)); \
 		} \
 		RANGE_LINEAR(T, x, 0.9, 1.1) { \
@@ -356,7 +356,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("log"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			test(x, logl(x), T##_test_log(x)); \
 		} \
 		RANGE_LINEAR(T, x, 0.9, 1.1) { \
@@ -367,7 +367,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("log10"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			test(x, log10l(x), T##_test_log10(x)); \
 		} \
 		RANGE_LINEAR(T, x, 0.999, 1.111) { \
@@ -398,7 +398,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		RANGE_LINEAR(T, x, -10, 10) { \
 			test(x, refSinPi(T##_halfTurns(x)), T##_test_sin(x)); \
 		} \
-		RANGE_EXP(T, x, 1e-30, 1e6) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_MAX(T)) { \
 			test(x, refSinPi(T##_halfTurns(x)), T##_test_sin(x)); \
 			test(-x, refSinPi(T##_halfTurns(-x)), T##_test_sin(-x)); \
 		} \
@@ -407,7 +407,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		RANGE_LINEAR(T, x, -10, 10) { \
 			test(x, refCosPi(T##_halfTurns(x)), T##_test_cos(x)); \
 		} \
-		RANGE_EXP(T, x, 1e-30, 1e6) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_MAX(T)) { \
 			test(x, refCosPi(T##_halfTurns(x)), T##_test_cos(x)); \
 			test(-x, refCosPi(T##_halfTurns(-x)), T##_test_cos(-x)); \
 		} \
@@ -419,7 +419,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("sincos"); /* same as sin() and cos(), and bounded for all inputs */ \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_MAX(T)) { \
 			T s, c; \
 			T##_test_sincos(x, &s, &c); \
 			assertCheck(s == T##_test_sin(x) && c == T##_test_cos(x) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, x, sinl(x), s); \

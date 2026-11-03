@@ -3,19 +3,26 @@
 
 /*
 SIGNALSMITH MATHFUN
--------------------
+===================
 
 This header defines common floating-point functions, given #defines for the basic operations (constants, arithmetic, bitwise).  The functions are defined using a naming macro, so you can define your own prefix/suffix, e.g. `SSMF_NAME(abs)` -> `prefix_abs_suffix`.
 
-It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.
-
 It's focused on audio DSP use, which means:
 -	approximate results - you can choose the accuracy/complexity tradeoff with `SSMF_ACCURACY`, up to 50 bits.
--	no NaN/Inf support - anything which would produce these outputs will give nonsense
--	limited range - some functions (rounding, sin/cos/etc.) only give proper results for "small number" range (±2^22 for float, ±2^51 for double).  Outside this range their result should still be sensibly bounded, but not necessarily correct.
--	inaccurate results for subnormals - they won't be _accurate_, but should still be between f(0) and f(smallestNormal)
+-	no NaN/Inf support - anything which is given (or would produce) these values will give nonsense
+-	inaccurate results for subnormals - they should still be plausible (i.e. between f(0) and f(smallestNormal)) just not accurate
+
+FUNCTION HEADER
+---------------
+
+It's a "function header" - explicitly designed to be included multiple times if needed, for different value types (float/double/SIMD) or accuracy levels.  You define various `SSMF_...` macros, and these are un-defined by this header.
 
 Some fundamental operations are required (and they'll error if missing), but others are optional and the implementation will work around that.  Defining them should always be better if they exist simply (e.g. as one or two instructions).  If you set `SSMF_BITS` to either 32 or 64, then it assumes IEEE floating-point, and can cover more things.
+
+If you supply a rounding method (SSMF_VF_ROUND/SSMF_VF_FLOOR) which only works within a given range (e.g. by casting to a fixed-size integer and back), then various rounding functions and periodic functions (sin/cos/etc.) will produce nonsense values outside of that range.
+
+ARGUMENTS
+---------
 
 General config:
 	SSMF_NAME(fn): defaults to ssmf_fn
@@ -25,15 +32,14 @@ Constants and accuracy:
 	SSMF_BITS: if 32 or 64, it can guess values for the others in this group
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
-	SSMF_ROUND_LIMIT: the supplied rounding methods (and therefore periodic functions) only work below this value
 
-Types and constants:
+Types and constants (mandatory):
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
 	SSMF_VF_0: expression which gives a SSMF_VF with value 0
 	SSMF_VF_F(c): create a vector from a scalar literal, including converting to the appropriate type (e.g. float) since literals might be in any form, including non-bracketed expressions
 	SSMF_VF_I(c): same as previous, but using an integer literal which gets re-interpreted as a float
 
-Mandatory bitwise ops:
+Bitwise ops (mandatory):
 	SSMF_VF_AND(a, b): a & b
 	SSMF_VF_ANDNOT(a, b): ~a & b
 	SSMF_VF_OR(a, b): a | b
@@ -41,7 +47,7 @@ Mandatory bitwise ops:
 	SSMF_VF_RSHIFT_K(a, k): a >> k, for integer constant k
 	SSMF_VF_LSHIFT_K(a, k): a << k, for integer constant k
 
-Mandatory arithmetic:
+Arithmetic (mandatory):
 	SSMF_VF_ADD(a, b): a + b
 	SSMF_VF_SUB(a, b): a - b
 	SSMF_VF_MUL(a, b): a * b
@@ -50,7 +56,7 @@ Mandatory arithmetic:
 	SSMF_VF_MIN(a, b): min(a, b)
 
 Optional:
-	SSMF_VF_BARRIER(v): returns v unchanged, but the compiler can't reassociate maths through it (e.g. an empty `asm` block, with a register constraint for the target)
+	SSMF_VF_BARRIER(v): returns v unchanged, but the compiler can't reassociate arithmetic through it (e.g. an empty `asm` block, with a register constraint for the target)
 	SSMF_ATTRIBUTES: attributes given to every defined function
 	SSMF_INLINE: correct way to specify inline functions
 	SSMF_VF_FMA(a, b, c): a*b + c
