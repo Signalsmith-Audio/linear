@@ -331,6 +331,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
 #if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
 	return SSMF_VF_ROUND_SMALL(v);
+#elif defined(SSMF_VF_BARRIER)
+	return SSMF_VF_BARRIER(SSMF_VF_SUB(v, SSMF_NAME(remainder1)(v)));
 #else
 	return SSMF_VF_SUB(v, SSMF_NAME(remainder1)(v));
 #endif
@@ -349,7 +351,12 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(ceil)(SSMF_VF v) {
 #	endif
 	SSMF_VF remainder = SSMF_NAME(remainder1)(v);
 	SSMF_VF roundedDown = SSMF_VF_MIN(SSMF_VF_MUL(SSMF_VF_MAX(remainder, SSMF_VF_0), huge), SSMF_VF_F(1));
-	return SSMF_VF_ADD(SSMF_VF_SUB(v, remainder), roundedDown);
+#	ifdef SSMF_VF_BARRIER
+	return SSMF_VF_ADD(SSMF_VF_BARRIER(SSMF_VF_SUB(v, remainder)), roundedDown);
+#	else
+	// TODO: this doesn't seem right, even though it kinda works
+	return SSMF_VF_ADD(SSMF_NAME(round)(v), roundedDown);
+#	endif
 #endif
 }
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(floor)(SSMF_VF v) {
@@ -479,7 +486,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log10)(SSMF_VF v) {
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 #if defined(SSMF_VF_EXP2)
 	return SSMF_VF_EXP2(v);
-#elif defined(SSMF_VF_EXP)
+#elif defined(SSMF_VF_EXP) && SSMF_BITS != 32 && SSMF_BITS != 64
 	return SSMF_VF_EXP(SSMF_VF_MUL(v, SSMF_VF_F(0.6931471805599453)));
 #else
 #	if SSMF_BITS == 32
@@ -508,7 +515,12 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 #	endif
 	SSMF_VF fraction = SSMF_VF_SUB(v, integer);
 
+#	if defined(SSMF_VF_EXP)
+	// Still split off the integer part, so the rounding error of (v*ln2) doesn't grow with v
+	SSMF_VF curve = SSMF_VF_EXP(SSMF_VF_MUL(fraction, SSMF_VF_F(0.6931471805599453)));
+#	else
 	SSMF_VF curve = SSMF_VF_EXP2_SMALL(fraction);
+#	endif
 	return SSMF_VF_MUL(curve, scale);
 #endif
 }
