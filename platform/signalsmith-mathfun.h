@@ -25,7 +25,7 @@ Constants and accuracy:
 	SSMF_BITS: if 32 or 64, it can guess values for the others in this group
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
-	SSMF_ROUND_LIMIT: values below this magnitude get accurately rounded
+	SSMF_ROUND_LIMIT: the supplied rounding methods (and therefore periodic functions) only work below this value
 
 Types and constants:
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
@@ -88,16 +88,6 @@ Optional:
 #		define SSMF_EPSILON 2.220446049250313080847263336181640625e-16 // 2^-52
 #	else
 #		error "need SSMF_EPSILON if it's not 32-/64-bit IEEE"
-#	endif
-#endif
-
-#ifndef SSMF_ROUND_LIMIT
-#	if SSMF_BITS == 32
-#		define SSMF_ROUND_LIMIT 4194304 // 2^22
-#	elif SSMF_BITS == 64
-#		define SSMF_ROUND_LIMIT 2251799813685248 // 2^51
-#	else
-#		error "need SSMF_ROUND_LIMIT if it's not 32-/64-bit IEEE"
 #	endif
 #endif
 
@@ -218,7 +208,7 @@ Optional:
 #define SSMF_VF_POLY14M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY13M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY15M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY14M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY16M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY15M(x, __VA_ARGS__), x, c0)
-// SSMF_VF_ROUND_SMALL - a helper valid within (at least) the SSMF_ROUND_LIMIT
+// SSMF_VF_ROUND_SMALL - a helper valid within (at least) the "small number" range
 #if defined(SSMF_VF_ROUND)
 #	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
 #elif defined(SSMF_VF_FLOOR)
@@ -292,7 +282,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(remainder1)(SSMF_VF v) {
 	absVOffset = SSMF_VF_ANDNOT(SSMF_VF_I(SSMF_ROUNDING_SAFEBIT), absVOffset);
 #	endif
 	SSMF_VF absVRounded = SSMF_VF_SUB(absVOffset, SSMF_VF_F(SSMF_ROUNDING_K));
-	return SSMF_VF_XOR(SSMF_VF_SUB(absV, absVRounded), sign);
+	return SSMF_VF_XOR(SSMF_VF_SUB(absV, SSMF_VF_BARRIER_LOWBIT(absVRounded)), sign);
 #	undef SSMF_ROUNDING_K
 #	undef SSMF_ROUNDING_SAFEBIT
 #endif
@@ -313,14 +303,16 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(dim)(SSMF_VF a, SSMF_VF b) {
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 #ifdef SSMF_VF_COPYSIGN
 	return SSMF_VF_COPYSIGN(a, b);
-#elif SSMF_BITS == 32
-	SSMF_VF mask = SSMF_VF_F(-0.0f);
-#elif SSMF_BITS == 64
-	SSMF_VF mask = SSMF_VF_F(-0.0);
 #else
-#	error "need SSMF_VF_COPYSIGN() unless it's 32/64-bit IEEE floats"
-#endif
+#	if SSMF_BITS == 32
+	SSMF_VF mask = SSMF_VF_F(-0.0f);
+#	elif SSMF_BITS == 64
+	SSMF_VF mask = SSMF_VF_F(-0.0);
+#	else
+#		error "need SSMF_VF_COPYSIGN() unless it's 32/64-bit IEEE floats"
+#	endif
 	return SSMF_VF_OR(SSMF_VF_ANDNOT(mask, a), SSMF_VF_AND(mask, b));
+#endif
 }
 
 // round(): nearest integer
@@ -336,8 +328,15 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(ceil)(SSMF_VF v) {
 #if defined(SSMF_VF_FLOOR)
 	return SSMF_NAME(neg)(SSMF_VF_FLOOR(SSMF_NAME(neg)(v)));
 #else
+#	if SSMF_BITS == 32
+	SSMF_VF huge = SSMF_VF_F(1.7014118e+38); // 2^127
+#	elif SSMF_BITS == 64
+	SSMF_VF huge = SSMF_VF_F(1.4119048864730642e+308); // 2^1023
+#	else
+#		error "need SSMF_VF_FLOOR() unless it's 32/64-bit IEEE floats"
+#	endif
 	SSMF_VF remainder = SSMF_NAME(remainder1)(v);
-	SSMF_VF roundedDown = SSMF_VF_SUB(SSMF_VF_F(0.5), SSMF_NAME(copysign)(SSMF_VF_F(0.5), remainder));
+	SSMF_VF roundedDown = SSMF_VF_MIN(SSMF_VF_MUL(SSMF_VF_MAX(remainder, SSMF_VF_0), huge), SSMF_VF_F(1));
 	return SSMF_VF_ADD(SSMF_VF_SUB(v, remainder), roundedDown);
 #endif
 }
@@ -544,18 +543,16 @@ SSMF_ATTRIBUTES SSMF_INLINE void SSMF_NAME(sincos)(SSMF_VF v, SSMF_VF *sinOut, S
 #	else
 #		error "need SSMF_VF_SINCOS (or _SIN/_COS pair) if not 32/64-bit IEEE"
 #	endif
-	SSMF_VF t = SSMF_VF_MUL(v, SSMF_VF_F(0.31830988618379067)); // 1/pi
-	// Clamp to the "small" range
-	t = SSMF_VF_MIN(SSMF_VF_MAX(t, SSMF_VF_F(-SSMF_ROUND_LIMIT)), SSMF_VF_F(SSMF_ROUND_LIMIT));
-	SSMF_VF k = SSMF_VF_ROUND_SMALL(t);
-	SSMF_VF f = SSMF_VF_SUB(t, k); // exact
+	SSMF_VF halfTurns = SSMF_VF_MUL(v, SSMF_VF_F(0.31830988618379067)); // 1/pi
+	SSMF_VF frac = SSMF_NAME(remainder1)(halfTurns);
+	SSMF_VF rounded = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(halfTurns, frac));
 	// Add to a magic constant, then bit-shift to move final mantissa bit (1s unit) -> sign bit
-	SSMF_VF sign = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(k, SSMF_VF_F(parityMagic)), signShift);
+	SSMF_VF sign = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(rounded, SSMF_VF_F(parityMagic)), signShift);
 	// Intermediate rounding can push it slightly outside the correct range, so we clamp again
-	SSMF_VF sinCurve = SSMF_VF_SINPI_SMALL(f);
+	SSMF_VF sinCurve = SSMF_VF_SINPI_SMALL(frac);
 	*sinOut = SSMF_VF_XOR(SSMF_VF_MIN(SSMF_VF_MAX(sinCurve, SSMF_VF_F(-1)), SSMF_VF_F(1)), sign);
 	// 0.5 - |f| is exact near cos()'s zeros (|f| near 0.5), so cos() keeps its relative accuracy there
-	SSMF_VF fCos = SSMF_VF_SUB(SSMF_VF_F(0.5), SSMF_NAME(abs)(f));
+	SSMF_VF fCos = SSMF_VF_SUB(SSMF_VF_F(0.5), SSMF_NAME(abs)(frac));
 	SSMF_VF cosCurve = SSMF_VF_SINPI_SMALL(fCos); // fCos >= 0, so this can't be below 0
 	*cosOut = SSMF_VF_XOR(SSMF_VF_MIN(cosCurve, SSMF_VF_F(1)), sign);
 #endif

@@ -76,7 +76,7 @@ static uint32_t floatAsInt(float f) {
 #	define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
 #	if defined(TEST_ROUND_INT32)
 #		define SSMF_VF_ROUND(v) ((float)(int32_t)lrintf(v))
-#		define SSMF_ROUND_LIMIT 2147483520 // largest float below 2^31 (2^31 - 1 rounds up to 2^31 as a float, which overflows int32)
+#		define SSMF_ROUND_LIMIT 1073741824 // largest float below 2^31 (otherwise it rounds up)
 #	elif TEST_ROUND
 #		define SSMF_VF_ROUND(v) rintf(v)
 #	endif
@@ -226,6 +226,12 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 #define RANGE_EXP(T, x, low, high) for (T x = (T)low; x <= (T)high; x *= (T)(1 + TEST_STEP))
 #define RANGE_LINEAR(T, x, low, high) for (T x = low; x <= (T)high; x += (T)(TEST_STEP*(high - low)))
 
+#ifdef SSMF_ROUND_LIMIT
+#	define ROUNDING_MAX SSMF_ROUND_LIMIT
+#else
+#	define ROUNDING_MAX 1e30
+#endif
+
 // Same tests for both types
 #define TEST_TYPE(T) \
 	{ \
@@ -242,7 +248,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 		} \
 		endCheck(); \
 		startCheck("round"); \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
 			T y = T##_test_round(x); \
 			assertCheck(T##_test_abs(x - y) <= 0.5, x, roundl(x), y); \
 			T yN = T##_test_round(-x); \
@@ -266,7 +272,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 				assertCheck(T##_test_floor(x) == floorl(x), x, floorl(x), T##_test_floor(x)); \
 			} \
 		} \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
 			T xs[2] = {x, -x}; \
 			for (int i = 0; i < 2; ++i) { \
 				T y = xs[i]; \
@@ -283,7 +289,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 				assertCheck(T##_test_ceil(x) == ceill(x), x, ceill(x), T##_test_ceil(x)); \
 			} \
 		} \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
 			T xs[2] = {x, -x}; \
 			for (int i = 0; i < 2; ++i) { \
 				T y = xs[i]; \
@@ -300,7 +306,7 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 				assertCheck(T##_test_trunc(x) == truncl(x), x, truncl(x), T##_test_trunc(x)); \
 			} \
 		} \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
 			T xs[2] = {x, -x}; \
 			for (int i = 0; i < 2; ++i) { \
 				T y = xs[i]; \
@@ -308,8 +314,8 @@ static inline double double_nextUp(double x) {return nextafter(x, 1e300);}
 			} \
 		} \
 		endCheck(); \
-		startCheck("remainder1"); /* exact below 2^22, only bounded above that */ \
-		RANGE_EXP(T, x, 1e-30, 1e30) { \
+		startCheck("remainder1"); \
+		RANGE_EXP(T, x, 1e-30, ROUNDING_MAX) { \
 			T r = T##_test_remainder1(x); \
 			long double k = (long double)x - r; \
 			assertCheck(T##_test_abs(r) <= 0.5 && k == roundl(k), x, x - roundl(x), r); \
