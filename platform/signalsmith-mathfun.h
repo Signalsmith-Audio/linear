@@ -71,6 +71,7 @@ Optional:
 	SSMF_VF_LOG(v)
 	SSMF_VF_EXP2(v)
 	SSMF_VF_EXP(v)
+	SSMF_VF_EXPM1(v)
 	SSMF_VF_SIN(v)
 	SSMF_VF_COS(v)
 	SSMF_VF_SINCOS(v, sinOut, cosOut): writes to two pointers
@@ -253,28 +254,32 @@ Optional:
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(abs)(SSMF_VF v) {
 #ifdef SSMF_VF_ABS
 	return SSMF_VF_ABS(v);
-#elif SSMF_BITS == 32
-	SSMF_VF mask = SSMF_VF_I(0x7FFFFFFF);
-#elif SSMF_BITS == 64
-	SSMF_VF mask = SSMF_VF_I(0x7FFFFFFFFFFFFFFFLL);
 #else
-#	error "need SSMF_VF_ABS() unless it's 32/64-bit IEEE floats"
-#endif
+#	if SSMF_BITS == 32
+	SSMF_VF mask = SSMF_VF_I(0x7FFFFFFF);
+#	elif SSMF_BITS == 64
+	SSMF_VF mask = SSMF_VF_I(0x7FFFFFFFFFFFFFFFLL);
+#	else
+#		error "need SSMF_VF_ABS() unless it's 32/64-bit IEEE floats"
+#	endif
 	return SSMF_VF_AND(v, mask);
+#endif
 }
 
 // neg(): bitwise XOR to flip the sign bit
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 #ifdef SSMF_VF_NEG
 	return SSMF_VF_NEG(v);
-#elif SSMF_BITS == 32
-	SSMF_VF mask = SSMF_VF_F(-0.0f);
-#elif SSMF_BITS == 64
-	SSMF_VF mask = SSMF_VF_F(-0.0);
 #else
-#	error "need SSMF_VF_NEG() unless it's 32/64-bit IEEE floats"
-#endif
+#	if SSMF_BITS == 32
+	SSMF_VF mask = SSMF_VF_F(-0.0f);
+#	elif SSMF_BITS == 64
+	SSMF_VF mask = SSMF_VF_F(-0.0);
+#	else
+#		error "need SSMF_VF_NEG() unless it's 32/64-bit IEEE floats"
+#	endif
 	return SSMF_VF_XOR(v, mask);
+#endif
 }
 
 // remainder1(): v - round(v), in [-0.5, 0.5].  Large inputs (which are already integers) give 0.
@@ -577,6 +582,66 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
 #endif
 }
 
+// Approximations for (2^x - 1)/x, over [-0.5, 0.5]
+#if SSMF_ACCURACY <= 6 // 6.65 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY1(fraction, 0.7000442826638025, 0.24021722076323884)
+#elif SSMF_ACCURACY <= 11 // 11.17 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY2(fraction, 0.6931783036650985, 0.24202885767082458, 0.055503963410521724)
+#elif SSMF_ACCURACY <= 16 // 16.03 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY3(fraction, 0.6931368577797392, 0.24023252161982106, 0.055837288260277985, 0.009618110776386968)
+#elif SSMF_ACCURACY <= 21 // 21.14 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY4(fraction, 0.6931471435061761, 0.2402235134314774, 0.05550500213506492, 0.00966624542474763, 0.0013333538697077286)
+#elif SSMF_ACCURACY <= 26 // 26.48 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY5(fraction, 0.6931471879266923, 0.24022649794966477, 0.05550357433634894, 0.009618237493735582, 0.0013390735478205204, 0.00015403512759642408)
+#elif SSMF_ACCURACY <= 32 // 32.00 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY6(fraction, 0.6931471805815692, 0.24022650920051655, 0.055504107275970826, 0.009618057037010458, 0.0013333669451609847, 0.00015461329895107015, 1.5252719788364698e-05)
+#elif SSMF_ACCURACY <= 37 // 37.70 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY7(fraction, 0.6931471805568766, 0.24022650696489165, 0.05550410906007004, 0.00961812894252873, 0.0013333478814173772, 0.00015403629590569136, 1.5303609855524417e-05, 1.3215476850803238e-06)
+#elif SSMF_ACCURACY <= 43 // 43.55 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_VF_POLY8(fraction, 0.6931471805599377, 0.24022650695814085, 0.05550410866573463, 0.009618129159051157, 0.0013333557983831008, 0.0001540345613381229, 1.5252811940269293e-05, 1.3255160531929068e-06, 1.017807963809425e-07)
+#else // 54.91 bits
+#	define SSMF_VF_EXPM1_SMALL(fraction) SSMF_NAME(pow2)(SSMF_VF_POLY8(fraction, 0.8325546111576978, 0.14427072034653474, 0.020833508967823437, 0.002166103200344167, 0.0001647400524524726, 9.756663689790118e-06, 5.292758407174255e-07, 2.9195119014317305e-08, 1.1392525047316455e-09))
+#endif
+
+// expm1(): exp(v) - 1, split into an integer + fraction, then computed as [2^k(2^f - 1)] + [2^k - 1]
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(expm1)(SSMF_VF v) {
+#if defined(SSMF_VF_EXPM1)
+	return SSMF_VF_EXPM1(v);
+#else
+#	if SSMF_BITS == 32
+	const int mantissaBits = 23;
+	const float minInput = -126, maxInput = 127.49609375; // same as exp2()
+	const float exponentMagic = 12582912 + 127; // 1.5 * 2^23 + 127
+#	elif SSMF_BITS == 64
+	const int mantissaBits = 52;
+	const double minInput = -1022, maxInput = 1023.4990234375;
+	const double exponentMagic = 6755399441056767LL; // 1.5 * 2^52 + 1023
+#	else
+#		error "Need SSMF_VF_EXPM1 if it's not 32/64-bit IEEE"
+#	endif
+	SSMF_VF v2 = SSMF_VF_MUL(v, SSMF_VF_F(1.4426950408889634)); // log2(e)
+	v2 = SSMF_VF_MIN(SSMF_VF_MAX(v2, SSMF_VF_F(minInput)), SSMF_VF_F(maxInput));
+#	if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
+	SSMF_VF integer = SSMF_VF_ROUND_SMALL(v2);
+	SSMF_VF scale = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(integer, SSMF_VF_F(exponentMagic)), mantissaBits);
+#	else
+	SSMF_VF withMagic = SSMF_NAME(abs)(SSMF_VF_ADD(v2, SSMF_VF_F(exponentMagic)));
+	SSMF_VF scale = SSMF_VF_LSHIFT_K(withMagic, mantissaBits);
+	SSMF_VF integer = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(withMagic, SSMF_VF_F(exponentMagic)));
+#	endif
+	SSMF_VF fraction = SSMF_VF_SUB(v2, integer);
+	SSMF_VF curveM1 = SSMF_VF_MUL(fraction, SSMF_VF_EXPM1_SMALL(fraction)); // 2^f - 1
+	// Stop fast-math from refactoring into 2^k(2^f - 1 + 1) - 1, which loses our small-input precision
+#	ifdef SSMF_VF_BARRIER
+	SSMF_VF scaleM1 = SSMF_VF_BARRIER(SSMF_VF_SUB(scale, SSMF_VF_F(1)));
+#	else
+	SSMF_VF zeroBit = SSMF_VF_BARRIER_HIGHBIT_MASK(fraction); // always zero because abs(fraction) <= 0.5
+	SSMF_VF scaleM1 = SSMF_VF_XOR(zeroBit, SSMF_VF_SUB(scale, SSMF_VF_F(1)));
+#	endif
+	return SSMF_VF_ADD(SSMF_VF_MUL(curveM1, scale), scaleM1);
+#endif
+}
+
 // Minimax fits (relative error, exact at 0 and 0.5) of sin(πx) for x in [-0.5, 0.5], as x*R(x^2)
 #if SSMF_ACCURACY <= 12 // 12.90 bits
 #	define SSMF_VF_SINPI_SMALL(x) SSMF_VF_MUL(x, SSMF_VF_POLY2(SSMF_NAME(pow2)(x), 3.1411817285078589, -5.1429482766351837, 2.3128854504149916))
@@ -798,6 +863,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(tanh)(SSMF_VF v) {
 #	undef SSMF_VF_LOG10
 #	undef SSMF_VF_EXP2
 #	undef SSMF_VF_EXP
+#	undef SSMF_VF_EXPM1
 #	undef SSMF_VF_SIN
 #	undef SSMF_VF_COS
 #	undef SSMF_VF_SINCOS
@@ -845,5 +911,6 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(tanh)(SSMF_VF v) {
 #undef SSMF_VF_ROUND_MAGIC
 #undef SSMF_VF_ROUND_SMALL
 #undef SSMF_VF_EXP2_SMALL
+#undef SSMF_VF_EXPM1_SMALL
 #undef SSMF_VF_SINPI_SMALL
 #undef SSMF_VF_SIGN_TO_ONE

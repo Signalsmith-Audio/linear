@@ -429,6 +429,18 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(x, expl(x), T##_test_exp(x)); \
 		} \
 		endCheck(); \
+		startCheck("expm1"); /* relative accuracy near 0 as well */ \
+		RANGE_LINEAR(T, x, -4, 4) { \
+			test(x, expm1l(x), T##_test_expm1(x)); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), 4) { \
+			test(x, expm1l(x), T##_test_expm1(x)); \
+			test(-x, expm1l(-x), T##_test_expm1(-x)); \
+		} \
+		RANGE_LINEAR(T, x, -80, -4) { /* approaches -1 */ \
+			test(x, expm1l(x), T##_test_expm1(x)); \
+		} \
+		endCheck(); \
 		/* sin/cos are backward-accurate: compared against the exact value for (x/pi rounded to T) */ \
 		startCheck("sin"); \
 		RANGE_LINEAR(T, x, -10, 10) { \
