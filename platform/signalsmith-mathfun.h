@@ -80,6 +80,7 @@ Optional:
 	SSMF_VF_TANH(v)
 	SSMF_VF_ASIN(v)
 	SSMF_VF_ACOS(v)
+	SSMF_VF_ATAN(v)
 
 APPROXIMATIONS
 ---------
@@ -907,6 +908,25 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(acos)(SSMF_VF v) {
 #endif
 }
 
+// atan() = x*s*H(s), for s = 1/sqrt(1 + x^2).  You can work this out by expanding asin(x/sqrt(1 + x^2))
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
+#if defined(SSMF_VF_ATAN)
+	return SSMF_VF_ATAN(v);
+#else
+	// Clamp so that x^2 can't overflow
+#	if SSMF_BITS == 32
+	const float maxInput = 1073741824; // 2^60 - this is already well into the region where it returns π/2 anyway
+#	elif SSMF_BITS == 64
+	const double maxInput = 1152921504606846976.0; // 2^500
+#	else
+#		error "need SSMF_VF_ATAN() unless it's 32/64-bit IEEE floats"
+#	endif
+	SSMF_VF x = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-maxInput)), SSMF_VF_F(maxInput));
+	SSMF_VF s = SSMF_NAME(rsqrt)(SSMF_VF_FMAK(x, x, 1));
+	return SSMF_VF_MUL(SSMF_VF_MUL(x, s), SSMF_VF_INVCOS_HELPER(s));
+#endif
+}
+
 // Clean up all our arguments unless explicitly told not to
 #ifndef SSMF_NO_CLEANUP
 #	undef SSMF_BITS
@@ -952,6 +972,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(acos)(SSMF_VF v) {
 #	undef SSMF_VF_TANH
 #	undef SSMF_VF_ASIN
 #	undef SSMF_VF_ACOS
+#	undef SSMF_VF_ATAN
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES

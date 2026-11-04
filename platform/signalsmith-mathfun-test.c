@@ -524,6 +524,17 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		test(0, refAcos(0), T##_test_acos(0)); \
 		assertCheck(T##_test_acos(2) >= 0 && T##_test_acos(-2) <= (T)3.1415927, 2, refAcos(1), T##_test_acos(2)); \
 		endCheck(); \
+		startCheck("atan"); /* relative accuracy near 0, and bounded */ \
+		RANGE_LINEAR(T, x, -10, 10) { \
+			test(x, atanl(x), T##_test_atan(x)); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), LARGE_MAX(T)) { \
+			T y = T##_test_atan(x), yNeg = T##_test_atan(-x); \
+			test(x, atanl(x), y); \
+			test(-x, atanl(-x), yNeg); \
+			assertCheck(y <= (T)1.5707963267948966 && yNeg >= -(T)1.5707963267948966, x, atanl(x), y); \
+		} \
+		endCheck(); \
 		startCheck("tan"); /* backward-accurate like sin/cos, and bounded for all inputs (within the rounding range) */ \
 		RANGE_LINEAR(T, x, -10, 10) TEST_TAN(T, x) \
 		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_ACCURATE_MAX(T)) { \
