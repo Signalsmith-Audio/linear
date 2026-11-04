@@ -29,10 +29,10 @@ General config:
 	SSMF_NO_CLEANUP: if defined, the arguments don't get #undef'd at the end
 
 Constants and accuracy:
-	SSMF_BITS: if 32 or 64, it can guess values for the others in this group
+	SSMF_BITS: if 32 or 64, it assumes standard IEEE floats, and provides defaults for SSMF_ACCURACY (20 or 48) and SSMF_EPSILON
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
-	SSMF_SMALL_INPUTS: if defined, skip some clamps which guard against overflows
+	SSMF_SMALL_INPUTS: if defined, skip some clamps which guard against overflows (specifically x^2)
 
 Types and constants (mandatory):
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
@@ -914,17 +914,19 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #if defined(SSMF_VF_ATAN)
 	return SSMF_VF_ATAN(v);
 #else
+#	ifndef SSMF_SMALL_INPUTS
 	// Clamp so that x^2 can't overflow
-#	if SSMF_BITS == 32
-	const float maxInput = 1073741824; // 2^60 - this is already well into the region where it returns π/2 anyway
-#	elif SSMF_BITS == 64
+#		if SSMF_BITS == 32
+		const float maxInput = 1073741824; // 2^60 - this is already well into the region where it returns π/2 anyway
+#		elif SSMF_BITS == 64
 	const double maxInput = 1152921504606846976.0; // 2^500
-#	else
-#		error "need SSMF_VF_ATAN() unless it's 32/64-bit IEEE floats"
+#		else
+#			error "need SSMF_VF_ATAN() (or SSMF_SMALL_INPUTS) unless it's 32/64-bit IEEE floats"
+#		endif
+	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-maxInput)), SSMF_VF_F(maxInput));
 #	endif
-	SSMF_VF x = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-maxInput)), SSMF_VF_F(maxInput));
-	SSMF_VF s = SSMF_NAME(rsqrt)(SSMF_VF_FMAK(x, x, 1));
-	return SSMF_VF_MUL(SSMF_VF_MUL(x, s), SSMF_VF_INVCOS_HELPER(s));
+	SSMF_VF s = SSMF_NAME(rsqrt)(SSMF_VF_FMAK(v, v, 1));
+	return SSMF_VF_MUL(SSMF_VF_MUL(v, s), SSMF_VF_INVCOS_HELPER(s));
 #endif
 }
 
