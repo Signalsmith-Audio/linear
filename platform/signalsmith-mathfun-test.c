@@ -216,6 +216,10 @@ static void endCheck() {
 	if (!ok) returnCode = 1;
 }
 
+// asin/acos references which avoid 1 - x^2 (gcc's fast-math asinl()/acosl() cancel near ±1)
+static long double refAsin(long double x) {return atan2l(x, sqrtl((1 - x)*(1 + x)));}
+static long double refAcos(long double x) {return 2*atan2l(sqrtl(1 - x), sqrtl(1 + x));}
+
 // Neighbouring values, for testing edge-cases
 #define SSMF_TEST_PI 3.141592653589793238462643383279502884L
 #define SSMF_TEST_EPSILON(T) (sizeof(T) == 4 ? 1.1920928955078125e-07 : 2.220446049250313080847263336181640625e-16)
@@ -490,6 +494,35 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(-x, tanhl(-x), yNeg); \
 			assertCheck(T##_test_abs(y) <= 1 && T##_test_abs(yNeg) <= 1, x, tanhl(x), y); \
 		} \
+		endCheck(); \
+		startCheck("asin"); /* relative accuracy near 0 and ±1, and bounded (inputs are clamped to [-1, 1]) */ \
+		RANGE_LINEAR(T, x, -1, 1) { \
+			test(x, refAsin(x), T##_test_asin(x)); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), 1) { \
+			test(x, refAsin(x), T##_test_asin(x)); \
+			test(-x, refAsin(-x), T##_test_asin(-x)); \
+			test(1 - x, refAsin(1 - x), T##_test_asin(1 - x)); \
+			test(x - 1, refAsin(x - 1), T##_test_asin(x - 1)); \
+		} \
+		test(1, refAsin(1), T##_test_asin(1)); \
+		test(-1, refAsin(-1), T##_test_asin(-1)); \
+		assertCheck(T##_test_abs(T##_test_asin(2)) <= (T)1.5707964 && T##_test_abs(T##_test_asin(-2)) <= (T)1.5707964, 2, refAsin(1), T##_test_asin(2)); \
+		endCheck(); \
+		startCheck("acos"); /* relative accuracy near 1, and bounded (inputs are clamped to [-1, 1]) */ \
+		RANGE_LINEAR(T, x, -1, 1) { \
+			test(x, refAcos(x), T##_test_acos(x)); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), 1) { \
+			test(x, refAcos(x), T##_test_acos(x)); \
+			test(-x, refAcos(-x), T##_test_acos(-x)); \
+			test(1 - x, refAcos(1 - x), T##_test_acos(1 - x)); \
+			test(x - 1, refAcos(x - 1), T##_test_acos(x - 1)); \
+		} \
+		test(1, refAcos(1), T##_test_acos(1)); \
+		test(-1, refAcos(-1), T##_test_acos(-1)); \
+		test(0, refAcos(0), T##_test_acos(0)); \
+		assertCheck(T##_test_acos(2) >= 0 && T##_test_acos(-2) <= (T)3.1415927, 2, refAcos(1), T##_test_acos(2)); \
 		endCheck(); \
 		startCheck("tan"); /* backward-accurate like sin/cos, and bounded for all inputs (within the rounding range) */ \
 		RANGE_LINEAR(T, x, -10, 10) TEST_TAN(T, x) \
