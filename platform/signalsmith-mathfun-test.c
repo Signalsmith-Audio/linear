@@ -217,6 +217,7 @@ static void endCheck() {
 
 // Neighbouring values, for testing edge-cases
 #define SSMF_TEST_PI 3.141592653589793238462643383279502884L
+#define SSMF_TEST_EPSILON(T) (sizeof(T) == 4 ? 1.1920928955078125e-07 : 2.220446049250313080847263336181640625e-16)
 // x/pi rounded to T (volatile so fast-math can't keep extra precision), which is what sin()/cos() are accurate for
 static inline float float_halfTurns(float x) {volatile float t = x*0.31830988618379067f; return t;}
 static inline double double_halfTurns(double x) {volatile double t = x*0.31830988618379067; return t;}
@@ -233,6 +234,14 @@ static long double refCosPi(long double t) {
 	long double r = sinl(SSMF_TEST_PI*fCos);
 	return (fmodl(k, 2) == 0) ? r : -r;
 }
+// tan(pi*t), reduced exactly first, using 1/tan(pi*(0.5 - |f|)) near the poles to keep relative accuracy
+static long double refTanPi(long double t) {
+	volatile long double k = roundl(t), f = t - k;
+	if (fabsl(f) < 0.25L) return tanl(SSMF_TEST_PI*f);
+	volatile long double fPole = 0.5L - fabsl(f);
+	long double r = 1/tanl(SSMF_TEST_PI*fPole);
+	return (f < 0) ? -r : r;
+}
 static inline int float_isSubnormal(float x) {uint32_t i; memcpy(&i, &x, 4); return (i & 0x7F800000u) == 0 && (i & 0x007FFFFFu) != 0;}
 static inline int double_isSubnormal(double x) {uint64_t i; memcpy(&i, &x, 8); return (i & 0x7FF0000000000000ull) == 0 && (i & 0x000FFFFFFFFFFFFFull) != 0;}
 static inline float float_nextDown(float x) {return nextafterf(x, -SWEEP_MAX(float));}
@@ -242,6 +251,16 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 
 #define RANGE_EXP(T, x, low, high) for (T x = (T)low; x <= (T)high; x *= (T)(1 + TEST_STEP))
 #define RANGE_LINEAR(T, x, low, high) for (T x = low; x <= (T)high; x += (T)(TEST_STEP*(high - low)))
+
+// When x/pi lands exactly a pole, we just check it's large and finite
+#define TEST_TAN(T, x) { \
+		T t = T##_halfTurns(x), y = T##_test_tan(x); \
+		if (fabsl(t - roundl(t)) == 0.5L) { \
+			assertCheck(T##_test_abs(y) >= (T)1e6 && T##_test_abs(y) <= (T)(4/SSMF_TEST_EPSILON(T)), x, refTanPi(T##_nextDown(t)), y); \
+		} else { \
+			test(x, refTanPi(t), y); \
+		} \
+	}
 
 // Same tests for both types
 #define TEST_TYPE(T) \
@@ -444,6 +463,25 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			assertCheck((!inRange || (s == T##_test_sin(x) && c == T##_test_cos(x))) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, x, sinl(x), s); \
 			T##_test_sincos(-x, &s, &c); \
 			assertCheck((!inRange || (s == T##_test_sin(-x) && c == T##_test_cos(-x))) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, -x, sinl(-x), s); \
+		} \
+		endCheck(); \
+		startCheck("tan"); /* backward-accurate like sin/cos, and bounded for all inputs (within the rounding range) */ \
+		RANGE_LINEAR(T, x, -10, 10) TEST_TAN(T, x) \
+		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_ACCURATE_MAX(T)) { \
+			TEST_TAN(T, x) \
+			TEST_TAN(T, -x) \
+		} \
+		for (T k = -100; k <= 100; ++k) { /* either side of tan()'s poles */ \
+			T edge = (T)((k + 0.5L)*SSMF_TEST_PI); \
+			T below = T##_nextDown(edge), above = T##_nextUp(edge); \
+			TEST_TAN(T, edge) \
+			TEST_TAN(T, below) \
+			TEST_TAN(T, above) \
+		} \
+		RANGE_EXP(T, x, TRIG_ACCURATE_MAX(T), SWEEP_MAX(T)) { \
+			if (x > (T)ROUNDING_MAX(T)*3) break; \
+			T y = T##_test_tan(x), yNeg = T##_test_tan(-x); \
+			assertCheck(T##_test_abs(y) <= (T)(4/SSMF_TEST_EPSILON(T)) && T##_test_abs(yNeg) <= (T)(4/SSMF_TEST_EPSILON(T)), x, tanl(x), y); \
 		} \
 		endCheck(); \
 	}
