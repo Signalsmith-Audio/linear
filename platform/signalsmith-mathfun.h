@@ -78,6 +78,24 @@ Optional:
 	SSMF_VF_TAN(v)
 	SSMF_VF_TANH(v)
 
+APPROXIMATIONS
+---------
+
+The approximations were found through brute-force search of different shapes of approximation.  At its core, each is a minimax Padé or polynomial approximation, with optional modifications of the input or output.
+
+Each candidate shape is given a rule-of-thumb "complexity" metric:
+* N for polynomials
+* N + M + 2 for Padé: the +2 is for division, which is often slower than 2 FMAs, but also enables parallel evaluation of the top/bottom polynomials (improves pipelining)
+* +1 for |x| or x² on the input
+* +1 for y² on the output, or multiplying by x
+* +2 for multiplying the output by |x|
+
+The best fit for each "complexity" is kept, and then they are chosen at compile-time based on the requested accuracy in bits (i.e. `log2(error)`).
+
+Sometimes the function actually fitted is some variant which already handles some features (like poles, or zeros where we want to maintain accuracy), for example instead of matching tan() directly, we match `tan(πf)(1 - 2f)(1 + 2f)/f` which is finite and non-negative everywhere.  These are noted in the comments.
+
+If you re-use any of these approximations, attribution would be nice, but isn't strictly required.
+
 */
 
 #ifndef SSMF_NAME
