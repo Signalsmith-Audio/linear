@@ -245,28 +245,12 @@ If you re-use any of these approximations, attribution would be nice, but isn't 
 #define SSMF_VF_POLY14M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY13M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY15M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY14M(x, __VA_ARGS__), x, c0)
 #define SSMF_VF_POLY16M(x, c0, ...) SSMF_VF_FMAK(SSMF_VF_POLY15M(x, __VA_ARGS__), x, c0)
-// SSMF_VF_ROUND_SMALL - a helper valid within (at least) the "small number" range
+// SSMF_VF_ROUND_INNER - uses either a supplied ROUND or FLOAT, otherwise undefined
 #if defined(SSMF_VF_ROUND)
-#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_ROUND(v)
+#	define SSMF_VF_ROUND_INNER(v) SSMF_VF_ROUND(v)
 #elif defined(SSMF_VF_FLOOR)
 // Add the largest value below 0.5, so that e.g. 0.49999997f doesn't round up (since 0.49999997f + 0.5f -> 1.0f)
-#	define SSMF_VF_ROUND_SMALL(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5 - SSMF_EPSILON*0.25)))
-#else
-#	if SSMF_BITS == 32
-#		define SSMF_VF_ROUND_MAGIC 12582912 // 1.5 * 2^23
-#	elif SSMF_BITS == 64
-#		define SSMF_VF_ROUND_MAGIC 6755399441055744 // 1.5 * 2^52
-#	else
-#		error "SSMF_VF_ROUND() or SSMF_VF_FLOOR() required unless it's 32/64-bit IEEE float"
-#	endif
-#	ifdef SSMF_VF_BARRIER
-			// Add, barrier, subtract, barrier (so the integer result can't be reassociated with whatever comes next, e.g. `v - round(v)`)
-#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER(SSMF_VF_SUB(SSMF_VF_BARRIER(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
-#	else
-			// (v + magic) is always positive, so abs() is a no-op which acts as a barrier, but the compiler can't prove it, so it stops the add/subtract being folded.
-			// The result is an integer, so its lowest mantissa bit is 0, and BARRIER_LOWBIT fences it from whatever comes next.
-#		define SSMF_VF_ROUND_SMALL(v) SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(SSMF_NAME(abs)(SSMF_VF_ADD((v), SSMF_VF_F(SSMF_VF_ROUND_MAGIC))), SSMF_VF_F(SSMF_VF_ROUND_MAGIC)))
-#	endif
+#	define SSMF_VF_ROUND_INNER(v) SSMF_VF_FLOOR(SSMF_VF_ADD((v), SSMF_VF_F(0.5 - SSMF_EPSILON*0.25)))
 #endif
 // abs(): bitwise AND to clear the sign bit
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(abs)(SSMF_VF v) {
@@ -302,13 +286,13 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(neg)(SSMF_VF v) {
 
 // remainder1(): v - round(v), in [-0.5, 0.5].  Large inputs (which are already integers) give 0.
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(remainder1)(SSMF_VF v) {
-#if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
+#ifdef SSMF_VF_ROUND_INNER
 #	ifdef SSMF_VF_BARRIER
-	return SSMF_VF_SUB(SSMF_VF_BARRIER(v), SSMF_VF_ROUND_SMALL(v));
+	return SSMF_VF_SUB(SSMF_VF_BARRIER(v), SSMF_VF_ROUND_INNER(v));
 #	else
 	SSMF_VF sign = SSMF_VF_AND(v, SSMF_VF_F(-0.0));
 	SSMF_VF absV = SSMF_VF_XOR(v, sign);
-	return SSMF_VF_XOR(sign, SSMF_VF_SUB(absV, SSMF_VF_ROUND_SMALL(absV)));
+	return SSMF_VF_XOR(sign, SSMF_VF_SUB(absV, SSMF_VF_ROUND_INNER(absV)));
 #	endif
 #else
 #	if SSMF_BITS == 32
@@ -364,8 +348,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(copysign)(SSMF_VF a, SSMF_VF b) {
 
 // round(): nearest integer
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(round)(SSMF_VF v) {
-#if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
-	return SSMF_VF_ROUND_SMALL(v);
+#if defined(SSMF_VF_ROUND_INNER)
+	return SSMF_VF_ROUND_INNER(v);
 #elif defined(SSMF_VF_BARRIER)
 	return SSMF_VF_BARRIER(SSMF_VF_SUB(v, SSMF_NAME(remainder1)(v)));
 #else
@@ -569,8 +553,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 #		error "Need SSMF_VF_EXP2 (or SSMF_VF_EXP) if it's not 32/64-bit IEEE"
 #	endif
 	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(minInput)), SSMF_VF_F(maxInput));
-#	if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
-	SSMF_VF integer = SSMF_VF_ROUND_SMALL(v);
+#	if defined(SSMF_VF_ROUND_INNER)
+	SSMF_VF integer = SSMF_VF_ROUND_INNER(v);
 	SSMF_VF scale = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(integer, SSMF_VF_F(exponentMagic)), mantissaBits);
 #	else
 	// Our magic number includes the exponent bias, and we've clamped so that abs() is a no-op (but still a barrier)
@@ -639,8 +623,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(expm1)(SSMF_VF v) {
 #	endif
 	SSMF_VF v2 = SSMF_VF_MUL(v, SSMF_VF_F(1.4426950408889634)); // log2(e)
 	v2 = SSMF_VF_MIN(SSMF_VF_MAX(v2, SSMF_VF_F(minInput)), SSMF_VF_F(maxInput));
-#	if defined(SSMF_VF_ROUND) || defined(SSMF_VF_FLOOR)
-	SSMF_VF integer = SSMF_VF_ROUND_SMALL(v2);
+#	if defined(SSMF_VF_ROUND_INNER)
+	SSMF_VF integer = SSMF_VF_ROUND_INNER(v2);
 	SSMF_VF scale = SSMF_VF_LSHIFT_K(SSMF_VF_ADD(integer, SSMF_VF_F(exponentMagic)), mantissaBits);
 #	else
 	SSMF_VF withMagic = SSMF_NAME(abs)(SSMF_VF_ADD(v2, SSMF_VF_F(exponentMagic)));
@@ -926,8 +910,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(tanh)(SSMF_VF v) {
 #undef SSMF_VF_POLY14M
 #undef SSMF_VF_POLY15M
 #undef SSMF_VF_POLY16M
-#undef SSMF_VF_ROUND_MAGIC
-#undef SSMF_VF_ROUND_SMALL
+#undef SSMF_VF_ROUND_INNER
 #undef SSMF_VF_EXP2_SMALL
 #undef SSMF_VF_EXPM1_SMALL
 #undef SSMF_VF_SINPI_SMALL
