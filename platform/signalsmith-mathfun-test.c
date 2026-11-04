@@ -465,6 +465,19 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			assertCheck((!inRange || (s == T##_test_sin(-x) && c == T##_test_cos(-x))) && T##_test_abs(s) <= 1 && T##_test_abs(c) <= 1, -x, sinl(-x), s); \
 		} \
 		endCheck(); \
+		startCheck("tanh"); /* also checks it never goes outside [-1, 1] */ \
+		RANGE_LINEAR(T, x, -20, 20) { \
+			T y = T##_test_tanh(x); \
+			test(x, tanhl(x), y); \
+			assertCheck(T##_test_abs(y) <= 1, x, tanhl(x), y); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
+			T y = T##_test_tanh(x), yNeg = T##_test_tanh(-x); \
+			test(x, tanhl(x), y); \
+			test(-x, tanhl(-x), yNeg); \
+			assertCheck(T##_test_abs(y) <= 1 && T##_test_abs(yNeg) <= 1, x, tanhl(x), y); \
+		} \
+		endCheck(); \
 		startCheck("tan"); /* backward-accurate like sin/cos, and bounded for all inputs (within the rounding range) */ \
 		RANGE_LINEAR(T, x, -10, 10) TEST_TAN(T, x) \
 		RANGE_EXP(T, x, SWEEP_MIN(T), TRIG_ACCURATE_MAX(T)) { \

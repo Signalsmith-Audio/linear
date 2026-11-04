@@ -368,6 +368,7 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_UNARY(Sin, ssmf_sinf, ssmf_sind)
 		SIGNALSMITH_EXPR_UNARY(Cos, ssmf_cosf, ssmf_cosd)
 		SIGNALSMITH_EXPR_UNARY(Tan, ssmf_tanf, ssmf_tand)
+		SIGNALSMITH_EXPR_UNARY(Tanh, ssmf_tanhf, ssmf_tanhd)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
 		template<bool aligned, class A, class B> \
