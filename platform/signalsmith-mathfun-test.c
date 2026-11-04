@@ -167,7 +167,7 @@ static uint64_t doubleAsInt(double d) {
 #	define SSMF_VF_FMA(a, b, c) fma(a, b, c)
 #endif
 #ifdef TEST_SQRT
-#	define SSMF_VF_SQRT(v) sqrtl(v)
+#	define SSMF_VF_SQRT(v) sqrt(v)
 #endif
 #include "./signalsmith-mathfun.h"
 

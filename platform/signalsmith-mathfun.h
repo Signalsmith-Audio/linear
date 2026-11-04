@@ -386,15 +386,21 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
 #	if SSMF_BITS == 32
 	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(2.3509887e-38))), 1);
 	// exponent bias is 127, right-shift approximately halves that (but with truncation)
-	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(1.9166167708542177e-20)); // 2^-65.5
+	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(1.83523129466333e-20)); // 2^-65.5626 (minimax scale for this seed: 4.6 bits)
 #	elif SSMF_BITS == 64
 	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(4.450147717014403e-308))), 1);
-	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(2.63692165371575e-155)); // 2^-513.5
+	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(2.524949804293825e-155)); // 2^-513.5626
 #	else
 #		error "need SSMF_VF_SQRT() unless it's 32/64-bit IEEE floats"
 #	endif
-	// Tuned by seeing where the worst-case error lands
-	const int stepCount = (SSMF_ACCURACY > 3) + (SSMF_ACCURACY > 6) + (SSMF_ACCURACY > 12) + (SSMF_ACCURACY > 22) + (SSMF_ACCURACY > 46);
+	// Prevent fast-math reassociation (v*invSqrt) into ((v*scale)*bits), which can underflow
+#	ifdef SSMF_VF_BARRIER
+	invSqrt = SSMF_VF_BARRIER(invSqrt);
+#	else
+	invSqrt = SSMF_NAME(abs)(invSqrt);
+#	endif
+	// Each step takes e -> 1.5e^2 (bits double, minus 0.6): 4.6 -> 8.5 -> 16.4 -> 32.3 -> 64
+	const int stepCount = (SSMF_ACCURACY >= 5) + (SSMF_ACCURACY >= 9) + (SSMF_ACCURACY >= 17) + (SSMF_ACCURACY >= 33);
 	for (int step = 0; step < stepCount; ++step) {
 		SSMF_VF adj2 = SSMF_VF_MUL(v, SSMF_VF_MUL(invSqrt, invSqrt)); // How wrong we are, squared
 		invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_SUB(SSMF_VF_F(1.5), SSMF_VF_MUL(SSMF_VF_F(0.5), adj2))); // close to 1, 1/sqrt(x) ~= 3/2 - x/2
@@ -667,6 +673,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cos)(SSMF_VF v) {
 #	undef SSMF_VF_COPYSIGN
 #	undef SSMF_VF_ROUND
 #	undef SSMF_VF_FLOOR
+#	undef SSMF_VF_SQRT
 #	undef SSMF_VF_LOG2
 #	undef SSMF_VF_LOG
 #	undef SSMF_VF_LOG10
