@@ -67,6 +67,7 @@ Optional:
 	SSMF_VF_ROUND(v)
 	SSMF_VF_FLOOR(v)
 	SSMF_VF_SQRT(v)
+	SSMF_VF_RSQRT(v) // reciprocal, if that's faster
 	SSMF_VF_LOG2(v)
 	SSMF_VF_LOG(v)
 	SSMF_VF_EXP2(v)
@@ -392,10 +393,10 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(trunc)(SSMF_VF v) {
 	return SSMF_NAME(copysign)(SSMF_NAME(floor)(SSMF_NAME(abs)(v)), v);
 }
 
-// sqrt()
-SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
-#ifdef SSMF_VF_SQRT
-	return SSMF_VF_SQRT(v);
+// rsqrt()
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(rsqrt)(SSMF_VF v) {
+#ifdef SSMF_VF_RSQRT
+	return SSMF_VF_RSQRT(v);
 #else
 #	if SSMF_BITS == 32
 	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(2.3509887e-38))), 1);
@@ -424,7 +425,15 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
 #	endif
 		invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_SUB(SSMF_VF_F(1.5), SSMF_VF_MUL(SSMF_VF_F(0.5), adj2))); // close to 1, 1/sqrt(x) ~= 3/2 - x/2
 	}
-	return SSMF_VF_MUL(v, invSqrt);
+	return invSqrt;
+#endif
+}
+
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
+#ifdef SSMF_VF_SQRT
+	return SSMF_VF_SQRT(v);
+#else
+	return SSMF_VF_MUL(v, SSMF_NAME(rsqrt)(v));
 #endif
 }
 
