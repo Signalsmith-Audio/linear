@@ -32,6 +32,7 @@ Constants and accuracy:
 	SSMF_BITS: if 32 or 64, it can guess values for the others in this group
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
+	SSMF_SMALL_INPUTS: if defined, skip some clamps which guard against overflows
 
 Types and constants (mandatory):
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
@@ -976,6 +977,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES
+#	undef SSMF_SMALL_INPUTS
 #endif
 #undef SSMF_VF_BARRIER_LOWBIT
 #undef SSMF_VF_BARRIER_HIGHBIT_MASK
