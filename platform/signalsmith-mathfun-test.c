@@ -45,6 +45,7 @@ static inline double testBarrierD(double v) {
 #endif
 #define SWEEP_MIN(T) ((T)(sizeof(T) == 4 ? 1e-30 : 1e-300))
 #define SWEEP_MAX(T) ((T)(sizeof(T) == 4 ? 1e30 : 1e300))
+#define LARGE_MAX(T) ((T)(sizeof(T) == 4 ? 3e38 : 1.7e308)) // close to the largest value, but (1 + TEST_STEP) times this doesn't overflow
 // Past this, the ULP of x/pi approaches 1, so sin/cos accuracy is meaningless (but results should still be bounded)
 #define TRIG_MAX(T) ((T)(sizeof(T) == 4 ? 1e6 : 1e15))
 // A limited SSMF_VF_ROUND also limits the periodic functions (approximately, since the limit applies to x/pi)
@@ -376,7 +377,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		endCheck(); \
 		startCheck("sqrt"); \
 		test(0, 0, T##_test_sqrt(0)); \
-		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), LARGE_MAX(T)) { \
 			test(x, sqrtl(x), T##_test_sqrt(x)); \
 		} \
 		endCheck(); \

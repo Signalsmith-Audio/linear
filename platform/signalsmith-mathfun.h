@@ -414,7 +414,12 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
 	// Each step takes e -> 1.5e^2 (bits double, minus 0.6): 4.6 -> 8.5 -> 16.4 -> 32.3 -> 64
 	const int stepCount = (SSMF_ACCURACY >= 5) + (SSMF_ACCURACY >= 9) + (SSMF_ACCURACY >= 17) + (SSMF_ACCURACY >= 33);
 	for (int step = 0; step < stepCount; ++step) {
-		SSMF_VF adj2 = SSMF_VF_MUL(v, SSMF_VF_MUL(invSqrt, invSqrt)); // How wrong we are, squared
+		// How wrong we are, squared.  We want this computed in a particular order so that huge inputs don't make invSqrt*invSqrt subnormal (which could be flushed to 0)
+#	ifdef SSMF_VF_BARRIER
+		SSMF_VF adj2 = SSMF_VF_MUL(SSMF_VF_BARRIER(SSMF_VF_MUL(v, invSqrt)), invSqrt);
+#	else
+		SSMF_VF adj2 = SSMF_VF_MUL(SSMF_NAME(abs)(SSMF_VF_MUL(v, invSqrt)), invSqrt);
+#	endif
 		invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_SUB(SSMF_VF_F(1.5), SSMF_VF_MUL(SSMF_VF_F(0.5), adj2))); // close to 1, 1/sqrt(x) ~= 3/2 - x/2
 	}
 	return SSMF_VF_MUL(v, invSqrt);
