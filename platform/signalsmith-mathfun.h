@@ -454,10 +454,10 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(hypot)(SSMF_VF a, SSMF_VF b) {
 	// To ensure that neither a^2 nor b^2 overflow into Inf, we scale by some 2^N factor first and by its inverse afterwards
 #	if SSMF_BITS == 32
 	SSMF_VF exponentMask = SSMF_VF_I(0x7F800000);
-	SSMF_VF minExp = SSMF_VF_F(1.1754943e-38); // 2^-126
+	SSMF_VF minExp = SSMF_VF_F(2.3509887e-38); // 2^-125, since we halve it later
 #	elif SSMF_BITS == 64
 	SSMF_VF exponentMask = SSMF_VF_I(0x7FF0000000000000LL);
-	SSMF_VF minExp = SSMF_VF_F(91.1125369292536007e-308); // 2^-1023
+	SSMF_VF minExp = SSMF_VF_F(4.450147717014403e-308); // 2^-1021
 #	else
 #		error "need SSMF_VF_HYPOT() or (not SSMF_FULL_RANGE) unless it's 32/64-bit IEEE floats"
 #	endif
