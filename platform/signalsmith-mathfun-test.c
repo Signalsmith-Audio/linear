@@ -542,6 +542,19 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(x, expm1l(x), T##_test_expm1(x)); \
 		} \
 		endCheck(); \
+		startCheck("erf"); /* also checks it never goes outside [-1, 1] */ \
+		RANGE_LINEAR(T, x, -7, 7) { \
+			T y = T##_test_erf(x); \
+			test(x, erfl(x), y); \
+			assertCheck(T##_test_abs(y) <= 1, x, erfl(x), y); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
+			T y = T##_test_erf(x), yNeg = T##_test_erf(-x); \
+			test(x, erfl(x), y); \
+			test(-x, erfl(-x), yNeg); \
+			assertCheck(T##_test_abs(y) <= 1 && T##_test_abs(yNeg) <= 1, x, erfl(x), y); \
+		} \
+		endCheck(); \
 		startCheck("pow"); /* accurate for (a rounded to SSMF_ACCURACY bits), so the error can scale with |b| */ \
 		RANGE_EXP(T, a, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			const T bs[] = {0, 1, -1, (T)0.5, (T)-0.5, 2, (T)3.3, (T)-7.9, (T)0.01, (T)20.5, (T)-100.25}; \
