@@ -113,12 +113,6 @@ static inline double testBarrierD(double v) {
 #	define EXP_MAX(T) ((T)(sizeof(T) == 4 ? 87.3 : 708.3))
 #	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 126 : 1022))
 #endif
-// If we have native log() but not log2(), then we round twice, so pow() loses an extra bit of precision for extreme values, unless it splits.  Either way, we just take a slight hit on this one, otherwise it'll be slower than expected
-#if defined(TEST_LOGEXP) && !defined(TEST_LOGEXP2)
-#	define POW_EXTRA_LEEWAY 2
-#else
-#	define POW_EXTRA_LEEWAY 1
-#endif
 // pow() outputs: the same range as exp2()
 #define POW_MIN(T) exp2l(1 - EXP2_MAX(T)) // exp2() clamps its input, which can cut off pow()'s remainder in the bottom binade
 #define POW_SUBNORMALS_HACK(T, y) ((y) < exp2l(-1 - EXP2_MAX(T)) ? exp2l(-1 - EXP2_MAX(T)) : (y)) // results flushed to 0 are treated as being just below the range
@@ -555,7 +549,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 				T b = bs[i]; \
 				long double expected = powl(a, b); \
 				if (expected < POW_MIN(T) || expected > POW_MAX(T)) continue; \
-				testScaled(a, expected, POW_SUBNORMALS_HACK(T, (long double)T##_test_pow(a, b)), POW_EXTRA_LEEWAY*(b*b > 1 ? fabsl(b) : 1)); \
+				testScaled(a, expected, POW_SUBNORMALS_HACK(T, (long double)T##_test_pow(a, b)), (b*b > 1 ? fabsl(b) : 1)); \
 			} \
 		} \
 		RANGE_LINEAR(T, a, (T)0.5, 2) { /* large b, with a near 1 */ \
@@ -564,7 +558,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 				T b = bs[i]; \
 				long double expected = powl(a, b); \
 				if (expected < POW_MIN(T) || expected > POW_MAX(T)) continue; \
-				testScaled(a, expected, POW_SUBNORMALS_HACK(T, (long double)T##_test_pow(a, b)), POW_EXTRA_LEEWAY*fabsl(b)); \
+				testScaled(a, expected, POW_SUBNORMALS_HACK(T, (long double)T##_test_pow(a, b)), fabsl(b)); \
 			} \
 		} \
 		endCheck(); \

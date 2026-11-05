@@ -638,7 +638,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 #	endif
 	SSMF_VF fraction = SSMF_VF_SUB(v, integer);
 #	if defined(SSMF_VF_EXP)
-	// Our 2^n is exact and quick, but if we have a (presumably fast) built-in exp we can use it for the fractional part
+	// If we have a (presumably fast) built-in exp, we might as well use it for the fractional part instead of our fit
 	SSMF_VF curve = SSMF_VF_EXP(SSMF_VF_MUL(fraction, SSMF_VF_F(0.6931471805599453)));
 #	else
 	SSMF_VF curve = SSMF_VF_EXP2_SMALL(fraction);
@@ -806,13 +806,17 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sinh)(SSMF_VF v) {
 }
 
 // pow(a, b): ostensibly = exp2(b*log2(a))
-// However (similar to using exp2() for exp() or vice-versa) absolute errors in b*log2(a) become relative errors in the output.  This is OK-ish (we give pow() 1-2 bits more leeway in the tests) unless we're being strict and need SSMF_EXP_SPLIT.
-// In that situation, we pull the same "split into exact + remainder" as in exp().  In the end, the accuracy is measured as if we rounded `a`, rather than the result.
+// However (similar to using exp2() for exp() or vice-versa) absolute errors in b*log2(a) become relative errors in the output.  This is OK when our requirements aren't very strict, so we check SSMF_EXP_SPLIT.
+// Otherwise, we pull the same "split into exact + remainder" as in exp().  In the end, the accuracy is measured as if we rounded `a`, rather than the result.
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(pow)(SSMF_VF a, SSMF_VF b) {
 #if defined(SSMF_VF_POW)
 	return SSMF_VF_POW(a, b);
 #elif !defined(SSMF_EXP_SPLIT)
+#	if defined(SSMF_VF_EXP) && defined(SSMF_VF_LOG) // if we have both of these supplied, use them
+	return SSMF_NAME(exp)(SSMF_VF_MUL(b, SSMF_NAME(log)(a)));
+#	else // otherwise, exp2/log2 are the more natural fit for floating-point
 	return SSMF_NAME(exp2)(SSMF_VF_MUL(b, SSMF_NAME(log2)(a)));
+#	endif
 #else
 	// The truncated parts of b and log2(a) have few enough bits that their product is exact
 #	if SSMF_BITS == 32
@@ -837,7 +841,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(pow)(SSMF_VF a, SSMF_VF b) {
 	SSMF_VF exponentOffset = SSMF_VF_OR(SSMF_VF_RSHIFT_K(a, exponentBits), SSMF_VF_F(exponentMagic));
 	SSMF_VF exponentRounded = SSMF_VF_AND(SSMF_VF_ADD(exponentOffset, SSMF_VF_F(0.5)), SSMF_VF_F(exponentRoundingMask));
 	SSMF_VF exponent = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(exponentRounded, SSMF_VF_F(exponentBase + exponentMagic)));
-	// A supplied log() is only used for the mantissa, so that its rounding error is relative to the curve, not to log2(a).
+	// A supplied log() is only used for the mantissa, so that its rounding error is relative to the curve, not to log2(a).  We need to get the actual mantissa with (1 + m)/2 though.
 #	if defined(SSMF_VF_LOG2)
 	SSMF_VF curve = SSMF_VF_LOG2(SSMF_VF_MUL(SSMF_VF_ADD(mantissa, SSMF_VF_F(1)), SSMF_VF_F(0.5)));
 #	elif defined(SSMF_VF_LOG)
