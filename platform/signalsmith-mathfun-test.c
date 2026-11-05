@@ -103,13 +103,15 @@ static inline double testBarrierD(double v) {
 #	define SMALL_INPUTS_MIN(T) SWEEP_MIN(T)
 #	define SMALL_INPUTS_MAX(T) ((T)(LARGE_MAX(T)/2)) // so hypot(x, x) can't overflow
 #endif
+// The split exp route's remainder (see `exp()`) is subnormal for x ~= 0 (and can get flushed to 0) so we skip testing those for `expm1()` and `sinh()`
+#define EXPM1_MIN(T) ((T)(sizeof(T) == 4 ? 1e-30 : 1e-290))
 // exp() over the whole (normal) output range, or just outputs within SMALL_INPUTS_MIN/MAX
 #ifdef TEST_SMALL_INPUTS
 #	define EXP_MAX(T) ((T)(sizeof(T) == 4 ? 34.5 : 345))
 #	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 45 : 490))
 #else
 #	define EXP_MAX(T) ((T)(sizeof(T) == 4 ? 87.3 : 708.3))
-#	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 126 : -1022))
+#	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 126 : 1022))
 #endif
 #ifdef TEST_ROUND_INT32
 #	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
@@ -517,16 +519,37 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(x, expl(x), T##_test_exp(x)); \
 		} \
 		endCheck(); \
-		startCheck("expm1"); /* relative accuracy near 0 as well */ \
+		startCheck("expm1"); \
 		RANGE_LINEAR(T, x, -4, 4) { \
 			test(x, expm1l(x), T##_test_expm1(x)); \
 		} \
-		RANGE_EXP(T, x, SWEEP_MIN(T), 4) { \
+		RANGE_EXP(T, x, EXPM1_MIN(T), 4) { \
 			test(x, expm1l(x), T##_test_expm1(x)); \
 			test(-x, expm1l(-x), T##_test_expm1(-x)); \
 		} \
 		RANGE_LINEAR(T, x, -80, -4) { /* approaches -1 */ \
 			test(x, expm1l(x), T##_test_expm1(x)); \
+		} \
+		RANGE_LINEAR(T, x, 4, EXP_MAX(T)) { /* same large-input accuracy as exp() */ \
+			test(x, expm1l(x), T##_test_expm1(x)); \
+		} \
+		endCheck(); \
+		startCheck("sinh"); \
+		RANGE_LINEAR(T, x, -EXP_MAX(T), EXP_MAX(T)) { \
+			test(x, sinhl(x), T##_test_sinh(x)); \
+		} \
+		RANGE_EXP(T, x, EXPM1_MIN(T), 4) { \
+			test(x, sinhl(x), T##_test_sinh(x)); \
+			test(-x, sinhl(-x), T##_test_sinh(-x)); \
+		} \
+		endCheck(); \
+		startCheck("cosh"); \
+		RANGE_LINEAR(T, x, -EXP_MAX(T), EXP_MAX(T)) { \
+			test(x, coshl(x), T##_test_cosh(x)); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), 4) { \
+			test(x, coshl(x), T##_test_cosh(x)); \
+			test(-x, coshl(-x), T##_test_cosh(-x)); \
 		} \
 		endCheck(); \
 		/* sin/cos are backward-accurate: compared against the exact value for (x/pi rounded to T) */ \
