@@ -470,14 +470,11 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(hypot)(SSMF_VF a, SSMF_VF b) {
 	scaleAfter = SSMF_VF_MUL(scaleAfter, SSMF_VF_F(0.5));
 	a = SSMF_VF_MUL(a, scaleBefore);
 	b = SSMF_VF_MUL(b, scaleBefore);
-#ifdef SSMF_VF_BARRIER
-	a = SSMF_VF_BARRIER(a);
-#else
-	a = SSMF_NAME(copysign)(a, b);
-#endif
+	SSMF_VF knownSmall = SSMF_VF_MUL(scaleBefore, scaleAfter); // always == 1, but we constructed it with bitwise shenanigans
+	a = SSMF_VF_BARRIER_HIGHBIT(a, knownSmall); // barrier so it can't factor the scaling out in `sum`
 	SSMF_VF sum = SSMF_VF_FMA(a, a, SSMF_NAME(pow2)(b));
 	SSMF_VF scaledResult = SSMF_NAME(sqrt)(sum);
-	scaledResult = SSMF_VF_BARRIER_HIGHBIT(scaledResult, SSMF_VF_MUL(scaleBefore, scaleAfter); /*always == 1, but we constructed it with bitwise shenanigans*/);
+	scaledResult = SSMF_VF_BARRIER_HIGHBIT(scaledResult, knownSmall);
 	return SSMF_VF_MUL(scaledResult, scaleAfter);
 #endif
 }
