@@ -7,9 +7,11 @@ rm -f "$OUT.log"
 
 run() {
 	echo "Running: $*"
-	if ! $CC -std=c99 -O2 "$@" signalsmith-mathfun-test.c -o "$OUT" -lm; then
+	cmd="$CC -std=c99 -O2 $@ signalsmith-mathfun-test.c -lm"
+	if ! eval "$cmd -o $OUT"; then
 		exit 1
 	elif ! "$OUT" > "$OUT.log" 2>&1; then
+		echo "Compiled with:\n\t$cmd"
 		cat "$OUT.log"
 		exit 1
 	fi
@@ -17,7 +19,7 @@ run() {
 
 # There are quite a few routing options, so we try and hit various combinations via a pseudo-random counter
 ROUTE_INDEX=0
-while [ $ROUTE_INDEX -le 20 ]; do
+while [ $ROUTE_INDEX -le 21 ]; do
 	for FAST in "" "-ffast-math"; do # fast-math alternates off/on
 		run -DTEST_ROUTE_INDEX=$ROUTE_INDEX $FAST
 		ROUTE_INDEX=$((ROUTE_INDEX + 1))
