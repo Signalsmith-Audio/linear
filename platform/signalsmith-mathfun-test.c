@@ -11,6 +11,7 @@ Optional ops can be switched on to test their routes:
 	TEST_BARRIER: SSMF_VF_BARRIER (empty `asm` block, GCC/Clang only)
 	TEST_FMA: SSMF_VF_FMA (fma)
 	TEST_LOGEXP / TEST_LOGEXP2: uses a reference log/exp, to test conversion between bases
+	TEST_SMALL_INPUTS: defines SSMF_SMALL_INPUTS, and only tests inputs within SMALL_INPUTS_MAX
 */
 #include <stdio.h>
 #include <stdint.h>
@@ -50,6 +51,16 @@ static inline double testBarrierD(double v) {
 #define TRIG_MAX(T) ((T)(sizeof(T) == 4 ? 1e6 : 1e15))
 // A limited SSMF_VF_ROUND also limits the periodic functions (approximately, since the limit applies to x/pi)
 #define TRIG_ACCURATE_MAX(T) (TRIG_MAX(T) < (T)ROUNDING_MAX(T)*3 ? TRIG_MAX(T) : (T)ROUNDING_MAX(T)*3)
+// With SSMF_SMALL_INPUTS, squaring shouldn't overflow/underflow, so we stay well inside sqrt() of the exponent range
+#ifdef TEST_SMALL_INPUTS
+#	define TEST_SMALL_INPUTS_ON 1
+#	define SMALL_INPUTS_MIN(T) ((T)(sizeof(T) == 4 ? 1e-15 : 1e-150))
+#	define SMALL_INPUTS_MAX(T) ((T)(sizeof(T) == 4 ? 1e15 : 1e150))
+#else
+#	define TEST_SMALL_INPUTS_ON 0
+#	define SMALL_INPUTS_MIN(T) SWEEP_MIN(T)
+#	define SMALL_INPUTS_MAX(T) ((T)(LARGE_MAX(T)/2)) // so hypot(x, x) can't overflow
+#endif
 #ifdef TEST_ROUND_INT32
 #	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
 #else
@@ -112,6 +123,9 @@ static uint32_t floatAsInt(float f) {
 #	ifdef TEST_SQRT
 #		define SSMF_VF_SQRT(v) sqrtf(v)
 #	endif
+#	ifdef TEST_SMALL_INPUTS
+#		define SSMF_SMALL_INPUTS
+#	endif
 #	include "./signalsmith-mathfun.h"
 #endif // TEST_FLOAT
 
@@ -169,6 +183,9 @@ static uint64_t doubleAsInt(double d) {
 #endif
 #ifdef TEST_SQRT
 #	define SSMF_VF_SQRT(v) sqrt(v)
+#endif
+#ifdef TEST_SMALL_INPUTS
+#	define SSMF_SMALL_INPUTS
 #endif
 #include "./signalsmith-mathfun.h"
 
@@ -385,6 +402,19 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(x, sqrtl(x), T##_test_sqrt(x)); \
 		} \
 		endCheck(); \
+		startCheck("hypot"); \
+		test(0, 0, T##_test_hypot(0, 0)); \
+		RANGE_EXP(T, x, SMALL_INPUTS_MIN(T), SMALL_INPUTS_MAX(T)) { \
+			const T ratios[] = {0, (T)1e-6, (T)0.001, (T)0.3, (T)0.75, 1}; \
+			for (int r = 0; r < 6; ++r) { \
+				T y = x*ratios[r]; \
+				long double expected = hypotl(x, y); \
+				test(x, expected, T##_test_hypot(x, y)); \
+				test(x, expected, T##_test_hypot(-y, x)); \
+				test(x, expected, T##_test_hypot(y, -x)); \
+			} \
+		} \
+		endCheck(); \
 		startCheck("log2"); \
 		RANGE_EXP(T, x, SWEEP_MIN(T), SWEEP_MAX(T)) { \
 			test(x, log2l(x), T##_test_log2(x)); \
@@ -528,7 +558,7 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		RANGE_LINEAR(T, x, -10, 10) { \
 			test(x, atanl(x), T##_test_atan(x)); \
 		} \
-		RANGE_EXP(T, x, SWEEP_MIN(T), LARGE_MAX(T)) { \
+		RANGE_EXP(T, x, SWEEP_MIN(T), (TEST_SMALL_INPUTS_ON ? SMALL_INPUTS_MAX(T) : LARGE_MAX(T))) { \
 			T y = T##_test_atan(x), yNeg = T##_test_atan(-x); \
 			test(x, atanl(x), y); \
 			test(-x, atanl(-x), yNeg); \
@@ -579,6 +609,9 @@ int main(void) {
 #endif
 #ifdef TEST_LOGEXP2
 		" LOG2/EXP2"
+#endif
+#ifdef TEST_SMALL_INPUTS
+		" SMALL_INPUTS"
 #endif
 #ifdef __FAST_MATH__
 		" (fast-math)"

@@ -69,6 +69,7 @@ Optional:
 	SSMF_VF_FLOOR(v)
 	SSMF_VF_SQRT(v)
 	SSMF_VF_RSQRT(v) // reciprocal, if that's faster
+	SSMF_VF_HYPOT(a, b)
 	SSMF_VF_LOG2(v)
 	SSMF_VF_LOG(v)
 	SSMF_VF_EXP2(v)
@@ -183,12 +184,15 @@ If you re-use any of these approximations, attribution would be nice, but isn't 
 #ifdef SSMF_VF_BARRIER
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_BARRIER(v)
 #	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_BARRIER(v)
+#	define SSMF_VF_BARRIER_HIGHBIT(v, knownLessThan2) SSMF_VF_BARRIER(v)
 #elif SSMF_BITS == 32
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFE), v) // For small integers
 #	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_AND(SSMF_VF_I(0x40000000), v) // Always 0 for things with magnitude < 2
+#	define SSMF_VF_BARRIER_HIGHBIT(v, knownSmall) SSMF_VF_XOR(v, SSMF_VF_BARRIER_HIGHBIT_MASK(knownSmall));
 #elif SSMF_BITS == 64
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFFFFFFFFFELL), v)
 #	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_AND(SSMF_VF_I(0x4000000000000000LL), v)
+#	define SSMF_VF_BARRIER_HIGHBIT(v, knownSmall) SSMF_VF_XOR(v, SSMF_VF_BARRIER_HIGHBIT_MASK(knownSmall));
 #else
 #	error "SSMF_VF_BARRIER is required unless it's 32/64-bit IEEE float"
 #endif
@@ -439,6 +443,45 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
 #endif
 }
 
+// hypot()
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(hypot)(SSMF_VF a, SSMF_VF b) {
+#if defined(SSMF_VF_HYPOT)
+	return SSMF_VF_HYPOT(a, b);
+#elif defined(SSMF_SMALL_INPUTS)
+	// This also might produce denormals (which could get flushed to zero), but that's OK
+	return SSMF_NAME(sqrt)(SSMF_VF_FMA(a, a, SSMF_NAME(pow2)(b)));
+#else
+	// To ensure that neither a^2 nor b^2 overflow into Inf, we scale by some 2^N factor first and by its inverse afterwards
+#	if SSMF_BITS == 32
+	SSMF_VF exponentMask = SSMF_VF_I(0x7F800000);
+	SSMF_VF minExp = SSMF_VF_F(1.1754943e-38); // 2^-126
+#	elif SSMF_BITS == 64
+	SSMF_VF exponentMask = SSMF_VF_I(0x7FF0000000000000LL);
+	SSMF_VF minExp = SSMF_VF_F(91.1125369292536007e-308); // 2^-1023
+#	else
+#		error "need SSMF_VF_HYPOT() or SSMF_SMALL_INPUTS unless it's 32/64-bit IEEE floats"
+#	endif
+	// 2^e for the larger of the two, e minimum 2
+	SSMF_VF scaleA = SSMF_VF_AND(a, exponentMask), scaleB = SSMF_VF_AND(b, exponentMask);
+	SSMF_VF scaleAfter = SSMF_VF_MAX(SSMF_VF_MAX(scaleA, scaleB), SSMF_VF_F(minExp));
+	// Flipping the exponent bits gives 2^(1 - e)
+	SSMF_VF scaleBefore = SSMF_VF_ANDNOT(scaleAfter, (exponentMask));
+	// So we add an extra factor of 2 when scaling afterwards
+	scaleAfter = SSMF_VF_MUL(scaleAfter, SSMF_VF_F(0.5));
+	a = SSMF_VF_MUL(a, scaleBefore);
+	b = SSMF_VF_MUL(b, scaleBefore);
+#ifdef SSMF_VF_BARRIER
+	a = SSMF_VF_BARRIER(a);
+#else
+	a = SSMF_NAME(copysign)(a, b);
+#endif
+	SSMF_VF sum = SSMF_VF_FMA(a, a, SSMF_NAME(pow2)(b));
+	SSMF_VF scaledResult = SSMF_NAME(sqrt)(sum);
+	scaledResult = SSMF_VF_BARRIER_HIGHBIT(scaledResult, SSMF_VF_MUL(scaleBefore, scaleAfter)/*always == 1, but we constructed it with bitwise shenanigans*/);
+	return SSMF_VF_MUL(scaledResult, scaleAfter);
+#endif
+}
+
 // log2(): splits into exponent and mantissa using bitwise ops, then applies a curve to the mantissa
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 #if defined(SSMF_VF_LOG2)
@@ -652,12 +695,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(expm1)(SSMF_VF v) {
 	SSMF_VF fraction = SSMF_VF_SUB(v2, integer);
 	SSMF_VF curveM1 = SSMF_VF_MUL(fraction, SSMF_VF_EXPM1_SMALL(fraction)); // 2^f - 1
 	// Stop fast-math from refactoring into 2^k(2^f - 1 + 1) - 1, which loses our small-input precision
-#	ifdef SSMF_VF_BARRIER
-	SSMF_VF scaleM1 = SSMF_VF_BARRIER(SSMF_VF_SUB(scale, SSMF_VF_F(1)));
-#	else
-	SSMF_VF zeroBit = SSMF_VF_BARRIER_HIGHBIT_MASK(fraction); // always zero because abs(fraction) <= 0.5
-	SSMF_VF scaleM1 = SSMF_VF_XOR(zeroBit, SSMF_VF_SUB(scale, SSMF_VF_F(1)));
-#	endif
+	SSMF_VF scaleM1 = SSMF_VF_BARRIER_HIGHBIT(SSMF_VF_SUB(scale, SSMF_VF_F(1)), fraction /* known to be <= 0.5 */);
 	return SSMF_VF_ADD(SSMF_VF_MUL(curveM1, scale), scaleM1);
 #endif
 }
@@ -900,11 +938,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(acos)(SSMF_VF v) {
 	SSMF_VF acosAbs = SSMF_VF_MUL(s, SSMF_VF_INVCOS_HELPER(absV));
 	// Awkwardly reflect around π/2 for v < 0, protecting against reassociation
 	SSMF_VF offset = SSMF_VF_SUB(SSMF_VF_F(1.5707963267948966), SSMF_NAME(copysign)(SSMF_VF_F(1.5707963267948966), v));
-#	ifdef SSMF_VF_BARRIER
-	offset = SSMF_VF_BARRIER(offset);
-#	else
-	offset = SSMF_VF_XOR(SSMF_VF_BARRIER_HIGHBIT_MASK(absV), offset); // zero for absV < 2, and if that's not true then all bets are off anyway
-#	endif
+	offset = SSMF_VF_BARRIER_HIGHBIT(offset, absV); // absV <= 1, or we're already in trouble
 	return SSMF_VF_ADD(offset, SSMF_NAME(copysign)(acosAbs, v));
 #endif
 }
@@ -976,6 +1010,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #	undef SSMF_VF_ASIN
 #	undef SSMF_VF_ACOS
 #	undef SSMF_VF_ATAN
+#	undef SSMF_VF_HYPOT
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES
@@ -983,6 +1018,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #endif
 #undef SSMF_VF_BARRIER_LOWBIT
 #undef SSMF_VF_BARRIER_HIGHBIT_MASK
+#undef SSMF_VF_BARRIER_HIGHBIT
 #undef SSMF_VF_POLY0
 #undef SSMF_VF_POLY1
 #undef SSMF_VF_POLY2
