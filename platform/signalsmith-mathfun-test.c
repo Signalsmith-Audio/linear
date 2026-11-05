@@ -94,14 +94,14 @@ static inline double testBarrierD(double v) {
 // A limited SSMF_VF_ROUND also limits the periodic functions (approximately, since the limit applies to x/pi)
 #define TRIG_ACCURATE_MAX(T) (TRIG_MAX(T) < (T)ROUNDING_MAX(T)*3 ? TRIG_MAX(T) : (T)ROUNDING_MAX(T)*3)
 // With SSMF_SMALL_INPUTS, squaring shouldn't overflow/underflow, so we stay well inside sqrt() of the exponent range
-#ifdef SSMF_FULL_RANGE
-#	define TEST_SMALL_INPUTS_ON 0
-#	define SMALL_INPUTS_MIN(T) SWEEP_MIN(T)
-#	define SMALL_INPUTS_MAX(T) ((T)(LARGE_MAX(T)/2)) // so hypot(x, x) can't overflow
-#else
+#ifdef TEST_SMALL_INPUTS
 #	define TEST_SMALL_INPUTS_ON 1
 #	define SMALL_INPUTS_MIN(T) ((T)(sizeof(T) == 4 ? 1e-15 : 1e-150))
 #	define SMALL_INPUTS_MAX(T) ((T)(sizeof(T) == 4 ? 1e15 : 1e150))
+#else
+#	define TEST_SMALL_INPUTS_ON 0
+#	define SMALL_INPUTS_MIN(T) SWEEP_MIN(T)
+#	define SMALL_INPUTS_MAX(T) ((T)(LARGE_MAX(T)/2)) // so hypot(x, x) can't overflow
 #endif
 #ifdef TEST_ROUND_INT32
 #	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
