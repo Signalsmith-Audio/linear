@@ -11,7 +11,7 @@ Optional ops can be switched on to test their routes:
 	TEST_BARRIER: SSMF_VF_BARRIER (empty `asm` block, GCC/Clang only)
 	TEST_FMA: SSMF_VF_FMA (fma)
 	TEST_LOGEXP / TEST_LOGEXP2: uses a reference log/exp, to test conversion between bases
-	TEST_SMALL_INPUTS: defines SSMF_SMALL_INPUTS, and only tests inputs within SMALL_INPUTS_MAX
+	TEST_SMALL_INPUTS: skips SSMF_FULL_RANGE, and only tests inputs within SMALL_INPUTS_MAX
 */
 #include <stdio.h>
 #include <stdint.h>
@@ -52,14 +52,14 @@ static inline double testBarrierD(double v) {
 // A limited SSMF_VF_ROUND also limits the periodic functions (approximately, since the limit applies to x/pi)
 #define TRIG_ACCURATE_MAX(T) (TRIG_MAX(T) < (T)ROUNDING_MAX(T)*3 ? TRIG_MAX(T) : (T)ROUNDING_MAX(T)*3)
 // With SSMF_SMALL_INPUTS, squaring shouldn't overflow/underflow, so we stay well inside sqrt() of the exponent range
-#ifdef TEST_SMALL_INPUTS
-#	define TEST_SMALL_INPUTS_ON 1
-#	define SMALL_INPUTS_MIN(T) ((T)(sizeof(T) == 4 ? 1e-15 : 1e-150))
-#	define SMALL_INPUTS_MAX(T) ((T)(sizeof(T) == 4 ? 1e15 : 1e150))
-#else
+#ifdef SSMF_FULL_RANGE
 #	define TEST_SMALL_INPUTS_ON 0
 #	define SMALL_INPUTS_MIN(T) SWEEP_MIN(T)
 #	define SMALL_INPUTS_MAX(T) ((T)(LARGE_MAX(T)/2)) // so hypot(x, x) can't overflow
+#else
+#	define TEST_SMALL_INPUTS_ON 1
+#	define SMALL_INPUTS_MIN(T) ((T)(sizeof(T) == 4 ? 1e-15 : 1e-150))
+#	define SMALL_INPUTS_MAX(T) ((T)(sizeof(T) == 4 ? 1e15 : 1e150))
 #endif
 #ifdef TEST_ROUND_INT32
 #	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
@@ -123,8 +123,8 @@ static uint32_t floatAsInt(float f) {
 #	ifdef TEST_SQRT
 #		define SSMF_VF_SQRT(v) sqrtf(v)
 #	endif
-#	ifdef TEST_SMALL_INPUTS
-#		define SSMF_SMALL_INPUTS
+#	ifndef TEST_SMALL_INPUTS
+#		define SSMF_FULL_RANGE
 #	endif
 #	include "./signalsmith-mathfun.h"
 #endif // TEST_FLOAT
@@ -184,8 +184,8 @@ static uint64_t doubleAsInt(double d) {
 #ifdef TEST_SQRT
 #	define SSMF_VF_SQRT(v) sqrt(v)
 #endif
-#ifdef TEST_SMALL_INPUTS
-#	define SSMF_SMALL_INPUTS
+#ifndef TEST_SMALL_INPUTS
+#	define SSMF_FULL_RANGE
 #endif
 #include "./signalsmith-mathfun.h"
 
@@ -611,7 +611,7 @@ int main(void) {
 		" LOG2/EXP2"
 #endif
 #ifdef TEST_SMALL_INPUTS
-		" SMALL_INPUTS"
+		" !FULL_RANGE"
 #endif
 #ifdef __FAST_MATH__
 		" (fast-math)"

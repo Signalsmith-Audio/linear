@@ -32,7 +32,7 @@ Constants and accuracy:
 	SSMF_BITS: if 32 or 64, it assumes standard IEEE floats, and provides defaults for SSMF_ACCURACY (20 or 48) and SSMF_EPSILON
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
-	SSMF_SMALL_INPUTS: if defined, skip some clamps which guard against overflows (specifically x^2)
+	SSMF_FULL_RANGE: if defined, adds extra guards against overflows (x² -> Inf) or underflows (x² -> subnormal, might get rounded to 0)
 
 Types and constants (mandatory):
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
@@ -447,7 +447,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(hypot)(SSMF_VF a, SSMF_VF b) {
 #if defined(SSMF_VF_HYPOT)
 	return SSMF_VF_HYPOT(a, b);
-#elif defined(SSMF_SMALL_INPUTS)
+#elif !defined(SSMF_FULL_RANGE)
 	// This also might produce denormals (which could get flushed to zero), but that's OK
 	return SSMF_NAME(sqrt)(SSMF_VF_FMA(a, a, SSMF_NAME(pow2)(b)));
 #else
@@ -459,7 +459,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(hypot)(SSMF_VF a, SSMF_VF b) {
 	SSMF_VF exponentMask = SSMF_VF_I(0x7FF0000000000000LL);
 	SSMF_VF minExp = SSMF_VF_F(91.1125369292536007e-308); // 2^-1023
 #	else
-#		error "need SSMF_VF_HYPOT() or SSMF_SMALL_INPUTS unless it's 32/64-bit IEEE floats"
+#		error "need SSMF_VF_HYPOT() or (not SSMF_FULL_RANGE) unless it's 32/64-bit IEEE floats"
 #	endif
 	// 2^e for the larger of the two, e minimum 2
 	SSMF_VF scaleA = SSMF_VF_AND(a, exponentMask), scaleB = SSMF_VF_AND(b, exponentMask);
@@ -948,14 +948,14 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #if defined(SSMF_VF_ATAN)
 	return SSMF_VF_ATAN(v);
 #else
-#	ifndef SSMF_SMALL_INPUTS
+#	ifdef SSMF_FULL_RANGE
 	// Clamp so that x^2 can't overflow
 #		if SSMF_BITS == 32
 		const float maxInput = 1073741824; // 2^60 - this is already well into the region where it returns π/2 anyway
 #		elif SSMF_BITS == 64
 	const double maxInput = 1152921504606846976.0; // 2^500
 #		else
-#			error "need SSMF_VF_ATAN() (or SSMF_SMALL_INPUTS) unless it's 32/64-bit IEEE floats"
+#			error "need SSMF_VF_ATAN() (or not SSMF_FULL_RANGE) unless it's 32/64-bit IEEE floats"
 #		endif
 	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-maxInput)), SSMF_VF_F(maxInput));
 #	endif
@@ -1014,7 +1014,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
 #	undef SSMF_ATTRIBUTES
-#	undef SSMF_SMALL_INPUTS
+#	undef SSMF_FULL_RANGE
 #endif
 #undef SSMF_VF_BARRIER_LOWBIT
 #undef SSMF_VF_BARRIER_HIGHBIT_MASK
