@@ -14,10 +14,12 @@ run() {
 	fi
 }
 
-# Routes, at the default accuracy
-for ROUTE in "" "-DTEST_ROUND" "-DTEST_ROUND_INT32" "-DTEST_FLOOR" "-DTEST_BARRIER" "-DTEST_FMA" "-DTEST_SQRT" "-DTEST_LOGEXP" "-DTEST_LOGEXP2" "-DTEST_BARRIER -DTEST_ROUND -DTEST_SQRT" "-DTEST_SMALL_INPUTS"; do
-	for FAST in "" "-ffast-math"; do
-		run $ROUTE $FAST
+# There are quite a few routing options, so we try and hit various combinations via a pseudo-random counter
+ROUTE_INDEX=0
+while [ $ROUTE_INDEX -le 20 ]; do
+	for FAST in "" "-ffast-math"; do # fast-math alternates off/on
+		run -DTEST_ROUTE_INDEX=$ROUTE_INDEX $FAST
+		ROUTE_INDEX=$((ROUTE_INDEX + 1))
 	done
 done
 

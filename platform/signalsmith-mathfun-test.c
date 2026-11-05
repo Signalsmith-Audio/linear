@@ -18,6 +18,48 @@ Optional ops can be switched on to test their routes:
 #include <string.h>
 #include <math.h>
 
+#ifdef TEST_ROUTE_INDEX
+// Start with an arbitrary mask
+#	define PRNG1 ((TEST_ROUTE_INDEX^0x9c8f2d35)&0xFFFFFFFF)
+// Bit-mixing with "lowbias32" constants from https://github.com/skeeto/hash-prospector
+#	define PRNG2 (((PRNG1^(PRNG1>>16))*0x7feb352d)&0xFFFFFFFF)
+#	define PRNG3 (((PRNG2^(PRNG2>>15))*0x846ca68b)&0xFFFFFFFF)
+#	define PRNG4 (PRNG3^(PRNG3>>16))
+// Use these bits to turn on/off route options
+#	if (PRNG4&1)
+#		define TEST_ROUND
+#	endif
+#	if (PRNG4&2)
+#		define TEST_ROUND_INT32
+#	endif
+#	if (PRNG4&4)
+#		define TEST_FLOOR
+#	endif
+#	if (PRNG4&8)
+#		define TEST_BARRIER
+#	endif
+#	if (PRNG4&16)
+#		define TEST_FMA
+#	endif
+#	if (PRNG4&32)
+#		define TEST_SQRT
+#	endif
+#	if (PRNG4&64)
+#		define TEST_LOGEXP
+#	endif
+#	if (PRNG4&128)
+#		define TEST_LOGEXP2
+#	endif
+#	if (PRNG4&256)
+#		define TEST_SMALL_INPUTS
+#	endif
+
+#	undef PRNG1
+#	undef PRNG2
+#	undef PRNG3
+#	undef PRNG4
+#endif
+
 #ifdef TEST_BARRIER
 #	if defined(__GNUC__)
 // Returns the value unchanged, but the compiler can't see through it
@@ -100,7 +142,7 @@ static uint32_t floatAsInt(float f) {
 #	define SSMF_VF_LSHIFT_K(a, bits) intAsFloat(floatAsInt(a) << (bits))
 #	if defined(TEST_ROUND_INT32)
 #		define SSMF_VF_ROUND(v) ((float)(int32_t)lrintf(v))
-#	elif TEST_ROUND
+#	elif defined(TEST_ROUND)
 #		define SSMF_VF_ROUND(v) rintf(v)
 #	endif
 #	ifdef TEST_FLOOR
@@ -161,7 +203,7 @@ static uint64_t doubleAsInt(double d) {
 #define SSMF_VF_LSHIFT_K(a, bits) intAsDouble(doubleAsInt(a) << (bits))
 #if defined(TEST_ROUND_INT32)
 #	define SSMF_VF_ROUND(v) ((double)(int32_t)lrint(v))
-#elif TEST_ROUND
+#elif defined(TEST_ROUND)
 #	define SSMF_VF_ROUND(v) rint(v)
 #endif
 #ifdef TEST_FLOOR
