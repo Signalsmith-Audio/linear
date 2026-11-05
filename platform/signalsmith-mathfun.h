@@ -604,12 +604,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log10)(SSMF_VF v) {
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 #if defined(SSMF_VF_EXP2)
 	return SSMF_VF_EXP2(v);
-#elif defined(SSMF_VF_EXP)
-#	if !defined(SSMF_EXP_SPLIT)
+#elif defined(SSMF_VF_EXP) && !defined(SSMF_EXP_SPLIT)
 	return SSMF_VF_EXP(SSMF_VF_MUL(v, SSMF_VF_F(0.6931471805599453)));
-#	else
-	return SSMF_VF_EXP(SSMF_VF_MUL(v, SSMF_VF_F(0.6931471805599453)));
-#	endif
 #else
 #	if SSMF_BITS == 32
 	const int mantissaBits = 23;
@@ -636,7 +632,12 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 	SSMF_VF integer = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(withMagic, SSMF_VF_F(exponentMagic)));
 #	endif
 	SSMF_VF fraction = SSMF_VF_SUB(v, integer);
+#	if defined(SSMF_VF_EXP)
+	// Our 2^n is exact and quick, but if we have a (presumably fast) built-in exp we can use it for the fractional part
+	SSMF_VF curve = SSMF_VF_EXP(SSMF_VF_MUL(fraction, SSMF_VF_F(0.6931471805599453)));
+#	else
 	SSMF_VF curve = SSMF_VF_EXP2_SMALL(fraction);
+#	endif
 	return SSMF_VF_MUL(curve, scale);
 #endif
 }
