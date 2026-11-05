@@ -77,6 +77,7 @@ Optional:
 	SSMF_VF_EXPM1(v)
 	SSMF_VF_SINH(v)
 	SSMF_VF_COSH(v)
+	SSMF_VF_POW(a, b)
 	SSMF_VF_SIN(v)
 	SSMF_VF_COS(v)
 	SSMF_VF_SINCOS(v, sinOut, cosOut): writes to two pointers
@@ -481,6 +482,37 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(hypot)(SSMF_VF a, SSMF_VF b) {
 #endif
 }
 
+// Minimax fits of log2((1+m)/2)/(m-1) for m in [0.5, 2).  We multiply by (m-1) to get good results near 0.
+#if SSMF_ACCURACY <= 2 // 2.3 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_MUL(mantissaM1, SSMF_VF_F(0.6666666666666666))
+#elif SSMF_ACCURACY <= 5 // 5.14 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY1(mantissa, 0.91177916450319807, -0.16340833189102097))
+#elif SSMF_ACCURACY <= 8 // 8.46 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY2(mantissa, 0.96241418483320151, -0.28999588271602933, 0.05063502033000334))
+#elif SSMF_ACCURACY <= 11 // 11.49 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3(mantissa, 0.98369960241357313, -0.3607029285420576, 0.11565419259812297, -0.017493501875099196))
+#elif SSMF_ACCURACY <= 14 // 14.38 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY4(mantissa, 0.9927714667919143, -0.39917168495103311, 0.17062675075462577, -0.049352485139110357, 0.0064279551203554903))
+#elif SSMF_ACCURACY <= 17 // 17.21 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5(mantissa, 0.99673421699056985, -0.41976757516362784, 0.21040570606352918, -0.085232649549313533, 0.021664070674094597, -0.0024569788933524986))
+#elif SSMF_ACCURACY <= 20 // 21.05 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY2M(mantissa, 87.919282444833087, 43.198765569390631)), SSMF_VF_POLY2(mantissa, 87.940924478146329, 81.98046715472374, 13.233186867851849))
+#elif SSMF_ACCURACY <= 25 // 25.86 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY2M(mantissa, 12.849423098943026, 9.3665014702745513)), SSMF_VF_POLY3(mantissa, 12.849923750627394, 15.051003529697775, 4.0971980158496795, 0.18597952684601951))
+#elif SSMF_ACCURACY <= 30 // 30.25 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 615.07015959602086, 560.02796626919769, 97.774089410506335)), SSMF_VF_POLY3(mantissa, 615.07481238180026, 832.27477563489219, 295.01130521376649, 23.600973955242399))
+#elif SSMF_ACCURACY <= 34 // 34.98 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 59.874988428042606, 68.198456234160986, 18.8326304136726)), SSMF_VF_POLY4(mantissa, 59.875061680986427, 94.704066242849095, 44.077134984989968, 6.221219353247025, 0.16387559422677625))
+#elif SSMF_ACCURACY <= 39 // 39.39 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY4M(mantissa, 4167.7301872918406, 5522.5148934114723, 1980.6031106095261, 178.08851861856616)), SSMF_VF_POLY4(mantissa, 4167.7311549300921, 7367.5372709525045, 4080.8900698751668, 774.38647159574089, 36.955473282984883))
+#elif SSMF_ACCURACY <= 43 // 44.08 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY4M(mantissa, 297.67500491434294, 460.80363178588181, 213.87328780984984, 31.568450793030927)), SSMF_VF_POLY5(mantissa, 297.67501625201004, 592.58273558781423, 393.25976268431577, 100.73798113118333, 8.7102964327181933, 0.1496575691326113))
+#elif SSMF_ACCURACY <= 48 // 48.50 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5M(mantissa, 27669.209715649555, 48061.607127308169, 26564.217866364506, 5218.706787092744, 286.09318187352375)), SSMF_VF_POLY5(mantissa, 27669.20991276007, 60310.626293978567, 45553.358309032737, 14175.149115843604, 1682.0498613576738, 53.295745555738556))
+#else // 53.16 bits
+#	define SSMF_VF_LOG2_CURVE(mantissa, mantissaM1) SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5M(mantissa, 1539.949449031581, 3012.7926448644621, 1985.4447244334174, 516.40343770651327, 47.614385556181887)), SSMF_VF_POLY6(mantissa, 1539.9494508493094, 3694.5206013958505, 3191.8801514383294, 1211.3930558551092, 197.70059821180519, 11.54910988714642, 0.13957288228854356))
+#endif
+
 // log2(): splits into exponent and mantissa using bitwise ops, then applies a curve to the mantissa
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 #if defined(SSMF_VF_LOG2)
@@ -516,36 +548,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log2)(SSMF_VF v) {
 	// Subtract the 'magic offset' and the exponent base at the same time
 	SSMF_VF exponent = SSMF_VF_SUB(exponentRounded, SSMF_VF_F(exponentBase + exponentMagic));
 
-	// Minimax fits of log2((1+m)/2)/(m-1) for m in [0.5, 2).  We multiply by (m-1) to get good results near 0.
-#	if SSMF_ACCURACY <= 2 // 2.3 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_F(0.6666666666666666));
-#	elif SSMF_ACCURACY <= 5 // 5.14 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY1(mantissa, 0.91177916450319807, -0.16340833189102097));
-#	elif SSMF_ACCURACY <= 8 // 8.46 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY2(mantissa, 0.96241418483320151, -0.28999588271602933, 0.05063502033000334));
-#	elif SSMF_ACCURACY <= 11 // 11.49 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3(mantissa, 0.98369960241357313, -0.3607029285420576, 0.11565419259812297, -0.017493501875099196));
-#	elif SSMF_ACCURACY <= 14 // 14.38 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY4(mantissa, 0.9927714667919143, -0.39917168495103311, 0.17062675075462577, -0.049352485139110357, 0.0064279551203554903));
-#	elif SSMF_ACCURACY <= 17 // 17.21 bits
-	SSMF_VF curve = SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5(mantissa, 0.99673421699056985, -0.41976757516362784, 0.21040570606352918, -0.085232649549313533, 0.021664070674094597, -0.0024569788933524986));
-#	elif SSMF_ACCURACY <= 20 // 21.05 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY2M(mantissa, 87.919282444833087, 43.198765569390631)), SSMF_VF_POLY2(mantissa, 87.940924478146329, 81.98046715472374, 13.233186867851849));
-#	elif SSMF_ACCURACY <= 25 // 25.86 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY2M(mantissa, 12.849423098943026, 9.3665014702745513)), SSMF_VF_POLY3(mantissa, 12.849923750627394, 15.051003529697775, 4.0971980158496795, 0.18597952684601951));
-#	elif SSMF_ACCURACY <= 30 // 30.25 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 615.07015959602086, 560.02796626919769, 97.774089410506335)), SSMF_VF_POLY3(mantissa, 615.07481238180026, 832.27477563489219, 295.01130521376649, 23.600973955242399));
-#	elif SSMF_ACCURACY <= 34 // 34.98 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY3M(mantissa, 59.874988428042606, 68.198456234160986, 18.8326304136726)), SSMF_VF_POLY4(mantissa, 59.875061680986427, 94.704066242849095, 44.077134984989968, 6.221219353247025, 0.16387559422677625));
-#	elif SSMF_ACCURACY <= 39 // 39.39 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY4M(mantissa, 4167.7301872918406, 5522.5148934114723, 1980.6031106095261, 178.08851861856616)), SSMF_VF_POLY4(mantissa, 4167.7311549300921, 7367.5372709525045, 4080.8900698751668, 774.38647159574089, 36.955473282984883));
-#	elif SSMF_ACCURACY <= 43 // 44.08 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY4M(mantissa, 297.67500491434294, 460.80363178588181, 213.87328780984984, 31.568450793030927)), SSMF_VF_POLY5(mantissa, 297.67501625201004, 592.58273558781423, 393.25976268431577, 100.73798113118333, 8.7102964327181933, 0.1496575691326113));
-#	elif SSMF_ACCURACY <= 48 // 48.50 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5M(mantissa, 27669.209715649555, 48061.607127308169, 26564.217866364506, 5218.706787092744, 286.09318187352375)), SSMF_VF_POLY5(mantissa, 27669.20991276007, 60310.626293978567, 45553.358309032737, 14175.149115843604, 1682.0498613576738, 53.295745555738556));
-#	else // 53.16 bits
-	SSMF_VF curve = SSMF_VF_DIV(SSMF_VF_MUL(mantissaM1, SSMF_VF_POLY5M(mantissa, 1539.949449031581, 3012.7926448644621, 1985.4447244334174, 516.40343770651327, 47.614385556181887)), SSMF_VF_POLY6(mantissa, 1539.9494508493094, 3694.5206013958505, 3191.8801514383294, 1211.3930558551092, 197.70059821180519, 11.54910988714642, 0.13957288228854356));
-#	endif
+	SSMF_VF curve = SSMF_VF_LOG2_CURVE(mantissa, mantissaM1);
 	// Include a barrier so that exponent doesn't get reassociated, which would lose precision in our curve
 	return SSMF_VF_ADD(SSMF_VF_BARRIER_LOWBIT(exponent), curve);
 #endif
@@ -799,6 +802,65 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sinh)(SSMF_VF v) {
 	SSMF_VF m = SSMF_NAME(expm1)(SSMF_NAME(abs)(v));
 	SSMF_VF sum = SSMF_VF_ADD(m, SSMF_VF_DIV(m, SSMF_VF_ADD(m, SSMF_VF_F(1))));
 	return SSMF_NAME(copysign)(SSMF_VF_MUL(sum, SSMF_VF_F(0.5)), v);
+#endif
+}
+
+// pow(a, b): ostensibly = exp2(b*log2(a))
+// However (similar to using exp2() for exp() or vice-versa) absolute errors in b*log2(a) become relative errors in the output.  This is OK-ish (we give pow() 1-2 bits more leeway in the tests) unless we're being strict and need SSMF_EXP_SPLIT.
+// In that situation, we pull the same "split into exact + remainder" as in exp().  In the end, the accuracy is measured as if we rounded `a`, rather than the result.
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(pow)(SSMF_VF a, SSMF_VF b) {
+#if defined(SSMF_VF_POW)
+	return SSMF_VF_POW(a, b);
+#elif !defined(SSMF_EXP_SPLIT)
+	return SSMF_NAME(exp2)(SSMF_VF_MUL(b, SSMF_NAME(log2)(a)));
+#else
+	// The truncated parts of b and log2(a) have few enough bits that their product is exact
+#	if SSMF_BITS == 32
+	SSMF_VF bMask = SSMF_VF_I(0xFFFFF000), log2aMask = bMask; // keep 12 and 12
+	const float remLimit = 0.125, maxB = 1e30f;
+#	else
+	SSMF_VF bMask = SSMF_VF_I(0xFFFFFFFFFC000000LL), log2aMask = SSMF_VF_I(0xFFFFFFFFF8000000LL); // keep 27 and 26
+	const double remLimit = 1.0/16384, maxB = 1e300;
+#	endif
+	// See log2() for what this is doing
+#	if SSMF_BITS == 32
+	const int mantissaMaskInt = 0x007FFFFF;
+	const int exponentBits = 8, exponentMagic = 256, exponentRoundingMask = 511;
+	const float exponentBase = 127;
+#	else
+	const long long mantissaMaskInt = 0x000FFFFFFFFFFFFFLL;
+	const int exponentBits = 11, exponentMagic = 2048, exponentRoundingMask = 4095;
+	const double exponentBase = 1023;
+#	endif
+	SSMF_VF mantissa = SSMF_VF_XOR(SSMF_VF_LSHIFT_K(SSMF_VF_AND(a, SSMF_VF_I(mantissaMaskInt)), 1), SSMF_VF_F(1));
+	SSMF_VF mantissaM1 = SSMF_VF_SUB(mantissa, SSMF_VF_F(1));
+	SSMF_VF exponentOffset = SSMF_VF_OR(SSMF_VF_RSHIFT_K(a, exponentBits), SSMF_VF_F(exponentMagic));
+	SSMF_VF exponentRounded = SSMF_VF_AND(SSMF_VF_ADD(exponentOffset, SSMF_VF_F(0.5)), SSMF_VF_F(exponentRoundingMask));
+	SSMF_VF exponent = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(exponentRounded, SSMF_VF_F(exponentBase + exponentMagic)));
+	// A supplied log() is only used for the mantissa, so that its rounding error is relative to the curve, not to log2(a).
+#	if defined(SSMF_VF_LOG2)
+	SSMF_VF curve = SSMF_VF_LOG2(SSMF_VF_MUL(SSMF_VF_ADD(mantissa, SSMF_VF_F(1)), SSMF_VF_F(0.5)));
+#	elif defined(SSMF_VF_LOG)
+	SSMF_VF curve = SSMF_VF_MUL(SSMF_VF_LOG(SSMF_VF_MUL(SSMF_VF_ADD(mantissa, SSMF_VF_F(1)), SSMF_VF_F(0.5))), SSMF_VF_F(1.4426950408889634));
+#	else
+	SSMF_VF curve = SSMF_VF_LOG2_CURVE(mantissa, mantissaM1);
+#	endif
+
+	SSMF_VF log2a = SSMF_VF_ADD(exponent, curve);
+	SSMF_VF log2aTrunc = SSMF_VF_AND(log2a, log2aMask);
+	// (exponent - log2aTrunc) is exact and less than 2, so we fence to protect its accuracy from reassociation
+	SSMF_VF log2aRem = SSMF_VF_ADD(SSMF_VF_BARRIER_HIGHBIT(SSMF_VF_SUB(exponent, log2aTrunc), curve), curve);
+	// Now the same as exp(), but the remainder can be larger, so we use expm1()'s polynomial for 2^rem - 1
+#	ifdef SSMF_FULL_RANGE
+	b = SSMF_VF_MIN(SSMF_VF_MAX(b, SSMF_VF_F(-maxB)), SSMF_VF_F(maxB)); // so b*log2(a) can't overflow
+#	endif
+	SSMF_VF bTrunc = SSMF_VF_AND(b, bMask);
+	SSMF_VF bRem = SSMF_VF_SUB(b, bTrunc);
+	SSMF_VF rem = SSMF_VF_FMA(bRem, log2a, SSMF_VF_MUL(bTrunc, log2aRem));
+	// Only out-of-range results have a remainder this big, so this is just to prevent overflows
+	rem = SSMF_VF_MIN(SSMF_VF_MAX(rem, SSMF_VF_F(-remLimit)), SSMF_VF_F(remLimit));
+	SSMF_VF result = SSMF_VF_BARRIER_HIGHBIT(SSMF_NAME(exp2)(SSMF_VF_MUL(bTrunc, log2aTrunc)), rem);
+	return SSMF_VF_MUL(result, SSMF_VF_FMAK(SSMF_VF_EXPM1_SMALL(rem), rem, 1));
 #endif
 }
 
@@ -1111,6 +1173,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #	undef SSMF_VF_TANH
 #	undef SSMF_VF_SINH
 #	undef SSMF_VF_COSH
+#	undef SSMF_VF_POW
 #	undef SSMF_VF_ASIN
 #	undef SSMF_VF_ACOS
 #	undef SSMF_VF_ATAN
@@ -1158,6 +1221,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #undef SSMF_VF_POLY16M
 #undef SSMF_VF_ROUND_INNER
 #undef SSMF_VF_EXP2_SMALL
+#undef SSMF_VF_LOG2_CURVE
 #undef SSMF_VF_EXPM1_SMALL
 #undef SSMF_VF_EXP2M1_RATIO_TINY
 #undef SSMF_VF_SINPI_SMALL

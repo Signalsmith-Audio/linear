@@ -113,6 +113,16 @@ static inline double testBarrierD(double v) {
 #	define EXP_MAX(T) ((T)(sizeof(T) == 4 ? 87.3 : 708.3))
 #	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 126 : 1022))
 #endif
+// If we have native log() but not log2(), then we round twice, so pow() loses an extra bit of precision for extreme values, unless it splits.  Either way, we just take a slight hit on this one, otherwise it'll be slower than expected
+#if defined(TEST_LOGEXP) && !defined(TEST_LOGEXP2)
+#	define POW_EXTRA_LEEWAY 2
+#else
+#	define POW_EXTRA_LEEWAY 1
+#endif
+// pow() outputs: the same range as exp2()
+#define POW_MIN(T) exp2l(1 - EXP2_MAX(T)) // exp2() clamps its input, which can cut off pow()'s remainder in the bottom binade
+#define POW_SUBNORMALS_HACK(T, y) ((y) < exp2l(-1 - EXP2_MAX(T)) ? exp2l(-1 - EXP2_MAX(T)) : (y)) // results flushed to 0 are treated as being just below the range
+#define POW_MAX(T) exp2l(EXP2_MAX(T))
 #ifdef TEST_ROUND_INT32
 #	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
 #else
@@ -272,6 +282,10 @@ static void test(double x, long double expected, long double actual) {
 		check.expected = expected;
 		check.actual = actual;
 	}
+}
+// Allows the (log) error to scale up by `scale` - we need this for pow() which is a bit looser than the others
+static void testScaled(double x, long double expected, long double actual, long double scale) {
+	test(x, expected, expected*(1 + logl(actual/expected)/scale));
 }
 static void endCheck() {
 	int ok = (check.worst <= check.limit);
@@ -532,6 +546,26 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		} \
 		RANGE_LINEAR(T, x, 4, EXP_MAX(T)) { /* same large-input accuracy as exp() */ \
 			test(x, expm1l(x), T##_test_expm1(x)); \
+		} \
+		endCheck(); \
+		startCheck("pow"); /* accurate for (a rounded to SSMF_ACCURACY bits), so the error can scale with |b| */ \
+		RANGE_EXP(T, a, SWEEP_MIN(T), SWEEP_MAX(T)) { \
+			const T bs[] = {0, 1, -1, (T)0.5, (T)-0.5, 2, (T)3.3, (T)-7.9, (T)0.01, (T)20.5, (T)-100.25}; \
+			for (int i = 0; i < 11; ++i) { \
+				T b = bs[i]; \
+				long double expected = powl(a, b); \
+				if (expected < POW_MIN(T) || expected > POW_MAX(T)) continue; \
+				testScaled(a, expected, POW_SUBNORMALS_HACK(T, (long double)T##_test_pow(a, b)), POW_EXTRA_LEEWAY*(b*b > 1 ? fabsl(b) : 1)); \
+			} \
+		} \
+		RANGE_LINEAR(T, a, (T)0.5, 2) { /* large b, with a near 1 */ \
+			const T bs[] = {(T)55.5, (T)-60.1, (T)-1000.3, (T)1234.5, (T)1e5}; \
+			for (int i = 0; i < 5; ++i) { \
+				T b = bs[i]; \
+				long double expected = powl(a, b); \
+				if (expected < POW_MIN(T) || expected > POW_MAX(T)) continue; \
+				testScaled(a, expected, POW_SUBNORMALS_HACK(T, (long double)T##_test_pow(a, b)), POW_EXTRA_LEEWAY*fabsl(b)); \
+			} \
 		} \
 		endCheck(); \
 		startCheck("sinh"); \
