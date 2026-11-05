@@ -188,11 +188,11 @@ If you re-use any of these approximations, attribution would be nice, but isn't 
 #elif SSMF_BITS == 32
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFE), v) // For small integers
 #	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_AND(SSMF_VF_I(0x40000000), v) // Always 0 for things with magnitude < 2
-#	define SSMF_VF_BARRIER_HIGHBIT(v, knownSmall) SSMF_VF_XOR(v, SSMF_VF_BARRIER_HIGHBIT_MASK(knownSmall));
+#	define SSMF_VF_BARRIER_HIGHBIT(v, knownSmall) SSMF_VF_XOR(v, SSMF_VF_BARRIER_HIGHBIT_MASK(knownSmall))
 #elif SSMF_BITS == 64
 #	define SSMF_VF_BARRIER_LOWBIT(v) SSMF_VF_AND(SSMF_VF_I(0xFFFFFFFFFFFFFFFELL), v)
 #	define SSMF_VF_BARRIER_HIGHBIT_MASK(v) SSMF_VF_AND(SSMF_VF_I(0x4000000000000000LL), v)
-#	define SSMF_VF_BARRIER_HIGHBIT(v, knownSmall) SSMF_VF_XOR(v, SSMF_VF_BARRIER_HIGHBIT_MASK(knownSmall));
+#	define SSMF_VF_BARRIER_HIGHBIT(v, knownSmall) SSMF_VF_XOR(v, SSMF_VF_BARRIER_HIGHBIT_MASK(knownSmall))
 #else
 #	error "SSMF_VF_BARRIER is required unless it's 32/64-bit IEEE float"
 #endif
@@ -477,7 +477,7 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(hypot)(SSMF_VF a, SSMF_VF b) {
 #endif
 	SSMF_VF sum = SSMF_VF_FMA(a, a, SSMF_NAME(pow2)(b));
 	SSMF_VF scaledResult = SSMF_NAME(sqrt)(sum);
-	scaledResult = SSMF_VF_BARRIER_HIGHBIT(scaledResult, SSMF_VF_MUL(scaleBefore, scaleAfter)/*always == 1, but we constructed it with bitwise shenanigans*/);
+	scaledResult = SSMF_VF_BARRIER_HIGHBIT(scaledResult, SSMF_VF_MUL(scaleBefore, scaleAfter); /*always == 1, but we constructed it with bitwise shenanigans*/);
 	return SSMF_VF_MUL(scaledResult, scaleAfter);
 #endif
 }
