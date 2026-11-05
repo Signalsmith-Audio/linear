@@ -32,7 +32,7 @@ Constants and accuracy:
 	SSMF_BITS: if 32 or 64, it assumes standard IEEE floats, and provides defaults for SSMF_ACCURACY (20 or 48) and SSMF_EPSILON
 	SSMF_ACCURACY: target accuracy (in mantissa bits) for the approximation - actual results might be 1 bit worse than this
 	SSMF_EPSILON: difference between 1 and the next representable value
-	SSMF_FULL_RANGE: if defined, adds extra guards against overflows (x² -> Inf) or underflows (x² -> subnormal, might get rounded to 0)
+	SSMF_FULL_RANGE: if defined, adds extra guards against overflows (x² -> Inf) or underflows (x² -> subnormal, might get rounded to 0), and exp() results outside that "safe" range are also slightly more approximate.
 
 Types and constants (mandatory):
 	SSMF_VF: type for all function arguments/results, could be scalar or SIMD
@@ -590,12 +590,26 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(log10)(SSMF_VF v) {
 #	define SSMF_VF_EXP2_SMALL(fraction) SSMF_NAME(pow2)(SSMF_VF_POLY9(fraction, 1, 0.34657359027997264, 0.060056626739773314, 0.0069380135831044612, 0.00060113306929947643, 4.1667369182049283e-05, 2.4068007441213058e-06, 1.1916210833453763e-07, 5.1664940928876514e-09, 1.9864502507589705e-10))
 #endif
 
+// If it can, exp() uses exp2() (or vice-versa if native exp() is provided), but absolute errors in v*log2(e) become relative errors in the result.
+// For "small range" output values, this is mostly OK, but we need a more accurate split otherwise.
+#if SSMF_BITS == 32
+#	if (SSMF_ACCURACY > 20) || (defined(SSMF_FULL_RANGE) && SSMF_ACCURACY > 18)
+#		define SSMF_EXP_SPLIT
+#	endif
+#elif SSMF_BITS == 64 && SSMF_ACCURACY > 44
+#	define SSMF_EXP_SPLIT
+#endif
+
 // exp2(): splits into an integer part (which becomes the exponent bits) and a fractional part in [-0.5, 0.5], which is curve-fitted
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 #if defined(SSMF_VF_EXP2)
 	return SSMF_VF_EXP2(v);
-#elif defined(SSMF_VF_EXP) && SSMF_BITS != 32 && SSMF_BITS != 64
+#elif defined(SSMF_VF_EXP)
+#	if !defined(SSMF_EXP_SPLIT)
 	return SSMF_VF_EXP(SSMF_VF_MUL(v, SSMF_VF_F(0.6931471805599453)));
+#	else
+	return SSMF_VF_EXP(SSMF_VF_MUL(v, SSMF_VF_F(0.6931471805599453)));
+#	endif
 #else
 #	if SSMF_BITS == 32
 	const int mantissaBits = 23;
@@ -622,23 +636,51 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp2)(SSMF_VF v) {
 	SSMF_VF integer = SSMF_VF_BARRIER_LOWBIT(SSMF_VF_SUB(withMagic, SSMF_VF_F(exponentMagic)));
 #	endif
 	SSMF_VF fraction = SSMF_VF_SUB(v, integer);
-
-#	if defined(SSMF_VF_EXP)
-	// Still split off the integer part, so the rounding error of (v*ln2) doesn't grow with v
-	SSMF_VF curve = SSMF_VF_EXP(SSMF_VF_MUL(fraction, SSMF_VF_F(0.6931471805599453)));
-#	else
 	SSMF_VF curve = SSMF_VF_EXP2_SMALL(fraction);
-#	endif
 	return SSMF_VF_MUL(curve, scale);
 #endif
 }
 
-// exp(): multiplies exp2() if not otherwise defined
+// exp()
+// For float this costs up to ~2 bits (18 bits near ±88), and for double ~4 bits (44 bits near ±709), or ~1 bit less within SSMF_FULL_RANGE's small-input range (|x| up to ~35 / ~345)
+// When that would miss SSMF_ACCURACY, we split both v and log2(e) so the main product is exact, and correct for the (small) remainder with a separate polynomial
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(exp)(SSMF_VF v) {
 #if defined(SSMF_VF_EXP)
 	return SSMF_VF_EXP(v);
-#else
+#elif !defined(SSMF_EXP_SPLIT)
 	return SSMF_NAME(exp2)(SSMF_VF_MUL(v, SSMF_VF_F(1.4426950408889634)));
+#else
+	// The best thing would be "Cody-Waite argument reduction" but I'm still wrapping my head around that.
+	// Instead, we start by zeroing out half the mantissa of the two numbers (v, log2e), which we can then multiply exactly.
+	// We're left with the remainder terms, so the full sum would be (vTrunc + vRem)*(log2eTrunc + log2eRem).
+#	if SSMF_BITS == 32
+	const float log2eTrunc = 1.44287109375f, log2eRem = -1.76052861e-04f;
+	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-87.3258819580078125)), SSMF_VF_F(88.3627700805664062));
+	SSMF_VF vTrunc = SSMF_VF_AND(v, SSMF_VF_I(0xFFFFF000)); // clear 12, keep 12
+#	else
+	const double log2eTrunc = 1.4426950514316559, log2eRem = -1.0542692476429138e-08; // log2(e) keeps 26 mantissa bits
+	v = SSMF_VF_MIN(SSMF_VF_MAX(v, SSMF_VF_F(-708.39641335555979)), SSMF_VF_F(709.43545721726324));
+	SSMF_VF vTrunc = SSMF_VF_AND(v, SSMF_VF_I(0xFFFFFFFFFC000000LL)); // drop 26, keep 27
+#	endif
+	// Take exp2() of the exact part
+	SSMF_VF expCoarse = SSMF_NAME(exp2)(SSMF_VF_MUL(vTrunc, SSMF_VF_F(log2eTrunc)));
+
+	// We compute rem = vRem*log2e + vTrunc*log2eRem, which rounds but it's already much smaller so it's fine
+	SSMF_VF vRem = SSMF_VF_SUB(v, vTrunc);
+	SSMF_VF rem = SSMF_VF_FMA(vRem, SSMF_VF_F(1.4426950408889634), SSMF_VF_MUL(vTrunc, SSMF_VF_F(log2eRem)));
+	// Minimax fits (relative error, exact at 0) of 2^x for |x| < 0.0339 (float) or 7.5e-6 (double), which bounds the remainder
+#	if SSMF_BITS == 32
+#		if SSMF_ACCURACY <= 20 // 20.81 bits
+	SSMF_VF correction = SSMF_VF_POLY2(rem, 1, 0.69319487647193889, 0.24022640853079075);
+#		else // 28.77 bits
+	SSMF_VF correction = SSMF_VF_POLY3(rem, 1, 0.69314718347733817, 0.24023566361042048, 0.055501787862308895);
+#		endif
+#	else // only double needs it for SSMF_ACCURACY > 44
+	SSMF_VF correction = SSMF_VF_POLY2(rem, 1, 0.69314718056228686, 0.24022650695910072); // 57.25 bits
+#	endif
+	// Barrier because exp2() ends with a multiplication, and we don't want that reassociating (since the power *could* be subnormal or 0)
+	expCoarse = SSMF_VF_BARRIER_HIGHBIT(expCoarse, rem);
+	return SSMF_VF_MUL(expCoarse, correction);
 #endif
 }
 
@@ -1055,3 +1097,4 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #undef SSMF_VF_SINPI_SMALL
 #undef SSMF_VF_INVCOS_HELPER
 #undef SSMF_VF_SIGN_TO_ONE
+#undef SSMF_EXP_SPLIT

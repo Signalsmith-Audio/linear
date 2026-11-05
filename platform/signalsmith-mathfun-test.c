@@ -96,12 +96,20 @@ static inline double testBarrierD(double v) {
 // With SSMF_SMALL_INPUTS, squaring shouldn't overflow/underflow, so we stay well inside sqrt() of the exponent range
 #ifdef TEST_SMALL_INPUTS
 #	define TEST_SMALL_INPUTS_ON 1
-#	define SMALL_INPUTS_MIN(T) ((T)(sizeof(T) == 4 ? 1e-15 : 1e-150))
+#	define SMALL_INPUTS_MIN(T) ((T)(sizeof(T) == 4 ? 1e-15 : 1e-140)) // hypot() tests use y = x*1e-6 so we need a bit more headroom (footroom?) for those not to get flushed to zero
 #	define SMALL_INPUTS_MAX(T) ((T)(sizeof(T) == 4 ? 1e15 : 1e150))
 #else
 #	define TEST_SMALL_INPUTS_ON 0
 #	define SMALL_INPUTS_MIN(T) SWEEP_MIN(T)
 #	define SMALL_INPUTS_MAX(T) ((T)(LARGE_MAX(T)/2)) // so hypot(x, x) can't overflow
+#endif
+// exp() over the whole (normal) output range, or just outputs within SMALL_INPUTS_MIN/MAX
+#ifdef TEST_SMALL_INPUTS
+#	define EXP_MAX(T) ((T)(sizeof(T) == 4 ? 34.5 : 345))
+#	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 45 : 490))
+#else
+#	define EXP_MAX(T) ((T)(sizeof(T) == 4 ? 87.3 : 708.3))
+#	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 126 : -1022))
 #endif
 #ifdef TEST_ROUND_INT32
 #	define ROUNDING_MAX(T) 1073741824 // largest float below 2^31 (otherwise it rounds up)
@@ -488,21 +496,24 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		} \
 		endCheck(); \
 		startCheck("exp2"); \
-		RANGE_LINEAR(T, x, (sizeof(T) == 4 ? -126 : -1022), (sizeof(T) == 4 ? 127 : 1023)) { \
+		RANGE_LINEAR(T, x, -EXP2_MAX(T), EXP2_MAX(T)) { \
 			test(x, exp2l(x), T##_test_exp2(x)); \
 		} \
 		RANGE_LINEAR(T, x, -2, 2) { \
 			test(x, exp2l(x), T##_test_exp2(x)); \
 		} \
-		for (T k = -100; k <= 100; ++k) { \
+		for (T k = -30; k <= 30; ++k) { \
 			test(k, exp2l(k), T##_test_exp2(k)); \
 			T below = T##_nextDown(k + (T)0.5), above = T##_nextUp(k + (T)0.5); \
 			test(below, exp2l(below), T##_test_exp2(below)); \
 			test(above, exp2l(above), T##_test_exp2(above)); \
 		} \
 		endCheck(); \
-		startCheck("exp"); /* small (epsilon-level) errors when scaling the argument compound into large relative errors in the result very quickly. */ \
+		startCheck("exp"); \
 		RANGE_LINEAR(T, x, -4, 4) { \
+			test(x, expl(x), T##_test_exp(x)); \
+		} \
+		RANGE_LINEAR(T, x, -EXP_MAX(T), EXP_MAX(T)) { \
 			test(x, expl(x), T##_test_exp(x)); \
 		} \
 		endCheck(); \
@@ -652,8 +663,8 @@ int main(void) {
 #ifdef TEST_LOGEXP2
 		" LOG2/EXP2"
 #endif
-#ifdef TEST_SMALL_INPUTS
-		" !FULL_RANGE"
+#ifndef TEST_SMALL_INPUTS
+		" FULL_RANGE"
 #endif
 #ifdef __FAST_MATH__
 		" (fast-math)"

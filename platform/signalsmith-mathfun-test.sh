@@ -3,6 +3,7 @@
 cd "$(dirname "$0")"
 CC="${CC:-cc}" # Assumes GCC-like
 OUT="${TMPDIR:-/tmp}/signalsmith-mathfun-test"
+rm -f "$OUT.log"
 
 run() {
 	echo "Running: $*"
