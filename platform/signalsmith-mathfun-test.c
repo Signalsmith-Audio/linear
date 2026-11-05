@@ -20,10 +20,10 @@ Optional ops can be switched on to test their routes:
 
 #ifdef TEST_ROUTE_INDEX
 // Start with an arbitrary mask
-#	define PRNG1 ((TEST_ROUTE_INDEX^0x9c8f2d35)&0xFFFFFFFF)
+#	define PRNG1 ((TEST_ROUTE_INDEX^0x9c8f2d35u)&0xFFFFFFFFu)
 // Bit-mixing with "lowbias32" constants from https://github.com/skeeto/hash-prospector
-#	define PRNG2 (((PRNG1^(PRNG1>>16))*0x7feb352d)&0xFFFFFFFF)
-#	define PRNG3 (((PRNG2^(PRNG2>>15))*0x846ca68b)&0xFFFFFFFF)
+#	define PRNG2 (((PRNG1^(PRNG1>>16))*0x7feb352du)&0xFFFFFFFFu)
+#	define PRNG3 (((PRNG2^(PRNG2>>15))*0x846ca68bu)&0xFFFFFFFFu)
 #	define PRNG4 (PRNG3^(PRNG3>>16))
 // Use these bits to turn on/off route options
 #	if (PRNG4&1)
