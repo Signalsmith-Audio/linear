@@ -598,6 +598,13 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			} \
 		} \
 		endCheck(); \
+		startCheck("cbrt"); \
+		test(0, 0, T##_test_cbrt(0)); \
+		RANGE_EXP(T, x, SWEEP_MIN(T), LARGE_MAX(T)) { \
+			test(x, cbrtl(x), T##_test_cbrt(x)); \
+			test(-x, cbrtl(-x), T##_test_cbrt(-x)); \
+		} \
+		endCheck(); \
 		startCheck("sinh"); \
 		RANGE_LINEAR(T, x, -EXP_MAX(T), EXP_MAX(T)) { \
 			test(x, sinhl(x), T##_test_sinh(x)); \
@@ -703,6 +710,19 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(x, atanl(x), y); \
 			test(-x, atanl(-x), yNeg); \
 			assertCheck(y <= (T)1.5707963267948966 && yNeg >= -(T)1.5707963267948966, x, atanl(x), y); \
+		} \
+		endCheck(); \
+		startCheck("atan2"); /* all four quadrants and the axes, everything except (0, 0) */ \
+		RANGE_EXP(T, x, SMALL_INPUTS_MIN(T), SMALL_INPUTS_MAX(T)) { \
+			const T ratios[] = {0, (T)1e-6, (T)0.001, (T)0.3, (T)0.75, 1}; \
+			for (int r = 0; r < 6; ++r) { \
+				T y = x*ratios[r]; \
+				for (int signs = 0; signs < 4; ++signs) { \
+					T sx = (signs&1) ? -x : x, sy = (signs&2) ? -y : y; \
+					test(x, atan2l(sy, sx), T##_test_atan2(sy, sx)); \
+					test(x, atan2l(sx, sy), T##_test_atan2(sx, sy)); \
+				} \
+			} \
 		} \
 		endCheck(); \
 		startCheck("tan"); /* backward-accurate like sin/cos, and bounded for all inputs (within the rounding range) */ \

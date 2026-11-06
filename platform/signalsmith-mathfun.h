@@ -78,6 +78,7 @@ Optional:
 	SSMF_VF_SINH(v)
 	SSMF_VF_COSH(v)
 	SSMF_VF_POW(a, b)
+	SSMF_VF_CBRT(v)
 	SSMF_VF_ERF(v)
 	SSMF_VF_ERFC(v)
 	SSMF_VF_SIN(v)
@@ -88,6 +89,7 @@ Optional:
 	SSMF_VF_ASIN(v)
 	SSMF_VF_ACOS(v)
 	SSMF_VF_ATAN(v)
+	SSMF_VF_ATAN2(y, x)
 
 APPROXIMATIONS
 ---------
@@ -445,6 +447,42 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
 	return SSMF_VF_SQRT(v);
 #else
 	return SSMF_VF_MUL(v, SSMF_NAME(rsqrt)(v));
+#endif
+}
+
+// cbrt():
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cbrt)(SSMF_VF v) {
+#if defined(SSMF_VF_CBRT)
+	return SSMF_VF_CBRT(v);
+#else
+	SSMF_VF absV = SSMF_NAME(abs)(v);
+#	if SSMF_BITS == 32
+#		define SSMF_MIN_NORMAL 1.1754943e-38f
+	absV = SSMF_VF_MAX(absV, 3.526483e-38f); // 3x smallest normal
+printf("absV = %.17g\n", absV);
+	SSMF_VF r3 = SSMF_VF_OR(SSMF_VF_F(3), SSMF_VF_RSHIFT_K(absV, 9)); // Shift into mantissa (1 bit free) and mask in 3, to get (3 + e)
+printf("r3 = %.17g", r3);
+	r3 = SSMF_VF_MUL(r3, SSMF_VF_F(0.33333334f)); // scale to get (1 + (e/256)/3)
+printf(" -> %.17g", r3);
+	r3 = SSMF_VF_ADD(r3, SSMF_VF_F(0.1653f)); // we also scaled the bias, so we want to add that back in to get `(1 + (e + 2*b)/256/3)`.  True compensation would be 0.16536458333333334, but we undershoot slightly to avoid going over 1.25
+printf(" -> %.17g", r3);
+	r3 = SSMF_VF_LSHIFT_K(r3, 9); // shift back into exponent, with a (truncated but not insane) mantissa
+printf(" -> %.17g\n", r3);
+if (absV > 1e30) return r3;
+return 0;
+#	elif SSMF_BITS == 64
+#		define SSMF_MIN_NORMAL 2.2250738585072014e-308
+	absV = SSMF_VF_MAX(absV, 6.675221575521604e-308);
+	SSMF_VF r3 = SSMF_VF_0; // TODO
+#	else
+#		error "need SSMF_VF_CBRT() unless it's 32/64-bit IEEE floats"
+#	endif
+	return SSMF_NAME(copysign)(r3, v);
+//	SSMF_VF y = SSMF_VF_MUL(SSMF_VF_MUL(v, r3), r3);
+//	// Newton step for y³ = v: y += (v/y² - y)/3
+//	SSMF_VF ratio = SSMF_VF_DIV(v, SSMF_VF_FMAK(y, y, SSMF_MIN_NORMAL));
+//	return SSMF_VF_FMA(SSMF_VF_SUB(ratio, y), SSMF_VF_F(0.33333333333333333), y);
+#	undef SSMF_MIN_NORMAL
 #endif
 }
 
@@ -1247,6 +1285,29 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #endif
 }
 
+// atan2(y, x): the angle for (|x|, y) is 2*atan(y/(hypot(x, y) + |x|)), where atan()'s input stays within [-1, 1].  For x < 0, we negate that and add ±π.  Only (0, 0) gives nonsense.
+SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan2)(SSMF_VF y, SSMF_VF x) {
+#if defined(SSMF_VF_ATAN2)
+	return SSMF_VF_ATAN2(y, x);
+#else
+#	ifdef SSMF_FULL_RANGE
+	// hypot(x, y) + |x| can overflow, so we halve the inputs first
+	SSMF_VF xS = SSMF_VF_MUL(x, SSMF_VF_F(0.5)), yS = SSMF_VF_MUL(y, SSMF_VF_F(0.5));
+#	else
+	SSMF_VF xS = x, yS = y;
+#	endif
+	SSMF_VF half = SSMF_NAME(atan)(SSMF_VF_DIV(yS, SSMF_VF_ADD(SSMF_NAME(hypot)(xS, yS), SSMF_NAME(abs)(xS))));
+#	if SSMF_BITS == 32 || SSMF_BITS == 64
+	// 2 for x < 0 (otherwise 0) from the sign bit, like in erfc(), so fast-math can't reassociate it with the final sum
+	SSMF_VF offsetScale = SSMF_VF_RSHIFT_K(SSMF_VF_AND(x, SSMF_VF_F(-0.0)), 1);
+#	else
+	SSMF_VF offsetScale = SSMF_VF_SUB(SSMF_VF_F(1), SSMF_NAME(copysign)(SSMF_VF_F(1), x));
+#	endif
+	SSMF_VF offset = SSMF_VF_MUL(offsetScale, SSMF_NAME(copysign)(SSMF_VF_F(1.5707963267948966), y));
+	return SSMF_VF_FMA(half, SSMF_NAME(copysign)(SSMF_VF_F(2), x), offset);
+#endif
+}
+
 // Clean up all our arguments unless explicitly told not to
 #ifndef SSMF_NO_CLEANUP
 #	undef SSMF_BITS
@@ -1293,11 +1354,13 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan)(SSMF_VF v) {
 #	undef SSMF_VF_SINH
 #	undef SSMF_VF_COSH
 #	undef SSMF_VF_POW
+#	undef SSMF_VF_CBRT
 #	undef SSMF_VF_ERF
 #	undef SSMF_VF_ERFC
 #	undef SSMF_VF_ASIN
 #	undef SSMF_VF_ACOS
 #	undef SSMF_VF_ATAN
+#	undef SSMF_VF_ATAN2
 #	undef SSMF_VF_HYPOT
 #	undef SSMF_NAME
 #	undef SSMF_INLINE
