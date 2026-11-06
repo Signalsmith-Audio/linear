@@ -450,38 +450,37 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(sqrt)(SSMF_VF v) {
 #endif
 }
 
-// cbrt():
+// cbrt(): similar to sqrt(), but we have to use actual multiplication (not shifts) to divide the exponent by 3.  We estimate 1/cbrt(v) iteratively with Newton steps, then finish with v*y².
 SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cbrt)(SSMF_VF v) {
 #if defined(SSMF_VF_CBRT)
 	return SSMF_VF_CBRT(v);
 #else
-	SSMF_VF absV = SSMF_NAME(abs)(v);
+	SSMF_VF absV = SSMF_VF_MAX(SSMF_NAME(abs)(v), SSMF_VF_F(SSMF_BITS == 32 ? 1.1754943508222875e-38 : 2.2250738585072014e-308));
+	// The estimate: shift |v|'s exponent and mantissa down into the mantissa of 3.0 (into the space left by the 0 sign bit), so this is 3 + log2(|v|)/2^k (approximately, with bias)
 #	if SSMF_BITS == 32
-#		define SSMF_MIN_NORMAL 1.1754943e-38f
-	absV = SSMF_VF_MAX(absV, 3.526483e-38f); // 3x smallest normal
-//printf("absV = %.17g\n", absV);
-	SSMF_VF r3 = SSMF_VF_OR(SSMF_VF_F(3), SSMF_VF_RSHIFT_K(absV, 9)); // Shift into mantissa (1 bit free) and mask in 3, to get (3 + e)
-//printf("r3 = %.17g", r3);
-	r3 = SSMF_VF_MUL(r3, SSMF_VF_F(0.33333334f)); // scale to get (1 + (e/256)/3), which means the relevant stuff is now right at the start of the mantissa (not 1-bit indented)
-//printf(" -> %.17g", r3);
-	r3 = SSMF_VF_ADD(r3, SSMF_VF_F(0.3307291666666667f)); // we also scaled the bias, so we want to add that back in to get `(1 + (e + 2*b)/256/3)`.  True compensation would be 0.3307291666666667, but we undershoot slightly to avoid going over 1.25
-//printf(" -> %.17g", r3);
-	r3 = SSMF_NAME(abs)(SSMF_VF_LSHIFT_K(r3, 8)); // shift back into exponent, with a (truncated but not insane) mantissa
-//printf(" -> %.17g\n", r3);
-	return r3;
+	absV = SSMF_VF_MAX(absV, SSMF_VF_F(1.1754943e-38f)); // smallest normal
+	SSMF_VF y = SSMF_VF_OR(SSMF_VF_F(3), SSMF_VF_RSHIFT_K(absV, 9)); // shift right into mantissa, one down from MSB because we're using the top for 3 = 2*1.5
+	y = SSMF_VF_FMAK(y, SSMF_VF_F(-0.33333334f), 2.6612005f); // scale by -1/3, add back the bias, plus a bit more because of the warped mantissa shape
+	y = SSMF_NAME(abs)(SSMF_VF_LSHIFT_K(y, 8)); // shift back into the exponent (and clear sign bit)
 #	elif SSMF_BITS == 64
-#		define SSMF_MIN_NORMAL 2.2250738585072014e-308
-	absV = SSMF_VF_MAX(absV, 6.675221575521604e-308);
-	SSMF_VF r3 = SSMF_VF_0; // TODO
+	absV = SSMF_VF_MAX(absV, SSMF_VF_F(2.2250738585072014e-308));
+	SSMF_VF y = SSMF_VF_OR(SSMF_VF_F(3), SSMF_VF_RSHIFT_K(absV, 12));
+	y = SSMF_VF_FMAK(y, SSMF_VF_F(-0.3333333333333333), 2.6659833984);
+	y = SSMF_NAME(abs)(SSMF_VF_LSHIFT_K(y, 11));
 #	else
 #		error "need SSMF_VF_CBRT() unless it's 32/64-bit IEEE floats"
 #	endif
-	return SSMF_NAME(copysign)(r3, v);
-//	SSMF_VF y = SSMF_VF_MUL(SSMF_VF_MUL(v, r3), r3);
-//	// Newton step for y³ = v: y += (v/y² - y)/3
-//	SSMF_VF ratio = SSMF_VF_DIV(v, SSMF_VF_FMAK(y, y, SSMF_MIN_NORMAL));
-//	return SSMF_VF_FMA(SSMF_VF_SUB(ratio, y), SSMF_VF_F(0.33333333333333333), y);
-#	undef SSMF_MIN_NORMAL
+	// Newton steps: y *= 1 + (1 - absV*y³)/3
+	const int stepCount = (SSMF_ACCURACY >= 7) + (SSMF_ACCURACY >= 15) + (SSMF_ACCURACY >= 30);
+	for (int step = 0; step < stepCount; ++step) {
+		SSMF_VF wrong = SSMF_VF_FMAK(SSMF_NAME(neg)(SSMF_NAME(abs)(SSMF_VF_MUL(v, y))), SSMF_VF_MUL(y, y), 1);
+		y = SSMF_VF_FMA(y, SSMF_VF_MUL(wrong, SSMF_VF_F(0.3333333333333333)), y);
+	}
+	// Final step has different coefficients because we're doing it upside-down
+	SSMF_VF vy = SSMF_VF_MUL(v, y);
+	SSMF_VF wrong = SSMF_VF_FMAK(SSMF_NAME(neg)(SSMF_NAME(abs)(vy)), SSMF_VF_MUL(y, y), 1);
+	SSMF_VF result = SSMF_VF_MUL(vy, y);
+	return SSMF_VF_FMA(result, SSMF_VF_MUL(wrong, SSMF_VF_F(0.6666666666666666)), result);
 #endif
 }
 
