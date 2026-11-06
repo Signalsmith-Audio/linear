@@ -307,6 +307,9 @@ static void endCheck() {
 // asin/acos references which avoid 1 - x^2 (gcc's fast-math asinl()/acosl() cancel near ±1)
 static long double refAsin(long double x) {return atan2l(x, sqrtl((1 - x)*(1 + x)));}
 static long double refAcos(long double x) {return 2*atan2l(sqrtl(1 - x), sqrtl(1 + x));}
+// 1 - x rounded to T (volatile, so fast-math can't fold the reference's 1 - (1 - x) back into x when long double is the same as double, as on arm64 Macs)
+static inline float float_oneMinus(float x) {volatile float t = 1 - x; return t;}
+static inline double double_oneMinus(double x) {volatile double t = 1 - x; return t;}
 
 // Neighbouring values, for testing edge-cases
 #define SSMF_TEST_PI 3.141592653589793238462643383279502884L
@@ -679,8 +682,9 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		RANGE_EXP(T, x, SWEEP_MIN(T), 1) { \
 			test(x, refAsin(x), T##_test_asin(x)); \
 			test(-x, refAsin(-x), T##_test_asin(-x)); \
-			test(1 - x, refAsin(1 - x), T##_test_asin(1 - x)); \
-			test(x - 1, refAsin(x - 1), T##_test_asin(x - 1)); \
+			T oneMinusX = T##_oneMinus(x); \
+			test(oneMinusX, refAsin(oneMinusX), T##_test_asin(oneMinusX)); \
+			test(-oneMinusX, refAsin(-oneMinusX), T##_test_asin(-oneMinusX)); \
 		} \
 		test(1, refAsin(1), T##_test_asin(1)); \
 		test(-1, refAsin(-1), T##_test_asin(-1)); \
@@ -693,8 +697,9 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 		RANGE_EXP(T, x, SWEEP_MIN(T), 1) { \
 			test(x, refAcos(x), T##_test_acos(x)); \
 			test(-x, refAcos(-x), T##_test_acos(-x)); \
-			test(1 - x, refAcos(1 - x), T##_test_acos(1 - x)); \
-			test(x - 1, refAcos(x - 1), T##_test_acos(x - 1)); \
+			T oneMinusX = T##_oneMinus(x); \
+			test(oneMinusX, refAcos(oneMinusX), T##_test_acos(oneMinusX)); \
+			test(-oneMinusX, refAcos(-oneMinusX), T##_test_acos(-oneMinusX)); \
 		} \
 		test(1, refAcos(1), T##_test_acos(1)); \
 		test(-1, refAcos(-1), T##_test_acos(-1)); \
