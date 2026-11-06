@@ -459,17 +459,16 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(cbrt)(SSMF_VF v) {
 #	if SSMF_BITS == 32
 #		define SSMF_MIN_NORMAL 1.1754943e-38f
 	absV = SSMF_VF_MAX(absV, 3.526483e-38f); // 3x smallest normal
-printf("absV = %.17g\n", absV);
+//printf("absV = %.17g\n", absV);
 	SSMF_VF r3 = SSMF_VF_OR(SSMF_VF_F(3), SSMF_VF_RSHIFT_K(absV, 9)); // Shift into mantissa (1 bit free) and mask in 3, to get (3 + e)
-printf("r3 = %.17g", r3);
-	r3 = SSMF_VF_MUL(r3, SSMF_VF_F(0.33333334f)); // scale to get (1 + (e/256)/3)
-printf(" -> %.17g", r3);
-	r3 = SSMF_VF_ADD(r3, SSMF_VF_F(0.1653f)); // we also scaled the bias, so we want to add that back in to get `(1 + (e + 2*b)/256/3)`.  True compensation would be 0.16536458333333334, but we undershoot slightly to avoid going over 1.25
-printf(" -> %.17g", r3);
-	r3 = SSMF_VF_LSHIFT_K(r3, 9); // shift back into exponent, with a (truncated but not insane) mantissa
-printf(" -> %.17g\n", r3);
-if (absV > 1e30) return r3;
-return 0;
+//printf("r3 = %.17g", r3);
+	r3 = SSMF_VF_MUL(r3, SSMF_VF_F(0.33333334f)); // scale to get (1 + (e/256)/3), which means the relevant stuff is now right at the start of the mantissa (not 1-bit indented)
+//printf(" -> %.17g", r3);
+	r3 = SSMF_VF_ADD(r3, SSMF_VF_F(0.3307291666666667f)); // we also scaled the bias, so we want to add that back in to get `(1 + (e + 2*b)/256/3)`.  True compensation would be 0.3307291666666667, but we undershoot slightly to avoid going over 1.25
+//printf(" -> %.17g", r3);
+	r3 = SSMF_NAME(abs)(SSMF_VF_LSHIFT_K(r3, 8)); // shift back into exponent, with a (truncated but not insane) mantissa
+//printf(" -> %.17g\n", r3);
+	return r3;
 #	elif SSMF_BITS == 64
 #		define SSMF_MIN_NORMAL 2.2250738585072014e-308
 	absV = SSMF_VF_MAX(absV, 6.675221575521604e-308);
