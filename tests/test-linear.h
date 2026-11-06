@@ -575,9 +575,9 @@ TEST_EXPR2(Cosh, a = std::cosh(b), a = b.cosh());
 TEST_EXPR2(Tanh, a = std::tanh(b), a = b.tanh());
 TEST_EXPR2(Asinh, a = std::asinh(b), a = b.asinh());
 TEST_EXPR2(Acosh, a = std::acosh(b + 1), a = (b + 1).acosh());
-TEST_EXPR2(Atanh, a = std::atanh(b*decltype(b)(0.9)), a = (b*0.9).atanh());
-TEST_EXPR2(Clamp, a = std::min(std::max(b, decltype(b)(-0.5)), decltype(b)(0.5)), a = linear.min(linear.max(b, -0.5), 0.5));
-TEST_EXPR2(Clamp2, a = std::max(std::min(b, decltype(b)(0.5)), decltype(b)(-0.5)), a = linear.max(linear.min(b, 0.5), -0.5));
+TEST_EXPR2(Atanh, a = std::atanh(b*0.9f), a = (b*0.9f).atanh());
+TEST_EXPR2(Clamp, a = std::min(std::max(b, decltype(b)(-0.5f)), decltype(b)(0.5)), a = linear.min(linear.max(b, -0.5f), 0.5f));
+TEST_EXPR2(Clamp2, a = std::max(std::min(b, decltype(b)(0.5)), decltype(b)(-0.5)), a = linear.max(linear.min(b, 0.5f), -0.5f));
 TEST_EXPR3(Pow, a = std::pow(b, c), a = linear.pow(b, c));
 TEST_EXPR3(Atan2, a = std::atan2(b, c), a = linear.atan2(b, c));
 TEST_EXPR3(Hypot, a = std::hypot(b, c), a = linear.hypot(b, c));
@@ -655,18 +655,18 @@ TEST_EXPR4(AddConjMul, a = b + std::conj(c)*d, a = b + c.conj()*d);
 TEST_EXPR4(ConjConjMulAdd, a = std::conj(b)*std::conj(c) + d, a = b.conj()*c.conj() + d);
 
 // Constants on the left of commutative ops
-TEST_EXPR3(KMulAdd, a = decltype(b)(0.5)*b + c, a = 0.5*b + c);
-TEST_EXPR3(AddMulK, a = b + c*decltype(b)(0.5), a = b + c*0.5);
-TEST_EXPR3(AddKMul, a = b + decltype(b)(0.5)*c, a = b + 0.5*c);
-TEST_EXPR3(KAddMul, a = decltype(b)(0.5) + b*c, a = 0.5 + b*c);
-TEST_EXPR3(SubKMul, a = b - decltype(b)(0.5)*c, a = b - 0.5*c);
-TEST_EXPR2(KMulAddK, a = decltype(b)(0.5)*b + decltype(b)(0.25), a = 0.5*b + 0.25);
-TEST_EXPR2(KSubMulK, a = decltype(b)(0.25) - b*decltype(b)(0.5), a = 0.25 - b*0.5);
-TEST_EXPR3(KMulAddSum, a = decltype(b)(0.5)*(b + c), a = 0.5*(b + c));
-TEST_EXPR3(KMulSubSum, a = decltype(b)(0.5)*(b - c), a = 0.5*(b - c));
-TEST_EXPR3(KMulKMulAdd, a = decltype(b)(0.5)*b + decltype(b)(0.25)*c, a = 0.5*b + 0.25*c);
-TEST_EXPR2(KClamp, a = std::min(decltype(b)(0.5), std::max(decltype(b)(-0.5), b)), a = linear.min(0.5, linear.max(-0.5, b)));
-TEST_EXPR2(KClamp2, a = std::max(decltype(b)(-0.5), std::min(decltype(b)(0.5), b)), a = linear.max(-0.5, linear.min(0.5, b)));
+TEST_EXPR3(KMulAdd, a = decltype(b)(0.5)*b + c, a = 0.5f*b + c);
+TEST_EXPR3(AddMulK, a = b + c*decltype(b)(0.5), a = b + c*0.5f);
+TEST_EXPR3(AddKMul, a = b + decltype(b)(0.5)*c, a = b + 0.5f*c);
+TEST_EXPR3(KAddMul, a = decltype(b)(0.5) + b*c, a = 0.5f + b*c);
+TEST_EXPR3(SubKMul, a = b - decltype(b)(0.5)*c, a = b - 0.5f*c);
+TEST_EXPR2(KMulAddK, a = decltype(b)(0.5)*b + decltype(b)(0.25), a = 0.5f*b + 0.25f);
+TEST_EXPR2(KSubMulK, a = decltype(b)(0.25) - b*decltype(b)(0.5), a = 0.25f - b*0.5f);
+TEST_EXPR3(KMulAddSum, a = decltype(b)(0.5)*(b + c), a = 0.5f*(b + c));
+TEST_EXPR3(KMulSubSum, a = decltype(b)(0.5)*(b - c), a = 0.5f*(b - c));
+TEST_EXPR3(KMulKMulAdd, a = decltype(b)(0.5)*b + decltype(b)(0.25)*c, a = 0.5f*b + 0.25f*c);
+TEST_EXPR2(KClamp, a = std::min(decltype(b)(0.5), std::max(decltype(b)(-0.5), b)), a = linear.min(0.5f, linear.max(-0.5f, b)));
+TEST_EXPR2(KClamp2, a = std::max(decltype(b)(-0.5), std::min(decltype(b)(0.5), b)), a = linear.max(-0.5f, linear.min(0.5f, b)));
 
 // Compound expressions which read from the output
 TEST_EXPR3(InPlaceMulAdd, a = toVal(a)*b + c, a = a*b + c);
