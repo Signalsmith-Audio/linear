@@ -67,6 +67,30 @@ namespace sse2 {
 #define SSMF_NAME(fn) ssmf_##fn##d
 #include "../signalsmith-mathfun.h"
 
+// Overloads, so that the functions in Sse2 below can be written once for float and double
+namespace ops {
+	template<class V> V k(double v);
+	template<> inline __m128 k<__m128>(double v) {return _mm_set1_ps(float(v));}
+	template<> inline __m128d k<__m128d>(double v) {return _mm_set1_pd(v);}
+#define SIGNALSMITH_OPS1(name, mmFloat, mmDouble) \
+	inline __m128 name(__m128 a) {return mmFloat(a);} \
+	inline __m128d name(__m128d a) {return mmDouble(a);}
+#define SIGNALSMITH_OPS2(name, mmFloat, mmDouble) \
+	inline __m128 name(__m128 a, __m128 b) {return mmFloat(a, b);} \
+	inline __m128d name(__m128d a, __m128d b) {return mmDouble(a, b);}
+	SIGNALSMITH_OPS2(add, _mm_add_ps, _mm_add_pd)
+	SIGNALSMITH_OPS2(sub, _mm_sub_ps, _mm_sub_pd)
+	SIGNALSMITH_OPS2(mul, _mm_mul_ps, _mm_mul_pd)
+	SIGNALSMITH_OPS2(div, _mm_div_ps, _mm_div_pd)
+	SIGNALSMITH_OPS2(copysign, ssmf_copysignf, ssmf_copysignd)
+	SIGNALSMITH_OPS1(abs, ssmf_absf, ssmf_absd)
+	SIGNALSMITH_OPS1(sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
+	SIGNALSMITH_OPS1(pow2, ssmf_pow2f, ssmf_pow2d)
+	SIGNALSMITH_OPS1(log, ssmf_logf, ssmf_logd)
+#undef SIGNALSMITH_OPS1
+#undef SIGNALSMITH_OPS2
+}
+
 	struct Sse2 {
 		struct ComplexFloat {
 			__m128 real, imag;
@@ -326,6 +350,45 @@ namespace sse2 {
 			return _mm_set1_pd(double(expr.value));
 		}
 
+		// Functions which mathfun doesn't define, composed from ones it does
+		template<class V>
+		static V asinh(V x) {
+			// log(|x| + sqrt(x² + 1)): absolute (not relative) accuracy near 0, and x² overflows for |x| > ~1e19 (or ~1e154 for double)
+			V ax = ops::abs(x);
+			V r = ops::log(ops::add(ax, ops::sqrt(ops::add(ops::pow2(ax), ops::k<V>(1)))));
+			return ops::copysign(r, x);
+		}
+		template<class V>
+		static V acosh(V x) {
+			// log(x + sqrt((x - 1)(x + 1))): absolute (not relative) accuracy near 1, and overflows for x > ~1e19 (or ~1e154 for double)
+			V s = ops::sqrt(ops::mul(ops::sub(x, ops::k<V>(1)), ops::add(x, ops::k<V>(1))));
+			return ops::log(ops::add(x, s));
+		}
+		template<class V>
+		static V atanh(V x) {
+			// log((1 + x)/(1 - x))/2: absolute (not relative) accuracy near 0
+			V ratio = ops::div(ops::add(ops::k<V>(1), x), ops::sub(ops::k<V>(1), x));
+			return ops::mul(ops::log(ratio), ops::k<V>(0.5));
+		}
+
+		// No vector approximation: call the `std::` function on each lane
+#define SIGNALSMITH_SCALAR_FALLBACK(fn) \
+		static __m128 fn(__m128 v) { \
+			alignas(16) float array[4]; \
+			_mm_store_ps(array, v); \
+			for (auto &x : array) x = std::fn(x); \
+			return _mm_load_ps(array); \
+		} \
+		static __m128d fn(__m128d v) { \
+			alignas(16) double array[2]; \
+			_mm_store_pd(array, v); \
+			for (auto &x : array) x = std::fn(x); \
+			return _mm_load_pd(array); \
+		}
+		SIGNALSMITH_SCALAR_FALLBACK(tgamma)
+		SIGNALSMITH_SCALAR_FALLBACK(lgamma)
+#undef SIGNALSMITH_SCALAR_FALLBACK
+
 		// Binary expressions are aligned if both sides are
 #define SIGNALSMITH_EXPR_BINARY(Name) \
 		template<class A, class B> \
@@ -340,6 +403,9 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_BINARY(Min)
 		SIGNALSMITH_EXPR_BINARY(Dim)
 		SIGNALSMITH_EXPR_BINARY(Copysign)
+		SIGNALSMITH_EXPR_BINARY(Pow)
+		SIGNALSMITH_EXPR_BINARY(Atan2)
+		SIGNALSMITH_EXPR_BINARY(Hypot)
 #undef SIGNALSMITH_EXPR_BINARY
 
 		// Expressions which map neatly to a single intrinsic or SSMF function
@@ -360,6 +426,11 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_UNARY(Abs, ssmf_absf, ssmf_absd)
 		SIGNALSMITH_EXPR_UNARY(Neg, ssmf_negf, ssmf_negd)
 		SIGNALSMITH_EXPR_UNARY(Sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
+		SIGNALSMITH_EXPR_UNARY(Cbrt, ssmf_cbrtf, ssmf_cbrtd)
+		SIGNALSMITH_EXPR_UNARY(Ceil, ssmf_ceilf, ssmf_ceild)
+		SIGNALSMITH_EXPR_UNARY(Floor, ssmf_floorf, ssmf_floord)
+		SIGNALSMITH_EXPR_UNARY(Trunc, ssmf_truncf, ssmf_truncd)
+		SIGNALSMITH_EXPR_UNARY(Round, ssmf_roundf, ssmf_roundd)
 		SIGNALSMITH_EXPR_UNARY(Log, ssmf_logf, ssmf_logd)
 		SIGNALSMITH_EXPR_UNARY(Log2, ssmf_log2f, ssmf_log2d)
 		SIGNALSMITH_EXPR_UNARY(Log10, ssmf_log10f, ssmf_log10d)
@@ -368,7 +439,19 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_UNARY(Sin, ssmf_sinf, ssmf_sind)
 		SIGNALSMITH_EXPR_UNARY(Cos, ssmf_cosf, ssmf_cosd)
 		SIGNALSMITH_EXPR_UNARY(Tan, ssmf_tanf, ssmf_tand)
+		SIGNALSMITH_EXPR_UNARY(Asin, ssmf_asinf, ssmf_asind)
+		SIGNALSMITH_EXPR_UNARY(Acos, ssmf_acosf, ssmf_acosd)
+		SIGNALSMITH_EXPR_UNARY(Atan, ssmf_atanf, ssmf_atand)
+		SIGNALSMITH_EXPR_UNARY(Sinh, ssmf_sinhf, ssmf_sinhd)
+		SIGNALSMITH_EXPR_UNARY(Cosh, ssmf_coshf, ssmf_coshd)
 		SIGNALSMITH_EXPR_UNARY(Tanh, ssmf_tanhf, ssmf_tanhd)
+		SIGNALSMITH_EXPR_UNARY(Asinh, asinh, asinh)
+		SIGNALSMITH_EXPR_UNARY(Acosh, acosh, acosh)
+		SIGNALSMITH_EXPR_UNARY(Atanh, atanh, atanh)
+		SIGNALSMITH_EXPR_UNARY(Erf, ssmf_erff, ssmf_erfd)
+		SIGNALSMITH_EXPR_UNARY(Erfc, ssmf_erfcf, ssmf_erfcd)
+		SIGNALSMITH_EXPR_UNARY(Tgamma, tgamma, tgamma)
+		SIGNALSMITH_EXPR_UNARY(Lgamma, lgamma, lgamma)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, mmFloat, mmDouble) \
 		template<bool aligned, class A, class B> \
@@ -387,6 +470,9 @@ namespace sse2 {
 		SIGNALSMITH_EXPR_BINARY(Min, _mm_min_ps, _mm_min_pd)
 		SIGNALSMITH_EXPR_BINARY(Dim, ssmf_dimf, ssmf_dimd)
 		SIGNALSMITH_EXPR_BINARY(Copysign, ssmf_copysignf, ssmf_copysignd)
+		SIGNALSMITH_EXPR_BINARY(Pow, ssmf_powf, ssmf_powd)
+		SIGNALSMITH_EXPR_BINARY(Atan2, ssmf_atan2f, ssmf_atan2d)
+		SIGNALSMITH_EXPR_BINARY(Hypot, ssmf_hypotf, ssmf_hypotd)
 #undef SIGNALSMITH_EXPR_BINARY
 	};
 }
