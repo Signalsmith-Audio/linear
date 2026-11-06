@@ -43,6 +43,10 @@ private:
 	SimdArch simdArch = SimdArch::sse2;
 
 	static SimdArch detectArch() {
+#ifdef SIGNALSMITH_LINEAR_FORCE_X86
+		return SimdArch::SIGNALSMITH_LINEAR_FORCE_X86;
+#endif
+
 #if defined(_MSC_VER) && !defined(__clang__)
 		int info[4];
 		__cpuid(info, 1);
