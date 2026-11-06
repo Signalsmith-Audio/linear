@@ -12,6 +12,11 @@
 int main(int argc, char *argv[]) {
 	StopDenormals scoped;
 
+#ifdef SIGNALSMITH_USE_INTRINSICS
+	std::cout << u8"✅ SIGNALSMITH_USE_INTRINSICS\n";
+#else
+	std::cout << u8"❌ SIGNALSMITH_USE_INTRINSICS\n";
+#endif
 #ifdef SIGNALSMITH_USE_ACCELERATE
 	std::cout << u8"✅ SIGNALSMITH_USE_ACCELERATE\n";
 #else

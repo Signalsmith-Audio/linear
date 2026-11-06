@@ -71,7 +71,6 @@ private:
 		}
 	}
 
-	// This is where the architecture switches will go
 	template<class Expr>
 	void fillBasic(RealPointer<float> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
