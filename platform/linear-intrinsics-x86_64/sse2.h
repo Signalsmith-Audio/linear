@@ -72,6 +72,9 @@ namespace ops {
 	template<class V> V k(double v);
 	template<> inline __m128 k<__m128>(double v) {return _mm_set1_ps(float(v));}
 	template<> inline __m128d k<__m128d>(double v) {return _mm_set1_pd(v);}
+	template<class V> V smallestNormal();
+	template<> inline __m128 smallestNormal<__m128>() {return _mm_set1_ps(std::numeric_limits<float>::min());}
+	template<> inline __m128d smallestNormal<__m128d>() {return _mm_set1_pd(std::numeric_limits<double>::min());}
 #define SIGNALSMITH_OPS1(name, mmFloat, mmDouble) \
 	inline __m128 name(__m128 a) {return mmFloat(a);} \
 	inline __m128d name(__m128d a) {return mmDouble(a);}
@@ -82,13 +85,32 @@ namespace ops {
 	SIGNALSMITH_OPS2(sub, _mm_sub_ps, _mm_sub_pd)
 	SIGNALSMITH_OPS2(mul, _mm_mul_ps, _mm_mul_pd)
 	SIGNALSMITH_OPS2(div, _mm_div_ps, _mm_div_pd)
+	SIGNALSMITH_OPS2(max, _mm_max_ps, _mm_max_pd)
 	SIGNALSMITH_OPS2(copysign, ssmf_copysignf, ssmf_copysignd)
+	SIGNALSMITH_OPS2(hypot, ssmf_hypotf, ssmf_hypotd)
+	SIGNALSMITH_OPS2(atan2, ssmf_atan2f, ssmf_atan2d)
 	SIGNALSMITH_OPS1(abs, ssmf_absf, ssmf_absd)
+	SIGNALSMITH_OPS1(neg, ssmf_negf, ssmf_negd)
 	SIGNALSMITH_OPS1(sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
 	SIGNALSMITH_OPS1(pow2, ssmf_pow2f, ssmf_pow2d)
 	SIGNALSMITH_OPS1(log, ssmf_logf, ssmf_logd)
+	SIGNALSMITH_OPS1(atan, ssmf_atanf, ssmf_atand)
+	SIGNALSMITH_OPS1(exp, ssmf_expf, ssmf_expd)
+	SIGNALSMITH_OPS1(sinh, ssmf_sinhf, ssmf_sinhd)
+	SIGNALSMITH_OPS1(cosh, ssmf_coshf, ssmf_coshd)
 #undef SIGNALSMITH_OPS1
 #undef SIGNALSMITH_OPS2
+	inline void sincos(__m128 v, __m128 &sinOut, __m128 &cosOut) {ssmf_sincosf(v, &sinOut, &cosOut);}
+	inline void sincos(__m128d v, __m128d &sinOut, __m128d &cosOut) {ssmf_sincosd(v, &sinOut, &cosOut);}
+	// v < 0 ? a : b
+	inline __m128 ifNegative(__m128 v, __m128 a, __m128 b) {
+		__m128 mask = _mm_cmplt_ps(v, _mm_setzero_ps());
+		return _mm_or_ps(_mm_and_ps(mask, a), _mm_andnot_ps(mask, b));
+	}
+	inline __m128d ifNegative(__m128d v, __m128d a, __m128d b) {
+		__m128d mask = _mm_cmplt_pd(v, _mm_setzero_pd());
+		return _mm_or_pd(_mm_and_pd(mask, a), _mm_andnot_pd(mask, b));
+	}
 }
 
 	struct Sse2 {
@@ -371,6 +393,161 @@ namespace ops {
 			return ops::mul(ops::log(ratio), ops::k<V>(0.5));
 		}
 
+		// Complex functions, from the real ones.  Unless noted, they have similar accuracy to the real ones (relative to |z| or |result|), and they work for any z which doesn't overflow or produce Inf/NaN.
+		template<class C>
+		static decltype(C::real) complexAbs(C z) {
+			return ops::hypot(z.real, z.imag);
+		}
+		template<class C>
+		static decltype(C::real) complexNorm(C z) {
+			return ops::add(ops::pow2(z.real), ops::pow2(z.imag));
+		}
+		template<class C>
+		static decltype(C::real) complexArg(C z) {
+			return ops::atan2(z.imag, z.real); // nonsense for z == 0
+		}
+		template<class C>
+		static C complexConj(C z) {
+			return {z.real, ops::neg(z.imag)};
+		}
+		template<class C>
+		static C complexMul(C a, C b) {
+			return {ops::sub(ops::mul(a.real, b.real), ops::mul(a.imag, b.imag)), ops::add(ops::mul(a.real, b.imag), ops::mul(a.imag, b.real))};
+		}
+		template<class C>
+		static C complexExp(C z) {
+			using V = decltype(z.real);
+			V e = ops::exp(z.real), s, c;
+			ops::sincos(z.imag, s, c);
+			return {ops::mul(e, c), ops::mul(e, s)};
+		}
+		template<class C>
+		static C complexLog(C z) {
+			// Absolute (not relative) accuracy for the real part when |z| is close to 1, and nonsense for z == 0
+			return {ops::log(complexAbs(z)), complexArg(z)};
+		}
+		template<class C>
+		static C complexLog10(C z) {
+			using V = decltype(z.real);
+			C l = complexLog(z);
+			V scale = ops::k<V>(0.43429448190325182); // 1/ln(10)
+			return {ops::mul(l.real, scale), ops::mul(l.imag, scale)};
+		}
+		template<class C>
+		static C complexSqrt(C z) {
+			using V = decltype(z.real);
+			// t = sqrt((|z| + |re|)/2) and h = im/(2t) are both accurate, and are (re, im) or (|im|, ±re) depending on the sign of re
+			V w = ops::mul(ops::add(complexAbs(z), ops::abs(z.real)), ops::k<V>(0.5));
+			// Clamped so that t (and h) are exactly 0 when z == 0
+			V invT = ops::div(ops::k<V>(1), ops::sqrt(ops::max(w, ops::smallestNormal<V>())));
+			V t = ops::mul(w, invT), h = ops::mul(ops::mul(z.imag, ops::k<V>(0.5)), invT);
+			return {ops::ifNegative(z.real, ops::abs(h), t), ops::ifNegative(z.real, ops::copysign(t, z.imag), h)};
+		}
+		template<class C>
+		static C complexSin(C z) {
+			using V = decltype(z.real);
+			V s, c;
+			ops::sincos(z.real, s, c);
+			return {ops::mul(s, ops::cosh(z.imag)), ops::mul(c, ops::sinh(z.imag))};
+		}
+		template<class C>
+		static C complexCos(C z) {
+			using V = decltype(z.real);
+			V s, c;
+			ops::sincos(z.real, s, c);
+			return {ops::mul(c, ops::cosh(z.imag)), ops::neg(ops::mul(s, ops::sinh(z.imag)))};
+		}
+		template<class C>
+		static C complexSinh(C z) {
+			using V = decltype(z.real);
+			V s, c;
+			ops::sincos(z.imag, s, c);
+			return {ops::mul(ops::sinh(z.real), c), ops::mul(ops::cosh(z.real), s)};
+		}
+		template<class C>
+		static C complexCosh(C z) {
+			using V = decltype(z.real);
+			V s, c;
+			ops::sincos(z.imag, s, c);
+			return {ops::mul(ops::cosh(z.real), c), ops::mul(ops::sinh(z.real), s)};
+		}
+		template<class C>
+		static C complexTan(C z) {
+			using V = decltype(z.real);
+			// (sin(2a), sinh(2b))/(cos(2a) + cosh(2b)), with the denominator written as 2(cos²(a) + sinh²(b)) to avoid cancellation near the poles.  sinh²(b) overflows for |b| > ~44 (or ~355 for double)
+			V s, c, sh = ops::sinh(z.imag), ch = ops::cosh(z.imag);
+			ops::sincos(z.real, s, c);
+			V invD = ops::div(ops::k<V>(1), ops::add(ops::pow2(c), ops::pow2(sh)));
+			return {ops::mul(ops::mul(s, c), invD), ops::mul(ops::mul(sh, ch), invD)};
+		}
+		template<class C>
+		static C complexTanh(C z) {
+			using V = decltype(z.real);
+			// (sinh(2a), sin(2b))/(cosh(2a) + cos(2b)), with the denominator written as 2(sinh²(a) + cos²(b)) to avoid cancellation near the poles.  sinh²(a) overflows for |a| > ~44 (or ~355 for double)
+			V s, c, sh = ops::sinh(z.real), ch = ops::cosh(z.real);
+			ops::sincos(z.imag, s, c);
+			V invD = ops::div(ops::k<V>(1), ops::add(ops::pow2(sh), ops::pow2(c)));
+			return {ops::mul(ops::mul(sh, ch), invD), ops::mul(ops::mul(s, c), invD)};
+		}
+		template<class C>
+		static C complexAsinh(C z) {
+			using V = decltype(z.real);
+			// log(w + sqrt(w² + 1)) with w = ±z so that re(w) >= 0 (avoiding cancellation), then the sign put back.
+			// Absolute (not relative) accuracy near 0 and near the branch points ±i, and w² overflows for |z| > ~1e19 (or ~1e154 for double)
+			V sign = ops::copysign(ops::k<V>(1), z.real);
+			C w{ops::abs(z.real), ops::mul(z.imag, sign)};
+			C w2p1{ops::add(ops::mul(ops::sub(w.real, w.imag), ops::add(w.real, w.imag)), ops::k<V>(1)), ops::mul(ops::add(w.real, w.real), w.imag)};
+			C q = complexSqrt(w2p1);
+			C l = complexLog(C{ops::add(w.real, q.real), ops::add(w.imag, q.imag)});
+			return {ops::mul(l.real, sign), ops::mul(l.imag, sign)};
+		}
+		template<class C>
+		static C complexAsin(C z) {
+			// -i*asinh(i*z)
+			C a = complexAsinh(C{ops::neg(z.imag), z.real});
+			return {a.imag, ops::neg(a.real)};
+		}
+		template<class C>
+		static C complexAcos(C z) {
+			using V = decltype(z.real);
+			// pi/2 - asin(z)
+			C a = complexAsin(z);
+			return {ops::sub(ops::k<V>(1.5707963267948966), a.real), ops::neg(a.imag)};
+		}
+		template<class C>
+		static C complexAcosh(C z) {
+			using V = decltype(z.real);
+			// log(z + sqrt(z + 1)*sqrt(z - 1)): absolute (not relative) accuracy near ±1, and z² overflows for |z| > ~1e19 (or ~1e154 for double)
+			C s = complexMul(complexSqrt(C{ops::add(z.real, ops::k<V>(1)), z.imag}), complexSqrt(C{ops::sub(z.real, ops::k<V>(1)), z.imag}));
+			return complexLog(C{ops::add(z.real, s.real), ops::add(z.imag, s.imag)});
+		}
+		template<class C>
+		static C complexAtanh(C z) {
+			using V = decltype(z.real);
+			// (log(|1 + z|²/|1 - z|²)/4, atan2(2b, (1 - a)(1 + a) - b²)/2): absolute (not relative) accuracy near 0 and near the branch points ±1
+			V b2 = ops::pow2(z.imag);
+			V onePlus = ops::add(ops::k<V>(1), z.real), oneMinus = ops::sub(ops::k<V>(1), z.real);
+			V ratio = ops::div(ops::add(ops::pow2(onePlus), b2), ops::add(ops::pow2(oneMinus), b2));
+			V angle = ops::atan2(ops::add(z.imag, z.imag), ops::sub(ops::mul(oneMinus, onePlus), b2));
+			return {ops::mul(ops::log(ratio), ops::k<V>(0.25)), ops::mul(angle, ops::k<V>(0.5))};
+		}
+		template<class C>
+		static C complexAtan(C z) {
+			// -i*atanh(i*z)
+			C a = complexAtanh(C{ops::neg(z.imag), z.real});
+			return {a.imag, ops::neg(a.real)};
+		}
+		static ComplexFloat complexPolar(__m128 r, __m128 theta) {
+			__m128 s, c;
+			ops::sincos(theta, s, c);
+			return {ops::mul(r, c), ops::mul(r, s)};
+		}
+		static ComplexDouble complexPolar(__m128d r, __m128d theta) {
+			__m128d s, c;
+			ops::sincos(theta, s, c);
+			return {ops::mul(r, c), ops::mul(r, s)};
+		}
+
 		// No vector approximation: call the `std::` function on each lane
 #define SIGNALSMITH_SCALAR_FALLBACK(fn) \
 		static __m128 fn(__m128 v) { \
@@ -406,6 +583,7 @@ namespace ops {
 		SIGNALSMITH_EXPR_BINARY(Pow)
 		SIGNALSMITH_EXPR_BINARY(Atan2)
 		SIGNALSMITH_EXPR_BINARY(Hypot)
+		SIGNALSMITH_EXPR_BINARY(Polar)
 #undef SIGNALSMITH_EXPR_BINARY
 
 		// Expressions which map neatly to a single intrinsic or SSMF function
@@ -474,6 +652,66 @@ namespace ops {
 		SIGNALSMITH_EXPR_BINARY(Atan2, ssmf_atan2f, ssmf_atan2d)
 		SIGNALSMITH_EXPR_BINARY(Hypot, ssmf_hypotf, ssmf_hypotd)
 #undef SIGNALSMITH_EXPR_BINARY
+		template<bool aligned, class A, class B>
+		static ItemTypeF<A, ComplexFloat> getCFloat(expression::Polar<A, B> expr, size_t i) {
+			return complexPolar(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i));
+		}
+		template<bool aligned, class A, class B>
+		static ItemTypeD<A, ComplexDouble> getCDouble(expression::Polar<A, B> expr, size_t i) {
+			return complexPolar(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i));
+		}
+
+		// Complex -> real
+#define SIGNALSMITH_EXPR_COMPLEX_REAL(Name, fn) \
+		template<bool aligned, class A> \
+		static auto getFloat(expression::Name<A> expr, size_t i) -> ItemTypeCF<A, decltype(fn(getCFloat<aligned>(expr.a, i)))> { \
+			return fn(getCFloat<aligned>(expr.a, i)); \
+		} \
+		template<bool aligned, class A> \
+		static auto getDouble(expression::Name<A> expr, size_t i) -> ItemTypeCD<A, decltype(fn(getCDouble<aligned>(expr.a, i)))> { \
+			return fn(getCDouble<aligned>(expr.a, i)); \
+		}
+		SIGNALSMITH_EXPR_COMPLEX_REAL(Abs, complexAbs)
+		SIGNALSMITH_EXPR_COMPLEX_REAL(Norm, complexNorm)
+		SIGNALSMITH_EXPR_COMPLEX_REAL(Arg, complexArg)
+#undef SIGNALSMITH_EXPR_COMPLEX_REAL
+		template<class A>
+		static bool isAligned(expression::Arg<A> expr) {
+			return isAligned(expr.a);
+		}
+
+		// Complex -> complex
+#define SIGNALSMITH_EXPR_COMPLEX(Name, fn) \
+		template<bool aligned, class A> \
+		static ItemTypeCF<A, ComplexFloat> getCFloat(expression::Name<A> expr, size_t i) { \
+			return fn(getCFloat<aligned>(expr.a, i)); \
+		} \
+		template<bool aligned, class A> \
+		static ItemTypeCD<A, ComplexDouble> getCDouble(expression::Name<A> expr, size_t i) { \
+			return fn(getCDouble<aligned>(expr.a, i)); \
+		}
+		SIGNALSMITH_EXPR_COMPLEX(Conj, complexConj)
+		SIGNALSMITH_EXPR_COMPLEX(Exp, complexExp)
+		SIGNALSMITH_EXPR_COMPLEX(Log, complexLog)
+		SIGNALSMITH_EXPR_COMPLEX(Log10, complexLog10)
+		SIGNALSMITH_EXPR_COMPLEX(Sqrt, complexSqrt)
+		SIGNALSMITH_EXPR_COMPLEX(Sin, complexSin)
+		SIGNALSMITH_EXPR_COMPLEX(Cos, complexCos)
+		SIGNALSMITH_EXPR_COMPLEX(Tan, complexTan)
+		SIGNALSMITH_EXPR_COMPLEX(Asin, complexAsin)
+		SIGNALSMITH_EXPR_COMPLEX(Acos, complexAcos)
+		SIGNALSMITH_EXPR_COMPLEX(Atan, complexAtan)
+		SIGNALSMITH_EXPR_COMPLEX(Sinh, complexSinh)
+		SIGNALSMITH_EXPR_COMPLEX(Cosh, complexCosh)
+		SIGNALSMITH_EXPR_COMPLEX(Tanh, complexTanh)
+		SIGNALSMITH_EXPR_COMPLEX(Asinh, complexAsinh)
+		SIGNALSMITH_EXPR_COMPLEX(Acosh, complexAcosh)
+		SIGNALSMITH_EXPR_COMPLEX(Atanh, complexAtanh)
+#undef SIGNALSMITH_EXPR_COMPLEX
+		template<class A>
+		static bool isAligned(expression::Conj<A> expr) {
+			return isAligned(expr.a);
+		}
 	};
 }
 
