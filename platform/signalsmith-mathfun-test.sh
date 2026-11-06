@@ -30,7 +30,8 @@ done
 ACCURACY=1
 while [ $ACCURACY -le 50 ]; do
 	for FAST in "" "-ffast-math"; do
-		run -DTEST_ACCURACY=$ACCURACY $FAST
+		run -DTEST_ACCURACY=$ACCURACY -DTEST_ROUTE_INDEX=$ROUTE_INDEX $FAST
+		ROUTE_INDEX=$((ROUTE_INDEX + 1)) # keep incrementing, why not
 	done
 	ACCURACY=$((ACCURACY + 1))
 done
