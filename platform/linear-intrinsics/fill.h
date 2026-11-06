@@ -121,7 +121,6 @@ struct SimdFill {
 			imag[i] = c.imag();
 		}
 	}
-
 	// ReadableReal
 	template<class V>
 	static bool isAligned(expression::ReadableReal<V> expr) {
@@ -135,7 +134,6 @@ struct SimdFill {
 	static D getDouble(expression::ReadableReal<double> expr, size_t i) {
 		return load<aligned>(expr.pointer + i);
 	}
-
 	// ReadableComplex: two interleaved vectors
 	template<class V>
 	static bool isAligned(expression::ReadableComplex<V> expr) {
@@ -156,7 +154,6 @@ struct SimdFill {
 	static ComplexDouble getCDouble(expression::ReadableComplex<double> expr, size_t i) {
 		return loadComplex<aligned, double, ComplexDouble>(expr.pointer + i);
 	}
-
 	// ReadableSplit
 	template<class V>
 	static bool isAligned(expression::ReadableSplit<V> expr) {
@@ -178,11 +175,21 @@ struct SimdFill {
 	}
 	template<bool aligned, class V>
 	static F getFloat(expression::ConstantExpr<V> expr, size_t) {
-		return k<F>(double(expr.value));
+		return k<F>(float(expr.value));
 	}
 	template<bool aligned, class V>
 	static D getDouble(expression::ConstantExpr<V> expr, size_t) {
 		return k<D>(double(expr.value));
+	}
+	template<bool aligned, class V>
+	static ComplexFloat getCFloat(expression::ConstantExpr<V> expr, size_t) {
+		std::complex<float> value = expr.value;
+		return {k<F>(value.real()), k<F>(value.imag())};
+	}
+	template<bool aligned, class V>
+	static ComplexDouble getCDouble(expression::ConstantExpr<V> expr, size_t) {
+		std::complex<double> value = expr.value;
+		return {k<D>(value.real()), k<D>(value.imag())};
 	}
 
 	// Functions which mathfun doesn't define, composed from ones it does
@@ -222,6 +229,14 @@ struct SimdFill {
 	template<class C>
 	static C complexConj(C z) {
 		return {z.real, Arch::neg(z.imag)};
+	}
+	template<class C>
+	static decltype(C::real) complexReal(C z) {
+		return z.real;
+	}
+	template<class C>
+	static decltype(C::real) complexImag(C z) {
+		return z.imag;
 	}
 	template<class C>
 	static C complexMul(C a, C b) {
@@ -474,7 +489,7 @@ struct SimdFill {
 		return {Arch::neg(a.real), Arch::neg(a.imag)};
 	}
 
-	// Two-argument complex-to-complex
+	// Add
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Add<A, B> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
@@ -487,8 +502,161 @@ struct SimdFill {
 		auto b = getCDouble<aligned>(expr.b, i);
 		return {Arch::add(a.real, b.real), Arch::add(a.imag, b.imag)};
 	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Add<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getFloat<aligned>(expr.b, i);
+		return {Arch::add(a.real, b), a.imag};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Add<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getDouble<aligned>(expr.b, i);
+		return {Arch::add(a.real, b), a.imag};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Add<A, B> expr, size_t i) {
+		auto a = getFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		return {Arch::add(a, b.real), b.imag};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Add<A, B> expr, size_t i) {
+		auto a = getDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		return {Arch::add(a, b.real), b.imag};
+	}
+	// Sub
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Sub<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		return {Arch::sub(a.real, b.real), Arch::sub(a.imag, b.imag)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Sub<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		return {Arch::sub(a.real, b.real), Arch::sub(a.imag, b.imag)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Sub<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getFloat<aligned>(expr.b, i);
+		return {Arch::sub(a.real, b), a.imag};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Sub<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getDouble<aligned>(expr.b, i);
+		return {Arch::sub(a.real, b), a.imag};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Sub<A, B> expr, size_t i) {
+		auto a = getFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		return {Arch::sub(a, b.real), Arch::neg(b.imag)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Sub<A, B> expr, size_t i) {
+		auto a = getDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		return {Arch::sub(a, b.real), Arch::neg(b.imag)};
+	}
+	// Mul
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Mul<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		return {
+			Arch::sub(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)),
+			Arch::add(Arch::mul(a.real, b.imag), Arch::mul(a.imag, b.real)),
+		};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Mul<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		return {
+			Arch::sub(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)),
+			Arch::add(Arch::mul(a.real, b.imag), Arch::mul(a.imag, b.real)),
+		};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Mul<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getFloat<aligned>(expr.b, i);
+		return {Arch::mul(a.real, b), Arch::mul(a.imag, b)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Mul<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getDouble<aligned>(expr.b, i);
+		return {Arch::mul(a.real, b), Arch::mul(a.imag, b)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Mul<A, B> expr, size_t i) {
+		auto a = getFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		return {Arch::mul(a, b.real), Arch::mul(a, b.imag)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Mul<A, B> expr, size_t i) {
+		auto a = getDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		return {Arch::mul(a, b.real), Arch::mul(a, b.imag)};
+	}
+	//Div
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
+		return {
+			Arch::div(Arch::add(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)), mag2B),
+			Arch::div(Arch::sub(Arch::mul(a.imag, b.real), Arch::mul(a.real, b.imag)), mag2B)
+		};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Div<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
+		return {
+			Arch::div(Arch::add(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)), mag2B),
+			Arch::div(Arch::sub(Arch::mul(a.imag, b.real), Arch::mul(a.real, b.imag)), mag2B)
+		};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getFloat<aligned>(expr.b, i);
+		return {Arch::div(a.real, b), Arch::div(a.imag, b)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Div<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getDouble<aligned>(expr.b, i);
+		return {Arch::div(a.real, b), Arch::div(a.imag, b)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
+		auto a = getFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
+		auto abNum = Arch::div(a, mag2B);
+		return {Arch::mul(abNum, b.real), Arch::mul(abNum, Arch::neg(b.imag))};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Div<A, B> expr, size_t i) {
+		auto a = getDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
+		auto abNum = Arch::div(a, mag2B);
+		return {Arch::mul(abNum, b.real), Arch::mul(abNum, Arch::neg(b.imag))};
+	}
 
-	// Only two-argument float-to-complex
+	 // Only two-argument float-to-complex
 	template<bool aligned, class A, class B>
 	static ItemTypeF<A, ComplexFloat> getCFloat(expression::Polar<A, B> expr, size_t i) {
 		return complexPolar(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i));
@@ -510,12 +678,23 @@ struct SimdFill {
 	}
 	SIGNALSMITH_EXPR_COMPLEX_REAL(Abs, complexAbs)
 	SIGNALSMITH_EXPR_COMPLEX_REAL(Norm, complexNorm)
-	SIGNALSMITH_EXPR_COMPLEX_REAL(Arg, complexArg)
-#undef SIGNALSMITH_EXPR_COMPLEX_REAL
+
 	template<class A>
 	static bool isAligned(expression::Arg<A> expr) {
 		return isAligned(expr.a);
 	}
+	template<class A>
+	static bool isAligned(expression::Real<A> expr) {
+		return isAligned(expr.a);
+	}
+	template<class A>
+	static bool isAligned(expression::Imag<A> expr) {
+		return isAligned(expr.a);
+	}
+	SIGNALSMITH_EXPR_COMPLEX_REAL(Arg, complexArg)
+	SIGNALSMITH_EXPR_COMPLEX_REAL(Real, complexReal)
+	SIGNALSMITH_EXPR_COMPLEX_REAL(Imag, complexImag)
+#undef SIGNALSMITH_EXPR_COMPLEX_REAL
 
 	// Complex -> complex
 #define SIGNALSMITH_EXPR_COMPLEX(Name, fn) \

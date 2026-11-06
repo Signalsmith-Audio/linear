@@ -560,12 +560,12 @@ struct WritableExpression : public Expression<BaseExpr> {
 
 	template<class Expr>
 	WritableExpression & operator=(const Expr &expr) {
-		this->linear.fill(this->pointer, expression::ensureExpr(expr), this->size);
+		this->linear.fill(this->pointer, expression::unwrap(expression::ensureExpr(expr)), this->size);
 		return *this;
 	}
 
 	WritableExpression & operator=(const WritableExpression &expr) {
-		this->linear.fill(this->pointer, expr, this->size);
+		this->linear.fill(this->pointer, expression::unwrap(expr), this->size);
 		return *this;
 	}
 #define SIGNALSMITH_AUDIO_ASSIGNMENT_OP(assignOp, binaryOp) \
