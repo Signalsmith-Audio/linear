@@ -4,6 +4,10 @@
 
 #include <immintrin.h>
 #include "./linear-intrinsics/x86-sse2.h"
+#include "./linear-intrinsics/x86-sse41.h"
+#if defined(_MSC_VER) && !defined(__clang__)
+#	include <intrin.h> // __cpuid
+#endif
 
 #include "./basic-fill-warnings.h"
 
@@ -13,7 +17,7 @@ template<>
 struct LinearImpl<true> : public LinearImplBase<true> {
 	using Base = LinearImplBase<true>;
 
-	LinearImpl() : Base(this) {
+	LinearImpl() : Base(this), simdArch(detectArch()) {
 		basicFillWarningReset();
 	}
 
@@ -35,10 +39,22 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 	}
 
 private:
-	enum class SimdArch{sse2};
+	enum class SimdArch{sse2, sse4_1};
 	SimdArch simdArch = SimdArch::sse2;
 
+	static SimdArch detectArch() {
+#if defined(_MSC_VER) && !defined(__clang__)
+		int info[4];
+		__cpuid(info, 1);
+		bool sse41 = info[2]&(1<<19);
+#else
+		bool sse41 = __builtin_cpu_supports("sse4.1");
+#endif
+		return sse41 ? SimdArch::sse4_1 : SimdArch::sse2;
+	}
+
 	using Sse2Fill = simd_sse2::SimdFill;
+	using Sse41Fill = simd_sse41::SimdFill;
 
 	template<class Pointer, class Expr>
 	void fillExpr(Pointer pointer, Expr expr, size_t size) {
@@ -75,36 +91,42 @@ private:
 	void fillBasic(RealPointer<float> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillReal(pointer, expr, size);
+			case SimdArch::sse4_1: return Sse41Fill::fillReal(pointer, expr, size);
 		}
 	}
 	template<class Expr>
 	void fillBasic(RealPointer<double> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillReal(pointer, expr, size);
+			case SimdArch::sse4_1: return Sse41Fill::fillReal(pointer, expr, size);
 		}
 	}
 	template<class Expr>
 	ItemTypeCF<Expr> fillBasic(ComplexPointer<float> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillComplex(pointer, expr, size);
+			case SimdArch::sse4_1: return Sse41Fill::fillComplex(pointer, expr, size);
 		}
 	}
 	template<class Expr>
 	ItemTypeCD<Expr> fillBasic(ComplexPointer<double> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillComplex(pointer, expr, size);
+			case SimdArch::sse4_1: return Sse41Fill::fillComplex(pointer, expr, size);
 		}
 	}
 	template<class Expr>
 	ItemTypeCF<Expr> fillBasic(SplitPointer<float> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
+			case SimdArch::sse4_1: return Sse41Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 		}
 	}
 	template<class Expr>
 	ItemTypeCD<Expr> fillBasic(SplitPointer<double> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
+			case SimdArch::sse4_1: return Sse41Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 		}
 	}
 	
