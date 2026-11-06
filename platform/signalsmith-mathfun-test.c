@@ -113,6 +113,17 @@ static inline double testBarrierD(double v) {
 #	define EXP_MAX(T) ((T)(sizeof(T) == 4 ? 87.3 : 708.3))
 #	define EXP2_MAX(T) ((T)(sizeof(T) == 4 ? 126 : 1022))
 #endif
+// erfc() up to where it's the smallest normal value, or where exp(-x^2) is within EXP_MAX
+#ifdef TEST_SMALL_INPUTS
+#	define ERFC_MAX(T) ((T)sqrt(EXP_MAX(T)))
+#else
+#	define ERFC_MAX(T) ((T)(sizeof(T) == 4 ? 9.19 : 26.54))
+#endif
+// erfc() doesn't split x^2 (unlike exp()), so its rounding error (~x^2*epsilon/2) caps the accuracy near ERFC_MAX
+#ifndef ERFC_CAP
+#	define ERFC_CAP(T) (sizeof(T) == 4 ? 17 : 43)
+#endif
+#define ERFC_LEEWAY(T) (TEST_ACCURACY > ERFC_CAP(T) ? exp2l(TEST_ACCURACY - ERFC_CAP(T)) : 1)
 // pow() outputs: the same range as exp2()
 #define POW_MIN(T) exp2l(1 - EXP2_MAX(T)) // exp2() clamps its input, which can cut off pow()'s remainder in the bottom binade
 #define POW_SUBNORMALS_HACK(T, y) ((y) < exp2l(-1 - EXP2_MAX(T)) ? exp2l(-1 - EXP2_MAX(T)) : (y)) // results flushed to 0 are treated as being just below the range
@@ -553,6 +564,18 @@ static inline double double_nextUp(double x) {return nextafter(x, SWEEP_MAX(doub
 			test(x, erfl(x), y); \
 			test(-x, erfl(-x), yNeg); \
 			assertCheck(T##_test_abs(y) <= 1 && T##_test_abs(yNeg) <= 1, x, erfl(x), y); \
+		} \
+		endCheck(); \
+		startCheck("erfc"); /* reduced accuracy for large x, see ERFC_LEEWAY */ \
+		RANGE_LINEAR(T, x, -7, ERFC_MAX(T)) { \
+			testScaled(x, erfcl(x), T##_test_erfc(x), ERFC_LEEWAY(T)); \
+		} \
+		RANGE_EXP(T, x, SWEEP_MIN(T), ERFC_MAX(T)) { \
+			testScaled(x, erfcl(x), T##_test_erfc(x), ERFC_LEEWAY(T)); \
+			testScaled(-x, erfcl(-x), T##_test_erfc(-x), ERFC_LEEWAY(T)); \
+		} \
+		RANGE_EXP(T, x, ERFC_MAX(T), SWEEP_MAX(T)) { /* saturates */ \
+			test(-x, 2, T##_test_erfc(-x)); \
 		} \
 		endCheck(); \
 		startCheck("pow"); /* accurate for (a rounded to SSMF_ACCURACY bits), so the error can scale with |b| */ \
