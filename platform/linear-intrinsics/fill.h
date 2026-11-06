@@ -122,46 +122,6 @@ struct SimdFill {
 		}
 	}
 
-	// Fallback: evaluate each lane as a scalar
-	template<class Expr>
-	static bool isAligned(Expr) {
-		return false;
-	}
-	template<class S, class Expr>
-	static auto gatherReal(Expr expr, size_t i) -> decltype(Arch::load((const S *)nullptr)) {
-		using V = decltype(Arch::load((const S *)nullptr));
-		alignas(V) S array[sizeof(V)/sizeof(S)];
-		for (size_t j = 0; j < sizeof(V)/sizeof(S); ++j) array[j] = expr.get(i + j);
-		return Arch::load(array);
-	}
-	template<class S, class C, class Expr>
-	static C gatherComplex(Expr expr, size_t i) {
-		using V = decltype(Arch::load((const S *)nullptr));
-		alignas(V) S real[sizeof(V)/sizeof(S)], imag[sizeof(V)/sizeof(S)];
-		for (size_t j = 0; j < sizeof(V)/sizeof(S); ++j) {
-			std::complex<S> c = expr.get(i + j);
-			real[j] = c.real();
-			imag[j] = c.imag();
-		}
-		return {Arch::load(real), Arch::load(imag)};
-	}
-	template<bool aligned, class Expr>
-	static F getFloat(Expr expr, size_t i) {
-		return gatherReal<float>(expr, i);
-	}
-	template<bool aligned, class Expr>
-	static D getDouble(Expr expr, size_t i) {
-		return gatherReal<double>(expr, i);
-	}
-	template<bool aligned, class Expr>
-	static ComplexFloat getCFloat(Expr expr, size_t i) {
-		return gatherComplex<float, ComplexFloat>(expr, i);
-	}
-	template<bool aligned, class Expr>
-	static ComplexDouble getCDouble(Expr expr, size_t i) {
-		return gatherComplex<double, ComplexDouble>(expr, i);
-	}
-
 	// ReadableReal
 	template<class V>
 	static bool isAligned(expression::ReadableReal<V> expr) {
@@ -501,6 +461,34 @@ struct SimdFill {
 	SIGNALSMITH_EXPR_BINARY(Atan2, Arch::atan2)
 	SIGNALSMITH_EXPR_BINARY(Hypot, Arch::hypot)
 #undef SIGNALSMITH_EXPR_BINARY
+
+	// One-argument complex-to-complex
+	template<bool aligned, class A>
+	static ItemTypeCF<A, ComplexFloat> getCFloat(expression::Neg<A> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		return {Arch::neg(a.real), Arch::neg(a.imag)};
+	}
+	template<bool aligned, class A>
+	static ItemTypeCD<A, ComplexDouble> getCDouble(expression::Neg<A> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		return {Arch::neg(a.real), Arch::neg(a.imag)};
+	}
+
+	// Two-argument complex-to-complex
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Add<A, B> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a, i);
+		auto b = getCFloat<aligned>(expr.b, i);
+		return {Arch::add(a.real, b.real), Arch::add(a.imag, b.imag)};
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Add<A, B> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a, i);
+		auto b = getCDouble<aligned>(expr.b, i);
+		return {Arch::add(a.real, b.real), Arch::add(a.imag, b.imag)};
+	}
+
+	// Only two-argument float-to-complex
 	template<bool aligned, class A, class B>
 	static ItemTypeF<A, ComplexFloat> getCFloat(expression::Polar<A, B> expr, size_t i) {
 		return complexPolar(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i));
