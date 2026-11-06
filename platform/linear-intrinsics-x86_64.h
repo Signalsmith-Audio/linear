@@ -5,8 +5,10 @@
 #include <immintrin.h>
 #include "./linear-intrinsics/x86-sse2.h"
 #include "./linear-intrinsics/x86-sse41.h"
+#include "./linear-intrinsics/x86-avx1.h"
+#include "./linear-intrinsics/x86-avx2.h"
 #if defined(_MSC_VER) && !defined(__clang__)
-#	include <intrin.h> // __cpuid
+#	include <intrin.h> // __cpuid, __cpuidex
 #endif
 
 #include "./basic-fill-warnings.h"
@@ -39,7 +41,7 @@ struct LinearImpl<true> : public LinearImplBase<true> {
 	}
 
 private:
-	enum class SimdArch{sse2, sse4_1};
+	enum class SimdArch{sse2, sse4_1, avx, avx2_fma};
 	SimdArch simdArch = SimdArch::sse2;
 
 	static SimdArch detectArch() {
@@ -51,14 +53,29 @@ private:
 		int info[4];
 		__cpuid(info, 1);
 		bool sse41 = info[2]&(1<<19);
+		// AVX also needs the OS to save the 256-bit registers: OSXSAVE, then XCR0 has the XMM and YMM bits
+		bool osYmm = (info[2]&(1<<27)) && (_xgetbv(0)&6) == 6;
+		bool avx = osYmm && (info[2]&(1<<28));
+		bool fma = osYmm && (info[2]&(1<<12));
+		__cpuidex(info, 7, 0);
+		bool avx2 = avx && (info[1]&(1<<5));
 #else
+		__builtin_cpu_init(); // in case we're called from a static initialiser, before it's run
+		// these check OS support for AVX as well
 		bool sse41 = __builtin_cpu_supports("sse4.1");
+		bool avx = __builtin_cpu_supports("avx");
+		bool avx2 = __builtin_cpu_supports("avx2");
+		bool fma = __builtin_cpu_supports("fma");
 #endif
+		if (avx2 && fma) return SimdArch::avx2_fma;
+		if (avx) return SimdArch::avx;
 		return sse41 ? SimdArch::sse4_1 : SimdArch::sse2;
 	}
 
 	using Sse2Fill = simd_sse2::SimdFill;
 	using Sse41Fill = simd_sse41::SimdFill;
+	using Avx1Fill = simd_avx1::SimdFill;
+	using Avx2Fill = simd_avx2::SimdFill;
 
 	template<class Pointer, class Expr>
 	void fillExpr(Pointer pointer, Expr expr, size_t size) {
@@ -96,6 +113,8 @@ private:
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillReal(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillReal(pointer, expr, size);
+			case SimdArch::avx: return Avx1Fill::fillReal(pointer, expr, size);
+			case SimdArch::avx2_fma: return Avx2Fill::fillReal(pointer, expr, size);
 		}
 	}
 	template<class Expr>
@@ -103,6 +122,8 @@ private:
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillReal(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillReal(pointer, expr, size);
+			case SimdArch::avx: return Avx1Fill::fillReal(pointer, expr, size);
+			case SimdArch::avx2_fma: return Avx2Fill::fillReal(pointer, expr, size);
 		}
 	}
 	template<class Expr>
@@ -110,6 +131,8 @@ private:
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillComplex(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillComplex(pointer, expr, size);
+			case SimdArch::avx: return Avx1Fill::fillComplex(pointer, expr, size);
+			case SimdArch::avx2_fma: return Avx2Fill::fillComplex(pointer, expr, size);
 		}
 	}
 	template<class Expr>
@@ -117,6 +140,8 @@ private:
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillComplex(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillComplex(pointer, expr, size);
+			case SimdArch::avx: return Avx1Fill::fillComplex(pointer, expr, size);
+			case SimdArch::avx2_fma: return Avx2Fill::fillComplex(pointer, expr, size);
 		}
 	}
 	template<class Expr>
@@ -124,6 +149,8 @@ private:
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillSplit(pointer.real, pointer.imag, expr, size);
+			case SimdArch::avx: return Avx1Fill::fillSplit(pointer.real, pointer.imag, expr, size);
+			case SimdArch::avx2_fma: return Avx2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 		}
 	}
 	template<class Expr>
@@ -131,6 +158,8 @@ private:
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillSplit(pointer.real, pointer.imag, expr, size);
+			case SimdArch::avx: return Avx1Fill::fillSplit(pointer.real, pointer.imag, expr, size);
+			case SimdArch::avx2_fma: return Avx2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 		}
 	}
 	
