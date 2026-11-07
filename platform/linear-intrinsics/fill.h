@@ -232,7 +232,7 @@ struct SimdFill {
 	}
 	template<class C>
 	static decltype(C::real) complexNorm(C z) {
-		return Arch::add(Arch::pow2(z.real), Arch::pow2(z.imag));
+		return Arch::fma(z.real, z.real, Arch::pow2(z.imag));
 	}
 	template<class C>
 	static decltype(C::real) complexArg(C z) {
@@ -250,9 +250,21 @@ struct SimdFill {
 	static decltype(C::real) complexImag(C z) {
 		return z.imag;
 	}
+	// Complex multiply/divide use FMA, so e.g. z*conj(z) can have a non-zero imaginary part
 	template<class C>
 	static C complexMul(C a, C b) {
-		return {Arch::sub(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)), Arch::add(Arch::mul(a.real, b.imag), Arch::mul(a.imag, b.real))};
+		return {Arch::fms(a.real, b.real, Arch::mul(a.imag, b.imag)), Arch::fma(a.real, b.imag, Arch::mul(a.imag, b.real))};
+	}
+	// conj(a)*b
+	template<class C>
+	static C complexConjMul(C a, C b) {
+		return {Arch::fma(a.real, b.real, Arch::mul(a.imag, b.imag)), Arch::fms(a.real, b.imag, Arch::mul(a.imag, b.real))};
+	}
+	template<class C>
+	static C complexDiv(C a, C b) {
+		auto mag2 = complexNorm(b);
+		C n = complexConjMul(b, a);
+		return {Arch::div(n.real, mag2), Arch::div(n.imag, mag2)};
 	}
 	template<class C>
 	static C complexExp(C z) {
@@ -602,21 +614,11 @@ struct SimdFill {
 	// Mul
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Mul<A, B> expr, size_t i) {
-		auto a = getCFloat<aligned>(expr.a, i);
-		auto b = getCFloat<aligned>(expr.b, i);
-		return {
-			Arch::sub(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)),
-			Arch::add(Arch::mul(a.real, b.imag), Arch::mul(a.imag, b.real)),
-		};
+		return complexMul(getCFloat<aligned>(expr.a, i), getCFloat<aligned>(expr.b, i));
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Mul<A, B> expr, size_t i) {
-		auto a = getCDouble<aligned>(expr.a, i);
-		auto b = getCDouble<aligned>(expr.b, i);
-		return {
-			Arch::sub(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)),
-			Arch::add(Arch::mul(a.real, b.imag), Arch::mul(a.imag, b.real)),
-		};
+		return complexMul(getCDouble<aligned>(expr.a, i), getCDouble<aligned>(expr.b, i));
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Mul<A, B> expr, size_t i) {
@@ -642,26 +644,23 @@ struct SimdFill {
 		auto b = getCDouble<aligned>(expr.b, i);
 		return {Arch::mul(a, b.real), Arch::mul(a, b.imag)};
 	}
-	//Div
+	// conj(A)*B (linear.h puts the Conj on the left)
+	template<bool aligned, class A, class B>
+	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Mul<expression::Conj<A>, B> expr, size_t i) {
+		return complexConjMul(getCFloat<aligned>(expr.a.a, i), getCFloat<aligned>(expr.b, i));
+	}
+	template<bool aligned, class A, class B>
+	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Mul<expression::Conj<A>, B> expr, size_t i) {
+		return complexConjMul(getCDouble<aligned>(expr.a.a, i), getCDouble<aligned>(expr.b, i));
+	}
+	// Div
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
-		auto a = getCFloat<aligned>(expr.a, i);
-		auto b = getCFloat<aligned>(expr.b, i);
-		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
-		return {
-			Arch::div(Arch::add(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)), mag2B),
-			Arch::div(Arch::sub(Arch::mul(a.imag, b.real), Arch::mul(a.real, b.imag)), mag2B)
-		};
+		return complexDiv(getCFloat<aligned>(expr.a, i), getCFloat<aligned>(expr.b, i));
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Div<A, B> expr, size_t i) {
-		auto a = getCDouble<aligned>(expr.a, i);
-		auto b = getCDouble<aligned>(expr.b, i);
-		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
-		return {
-			Arch::div(Arch::add(Arch::mul(a.real, b.real), Arch::mul(a.imag, b.imag)), mag2B),
-			Arch::div(Arch::sub(Arch::mul(a.imag, b.real), Arch::mul(a.real, b.imag)), mag2B)
-		};
+		return complexDiv(getCDouble<aligned>(expr.a, i), getCDouble<aligned>(expr.b, i));
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
@@ -679,7 +678,7 @@ struct SimdFill {
 	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
 		auto a = getFloat<aligned>(expr.a, i);
 		auto b = getCFloat<aligned>(expr.b, i);
-		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
+		auto mag2B = complexNorm(b);
 		auto abNum = Arch::div(a, mag2B);
 		return {Arch::mul(abNum, b.real), Arch::mul(abNum, Arch::neg(b.imag))};
 	}
@@ -687,7 +686,7 @@ struct SimdFill {
 	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Div<A, B> expr, size_t i) {
 		auto a = getDouble<aligned>(expr.a, i);
 		auto b = getCDouble<aligned>(expr.b, i);
-		auto mag2B = Arch::add(Arch::pow2(b.real), Arch::pow2(b.imag));
+		auto mag2B = complexNorm(b);
 		auto abNum = Arch::div(a, mag2B);
 		return {Arch::mul(abNum, b.real), Arch::mul(abNum, Arch::neg(b.imag))};
 	}
