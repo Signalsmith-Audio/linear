@@ -515,6 +515,15 @@ struct SimdFill {
 	SIGNALSMITH_EXPR_FMA(fnma, expr.b.a, expr.b.b, expr.a, expression::Sub<C, expression::Mul<A, B>>) // C - A*B
 	SIGNALSMITH_EXPR_FMA(fnms, expr.a.a.a, expr.a.a.b, expr.a.b, expression::Neg<expression::Add<expression::Mul<A, B>, C>>) // -(A*B + C)
 #undef SIGNALSMITH_EXPR_FMA
+	// A/sqrt(B) -> A*rsqrt(B), which isn't exact (but is often faster)
+	template<bool aligned, class A, class B>
+	static F getFloat(expression::Div<A, expression::Sqrt<B>> expr, size_t i) {
+		return Arch::mul(getFloat<aligned>(expr.a, i), Arch::rsqrt(getFloat<aligned>(expr.b.a, i)));
+	}
+	template<bool aligned, class A, class B>
+	static D getDouble(expression::Div<A, expression::Sqrt<B>> expr, size_t i) {
+		return Arch::mul(getDouble<aligned>(expr.a, i), Arch::rsqrt(getDouble<aligned>(expr.b.a, i)));
+	}
 	// A*B - C*D matches both of the Sub shapes above, so it needs its own
 	template<bool aligned, class A, class B, class C, class D2>
 	static F getFloat(expression::Sub<expression::Mul<A, B>, expression::Mul<C, D2>> expr, size_t i) {
