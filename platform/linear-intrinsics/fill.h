@@ -3,6 +3,9 @@
 GCC/Clang need #pragma wrapped around all the functions which we want to inline with a particular architecture inside, which means we can't just do it with a template.  Instead, we have this (unguarded, namespace-agnostic) fill class which assumes the architecture is present as `Arch`, and can be included from with different namespaces.
 */
 struct SimdFill {
+	// The elements left over after the last full vector
+	using ScalarFill = ::signalsmith::linear::simd_scalar::SimdFill;
+
 	using F = typename Arch::Float;
 	using D = typename Arch::Double;
 	struct ComplexFloat {
@@ -11,13 +14,21 @@ struct SimdFill {
 	struct ComplexDouble {
 		D real, imag;
 	};
-	static constexpr size_t floatLanes = sizeof(F)/sizeof(float);
-	static constexpr size_t doubleLanes = sizeof(D)/sizeof(double);
-	static constexpr size_t alignmentSize = sizeof(F);
+	// Vector type for a scalar type, and how many lanes it has.  These can differ between float and double (e.g. for the scalar `Arch`)
+	template<class S>
+	using Vector = decltype(Arch::load((const S *)nullptr));
+	template<class S>
+	static constexpr size_t lanes() {
+		return sizeof(Vector<S>)/sizeof(S);
+	}
 
-	template<class V>
-	static bool pointerAligned(const V *ptr) {
-		return (size_t(ptr)&(alignmentSize - 1)) == 0;
+	template<class S>
+	static bool pointerAligned(const S *ptr) {
+		return (size_t(ptr)&(sizeof(Vector<S>) - 1)) == 0;
+	}
+	template<class S>
+	static bool pointerAligned(const std::complex<S> *ptr) {
+		return pointerAligned(reinterpret_cast<const S *>(ptr));
 	}
 
 	template<class V>
@@ -56,14 +67,14 @@ struct SimdFill {
 
 	template<bool aligned, class S, class Expr>
 	static void fillRealSimd(S *pointer, Expr expr, size_t simdSize) {
-		constexpr size_t lanes = alignmentSize/sizeof(S);
+		constexpr size_t lanes = SimdFill::lanes<S>();
 		for (size_t i = 0; i < simdSize; i += lanes) {
 			store<aligned>(pointer + i, getReal<aligned>(expr, i, pointer));
 		}
 	}
 	template<class S, class Expr>
 	static void fillReal(S *pointer, Expr expr, size_t size) {
-		size_t simdSize = size - size%(alignmentSize/sizeof(S));
+		size_t simdSize = size - size%lanes<S>();
 		// Don't explode the code-paths - have one for "everything is aligned", one otherwise
 		if (pointerAligned(pointer) && isAligned(expr)) {
 			fillRealSimd<true>(pointer, expr, simdSize);
@@ -71,12 +82,12 @@ struct SimdFill {
 			fillRealSimd<false>(pointer, expr, simdSize);
 		}
 		for (size_t i = simdSize; i < size; ++i) {
-			pointer[i] = expr.get(i);
+			pointer[i] = ScalarFill::getReal<false>(expr, i, pointer);
 		}
 	}
 	template<bool aligned, class S, class Expr>
 	static void fillComplexSimd(std::complex<S> *pointer, Expr expr, size_t simdSize) {
-		constexpr size_t lanes = alignmentSize/sizeof(S);
+		constexpr size_t lanes = SimdFill::lanes<S>();
 		for (size_t i = 0; i < simdSize; i += lanes) {
 			auto c = getComplex<aligned>(expr, i, (const S *)nullptr);
 			S *s = reinterpret_cast<S *>(pointer + i);
@@ -88,19 +99,20 @@ struct SimdFill {
 	}
 	template<class S, class Expr>
 	static void fillComplex(std::complex<S> *pointer, Expr expr, size_t size) {
-		size_t simdSize = size - size%(alignmentSize/sizeof(S));
+		size_t simdSize = size - size%lanes<S>();
 		if (pointerAligned(pointer) && isAligned(expr)) {
 			fillComplexSimd<true>(pointer, expr, simdSize);
 		} else {
 			fillComplexSimd<false>(pointer, expr, simdSize);
 		}
 		for (size_t i = simdSize; i < size; ++i) {
-			pointer[i] = expr.get(i);
+			auto c = ScalarFill::getComplex<false>(expr, i, (const S *)nullptr);
+			pointer[i] = {c.real, c.imag};
 		}
 	}
 	template<bool aligned, class S, class Expr>
 	static void fillSplitSimd(S *real, S *imag, Expr expr, size_t simdSize) {
-		constexpr size_t lanes = alignmentSize/sizeof(S);
+		constexpr size_t lanes = SimdFill::lanes<S>();
 		for (size_t i = 0; i < simdSize; i += lanes) {
 			auto c = getComplex<aligned>(expr, i, real);
 			store<aligned>(real + i, c.real);
@@ -109,16 +121,16 @@ struct SimdFill {
 	}
 	template<class S, class Expr>
 	static void fillSplit(S *real, S *imag, Expr expr, size_t size) {
-		size_t simdSize = size - size%(alignmentSize/sizeof(S));
+		size_t simdSize = size - size%lanes<S>();
 		if (pointerAligned(real) && pointerAligned(imag) && isAligned(expr)) {
 			fillSplitSimd<true>(real, imag, expr, simdSize);
 		} else {
 			fillSplitSimd<false>(real, imag, expr, simdSize);
 		}
 		for (size_t i = simdSize; i < size; ++i) {
-			std::complex<S> c = expr.get(i);
-			real[i] = c.real();
-			imag[i] = c.imag();
+			auto c = ScalarFill::getComplex<false>(expr, i, real);
+			real[i] = c.real;
+			imag[i] = c.imag;
 		}
 	}
 	// ReadableReal
@@ -143,7 +155,7 @@ struct SimdFill {
 	static C loadComplex(const std::complex<S> *pointer) {
 		const S *s = reinterpret_cast<const S *>(pointer);
 		C c;
-		Arch::deinterleave(load<aligned>(s), load<aligned>(s + alignmentSize/sizeof(S)), c.real, c.imag);
+		Arch::deinterleave(load<aligned>(s), load<aligned>(s + lanes<S>()), c.real, c.imag);
 		return c;
 	}
 	template<bool aligned>

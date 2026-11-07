@@ -3,6 +3,7 @@
 #include <type_traits>
 
 #include <immintrin.h>
+#include "./linear-intrinsics/scalar.h"
 #include "./linear-intrinsics/x86-sse2.h"
 #include "./linear-intrinsics/x86-sse41.h"
 #include "./linear-intrinsics/x86-avx1.h"
