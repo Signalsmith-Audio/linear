@@ -70,7 +70,9 @@ Optional:
 	SSMF_VF_ROUND(v)
 	SSMF_VF_FLOOR(v)
 	SSMF_VF_SQRT(v)
-	SSMF_VF_RSQRT(v) // reciprocal, if that's faster
+	SSMF_VF_RSQRT(v): reciprocal, if that's faster
+	SSMF_VF_RSQRT_EST(v): approximate reciprocal, which rsqrt() then refines
+	SSMF_RSQRT_EST_BITS: starting accuracy (as bits, integer) of SSMF_VF_RSQRT_EST
 	SSMF_VF_HYPOT(a, b)
 	SSMF_VF_LOG2(v)
 	SSMF_VF_LOG(v)
@@ -751,24 +753,34 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(rsqrt)(SSMF_VF v) {
 #ifdef SSMF_VF_RSQRT
 	return SSMF_VF_RSQRT(v);
 #else
-#	if SSMF_BITS == 32
+#	if defined(SSMF_VF_RSQRT_EST)
+#		ifndef SSMF_RSQRT_EST_BITS
+#			error "SSMF_VF_RSQRT_EST() needs SSMF_RSQRT_EST_BITS"
+#		endif
+	// Clamped so 0 gives a finite estimate (and then sqrt(0) = 0*rsqrt(0) = 0)
+	SSMF_VF invSqrt = SSMF_VF_RSQRT_EST(SSMF_VF_MAX(v, SSMF_VF_FE(SSMF_MIN_NORMAL*2.0)));
+#	elif SSMF_BITS == 32
+#		define SSMF_RSQRT_EST_BITS 5 // actually 4.6, but rounded up so the step thresholds below are for this estimate
 	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(2.3509887e-38))), 1);
 	// exponent bias is 127, right-shift approximately halves that (but with truncation)
 	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(1.83523129466333e-20)); // 2^-65.5626 (minimax scale for this seed: 4.6 bits)
 #	elif SSMF_BITS == 64
+#		define SSMF_RSQRT_EST_BITS 5
 	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(4.450147717014403e-308))), 1);
 	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(2.524949804293825e-155)); // 2^-513.5626
 #	else
-#		error "need SSMF_VF_SQRT() unless it's 32/64-bit IEEE floats"
+#		error "need SSMF_VF_RSQRT() or SSMF_VF_RSQRT_EST() unless it's 32/64-bit IEEE floats"
 #	endif
 	// Prevent fast-math reassociation (v*invSqrt) into ((v*scale)*bits), which can underflow
 #	ifdef SSMF_VF_BARRIER
 	invSqrt = SSMF_VF_BARRIER(invSqrt);
 #	else
-	invSqrt = SSMF_NAME(abs)(invSqrt);
+	invSqrt = SSMF_NAME(abs)(invSqrt); // TODO: in the RSQRT_EST path, can the compiler know the sign and bypass this?
 #	endif
 	// Each step takes e -> 1.5e^2 (bits double, minus 0.6): 4.6 -> 8.5 -> 16.4 -> 32.3 -> 64
-	const int stepCount = (SSMF_ACCURACY >= 5) + (SSMF_ACCURACY >= 9) + (SSMF_ACCURACY >= 17) + (SSMF_ACCURACY >= 33);
+	// These thresholds are for a 5-bit estimate, so a better estimate shifts them up by the extra bits (which is conservative, since each step doubles that gain)
+	const int stepAccuracy = SSMF_ACCURACY + 5 - SSMF_RSQRT_EST_BITS;
+	const int stepCount = (stepAccuracy >= 5) + (stepAccuracy >= 9) + (stepAccuracy >= 17) + (stepAccuracy >= 33);
 	for (int step = 0; step < stepCount; ++step) {
 		// How wrong we are, squared.  We want this computed in a particular order so that huge inputs don't make invSqrt*invSqrt subnormal (which could be flushed to 0)
 #	ifdef SSMF_VF_BARRIER
@@ -1381,6 +1393,9 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(atan2)(SSMF_VF y, SSMF_VF x) {
 #	undef SSMF_VF_ROUND
 #	undef SSMF_VF_FLOOR
 #	undef SSMF_VF_SQRT
+#	undef SSMF_VF_RSQRT
+#	undef SSMF_VF_RSQRT_EST
+#	undef SSMF_RSQRT_EST_BITS
 #	undef SSMF_VF_LOG2
 #	undef SSMF_VF_LOG
 #	undef SSMF_VF_LOG10
