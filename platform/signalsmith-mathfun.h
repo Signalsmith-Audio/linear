@@ -760,12 +760,12 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(rsqrt)(SSMF_VF v) {
 	// Clamped so 0 gives a finite estimate (and then sqrt(0) = 0*rsqrt(0) = 0)
 	SSMF_VF invSqrt = SSMF_VF_RSQRT_EST(SSMF_VF_MAX(v, SSMF_VF_FE(SSMF_MIN_NORMAL*2.0)));
 #	elif SSMF_BITS == 32
-#		define SSMF_RSQRT_EST_BITS 5 // actually 4.6, but rounded up so the step thresholds below are for this estimate
+#		define SSMF_RSQRT_EST_BITS 4 // actually 4.6, but be conservative
 	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(2.3509887e-38))), 1);
 	// exponent bias is 127, right-shift approximately halves that (but with truncation)
 	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(1.83523129466333e-20)); // 2^-65.5626 (minimax scale for this seed: 4.6 bits)
 #	elif SSMF_BITS == 64
-#		define SSMF_RSQRT_EST_BITS 5
+#		define SSMF_RSQRT_EST_BITS 4
 	SSMF_VF invSqrt = SSMF_VF_RSHIFT_K(SSMF_VF_NOT(SSMF_VF_MAX(v, SSMF_VF_F(4.450147717014403e-308))), 1);
 	invSqrt = SSMF_VF_MUL(invSqrt, SSMF_VF_F(2.524949804293825e-155)); // 2^-513.5626
 #	else
@@ -777,10 +777,8 @@ SSMF_ATTRIBUTES SSMF_INLINE SSMF_VF SSMF_NAME(rsqrt)(SSMF_VF v) {
 #	else
 	invSqrt = SSMF_NAME(abs)(invSqrt); // TODO: in the RSQRT_EST path, can the compiler know the sign and bypass this?
 #	endif
-	// Each step takes e -> 1.5e^2 (bits double, minus 0.6): 4.6 -> 8.5 -> 16.4 -> 32.3 -> 64
-	// These thresholds are for a 5-bit estimate, so a better estimate shifts them up by the extra bits (which is conservative, since each step doubles that gain)
-	const int stepAccuracy = SSMF_ACCURACY + 5 - SSMF_RSQRT_EST_BITS;
-	const int stepCount = (stepAccuracy >= 5) + (stepAccuracy >= 9) + (stepAccuracy >= 17) + (stepAccuracy >= 33);
+	// Each step (roughly) doubles the accuracy
+	const int stepCount = (SSMF_ACCURACY > SSMF_RSQRT_EST_BITS) + (SSMF_ACCURACY > SSMF_RSQRT_EST_BITS*2) + (SSMF_ACCURACY > SSMF_RSQRT_EST_BITS*4) + (SSMF_ACCURACY > SSMF_RSQRT_EST_BITS*8);
 	for (int step = 0; step < stepCount; ++step) {
 		// How wrong we are, squared.  We want this computed in a particular order so that huge inputs don't make invSqrt*invSqrt subnormal (which could be flushed to 0)
 #	ifdef SSMF_VF_BARRIER
