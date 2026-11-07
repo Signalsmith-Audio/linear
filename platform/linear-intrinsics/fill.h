@@ -488,14 +488,29 @@ struct SimdFill {
 	SIGNALSMITH_EXPR_BINARY(Atan2, Arch::atan2)
 	SIGNALSMITH_EXPR_BINARY(Hypot, Arch::hypot)
 #undef SIGNALSMITH_EXPR_BINARY
-	// a*b + c (linear.h puts the Mul on the left)
-	template<bool aligned, class A, class B, class C>
-	static F getFloat(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
-		return Arch::fma(getFloat<aligned>(expr.a.a, i), getFloat<aligned>(expr.a.b, i), getFloat<aligned>(expr.b, i));
+	// Fused multiply-add shapes.  linear.h puts things in a consistent shape for better matching
+#define SIGNALSMITH_EXPR_FMA(fn, a, b, c, ...) \
+	template<bool aligned, class A, class B, class C> \
+	static F getFloat(__VA_ARGS__ expr, size_t i) { \
+		return Arch::fn(getFloat<aligned>(a, i), getFloat<aligned>(b, i), getFloat<aligned>(c, i)); \
+	} \
+	template<bool aligned, class A, class B, class C> \
+	static D getDouble(__VA_ARGS__ expr, size_t i) { \
+		return Arch::fn(getDouble<aligned>(a, i), getDouble<aligned>(b, i), getDouble<aligned>(c, i)); \
 	}
-	template<bool aligned, class A, class B, class C>
-	static D getDouble(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
-		return Arch::fma(getDouble<aligned>(expr.a.a, i), getDouble<aligned>(expr.a.b, i), getDouble<aligned>(expr.b, i));
+	SIGNALSMITH_EXPR_FMA(fma, expr.a.a, expr.a.b, expr.b, expression::Add<expression::Mul<A, B>, C>) // A*B + C
+	SIGNALSMITH_EXPR_FMA(fms, expr.a.a, expr.a.b, expr.b, expression::Sub<expression::Mul<A, B>, C>) // A*B - C
+	SIGNALSMITH_EXPR_FMA(fnma, expr.b.a, expr.b.b, expr.a, expression::Sub<C, expression::Mul<A, B>>) // C - A*B
+	SIGNALSMITH_EXPR_FMA(fnms, expr.a.a.a, expr.a.a.b, expr.a.b, expression::Neg<expression::Add<expression::Mul<A, B>, C>>) // -(A*B + C)
+#undef SIGNALSMITH_EXPR_FMA
+	// A*B - C*D matches both of the Sub shapes above, so it needs its own
+	template<bool aligned, class A, class B, class C, class D2>
+	static F getFloat(expression::Sub<expression::Mul<A, B>, expression::Mul<C, D2>> expr, size_t i) {
+		return Arch::fms(getFloat<aligned>(expr.a.a, i), getFloat<aligned>(expr.a.b, i), getFloat<aligned>(expr.b, i));
+	}
+	template<bool aligned, class A, class B, class C, class D2>
+	static D getDouble(expression::Sub<expression::Mul<A, B>, expression::Mul<C, D2>> expr, size_t i) {
+		return Arch::fms(getDouble<aligned>(expr.a.a, i), getDouble<aligned>(expr.a.b, i), getDouble<aligned>(expr.b, i));
 	}
 
 	// One-argument complex-to-complex

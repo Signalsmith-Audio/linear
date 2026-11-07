@@ -150,9 +150,15 @@ struct Arch {
 	SIGNALSMITH_SSE_OP2(max, _mm_max_ps, _mm_max_pd)
 	SIGNALSMITH_SSE_OP2(min, _mm_min_ps, _mm_min_pd)
 	SIGNALSMITH_SSE_OP1(sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
-	// a*b + c: there are no fused 128-bit instructions without AVX2+FMA
+	// a*b + c, a*b - c, c - a*b and -(a*b + c): there are no fused 128-bit instructions without AVX2+FMA
 	static __m128 fma(__m128 a, __m128 b, __m128 c) {return _mm_add_ps(_mm_mul_ps(a, b), c);}
 	static __m128d fma(__m128d a, __m128d b, __m128d c) {return _mm_add_pd(_mm_mul_pd(a, b), c);}
+	static __m128 fms(__m128 a, __m128 b, __m128 c) {return _mm_sub_ps(_mm_mul_ps(a, b), c);}
+	static __m128d fms(__m128d a, __m128d b, __m128d c) {return _mm_sub_pd(_mm_mul_pd(a, b), c);}
+	static __m128 fnma(__m128 a, __m128 b, __m128 c) {return _mm_sub_ps(c, _mm_mul_ps(a, b));}
+	static __m128d fnma(__m128d a, __m128d b, __m128d c) {return _mm_sub_pd(c, _mm_mul_pd(a, b));}
+	static __m128 fnms(__m128 a, __m128 b, __m128 c) {return _mm_xor_ps(_mm_add_ps(_mm_mul_ps(a, b), c), _mm_set1_ps(-0.0f));}
+	static __m128d fnms(__m128d a, __m128d b, __m128d c) {return _mm_xor_pd(_mm_add_pd(_mm_mul_pd(a, b), c), _mm_set1_pd(-0.0));}
 #define SIGNALSMITH_SSMF1(name) SIGNALSMITH_SSE_OP1(name, ssmf_##name##f, ssmf_##name##d)
 #define SIGNALSMITH_SSMF2(name) SIGNALSMITH_SSE_OP2(name, ssmf_##name##f, ssmf_##name##d)
 	SIGNALSMITH_SSMF1(abs)

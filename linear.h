@@ -274,15 +274,10 @@ namespace expression { \
 	} \
 } \
 template<class A> \
-Expression<expression::Name<expression::Unwrap<A>>> operator OP(const Expression<A> &a) { \
-	return {a}; \
+auto operator OP(const Expression<A> &a) -> const Expression<decltype(make##Name(expression::unwrap(a)))> { \
+	return make##Name(expression::unwrap(a)); \
 }
 SIGNALSMITH_AUDIO_LINEAR_UNARY_PREFIX(Neg, -)
-// Two negatives cancel out
-template<class A>
-Expression<A> operator-(const Expression<expression::Neg<A>> &expr) { \
-	return expr.a;
-}
 #undef SIGNALSMITH_AUDIO_LINEAR_UNARY_PREFIX
 
 #define SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Name, OP) \
@@ -310,23 +305,23 @@ namespace expression { \
 	} \
 } \
 template<class A, class B> \
-const Expression<expression::Name<expression::Unwrap<A>, expression::Unwrap<B>>> operator OP(const Expression<A> &a, const Expression<B> &b) { \
-	return {a, b}; \
+auto operator OP(const Expression<A> &a, const Expression<B> &b) -> const Expression<decltype(make##Name(expression::unwrap(a), expression::unwrap(b)))> { \
+	return make##Name(expression::unwrap(a), expression::unwrap(b)); \
 } \
 template<class A, class B> \
-const Expression<expression::Name<expression::Unwrap<A>, expression::Constant<B>>> operator OP(const Expression<A> &a, const B &b) { \
-	return {a, b}; \
+auto operator OP(const Expression<A> &a, const B &b) -> const Expression<decltype(make##Name(expression::unwrap(a), expression::Constant<B>(b)))> { \
+	return make##Name(expression::unwrap(a), expression::Constant<B>(b)); \
 }
 // Constants go on the right for commutative ops, but not otherwise
 #define SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_NONCOMMUTE(Name, OP) \
 template<class A, class B> \
-const Expression<expression::Name<expression::Constant<A>, expression::Unwrap<B>>> operator OP(const A &a, const Expression<B> &b) { \
-	return {a, b}; \
+auto operator OP(const A &a, const Expression<B> &b) -> const Expression<decltype(make##Name(expression::Constant<A>(a), expression::unwrap(b)))> { \
+	return make##Name(expression::Constant<A>(a), expression::unwrap(b)); \
 }
 #define SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_COMMUTE(Name, OP) \
 template<class A, class B> \
-const Expression<expression::Name<expression::Unwrap<B>, expression::Constant<A>>> operator OP(const A &a, const Expression<B> &b) { \
-	return {b, a}; \
+auto operator OP(const A &a, const Expression<B> &b) -> const Expression<decltype(make##Name(expression::unwrap(b), expression::Constant<A>(a)))> { \
+	return make##Name(expression::unwrap(b), expression::Constant<A>(a)); \
 }
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX(Add, +)
 SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_COMMUTE(Add, +)
@@ -340,21 +335,107 @@ SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_NONCOMMUTE(Div, /)
 #undef SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_COMMUTE
 #undef SIGNALSMITH_AUDIO_LINEAR_BINARY_INFIX_NONCOMMUTE
 
+namespace expression {
+	// Negation factors upwards out of Mul/Div, and is absorbed by Add/Sub.
+	// e.g. (-A)*B -> -(A*B), A + -(B*C) -> A - B*C
+	template<class A>
+	A makeNeg(Neg<A> a) {
+		return a.a;
+	}
+	// Folds into constants, e.g. -(A*2) -> A*-2
+	template<class V>
+	ConstantExpr<V> makeNeg(ConstantExpr<V> c) {
+		return {-c.value};
+	}
+	template<class A, class V>
+	Mul<A, ConstantExpr<V>> makeNeg(Mul<A, ConstantExpr<V>> m) {
+		return {m.a, -m.b.value};
+	}
+	template<class A, class V>
+	Div<A, ConstantExpr<V>> makeNeg(Div<A, ConstantExpr<V>> d) {
+		return {d.a, -d.b.value};
+	}
+	template<class V, class B>
+	Div<ConstantExpr<V>, B> makeNeg(Div<ConstantExpr<V>, B> d) {
+		return {-d.a.value, d.b};
+	}
+	// -(A + k) -> (-k) - A
+	template<class A, class V>
+	Sub<ConstantExpr<V>, A> makeNeg(Add<A, ConstantExpr<V>> s) {
+		return {-s.b.value, s.a};
+	}
+	template<class A, class B>
+	Sub<B, A> makeNeg(Sub<A, B> s) {
+		return {s.b, s.a};
+	}
+#define SIGNALSMITH_AUDIO_LINEAR_NEG_FACTOR(Name) \
+	template<class A, class B> \
+	auto make##Name(Neg<A> a, B b) -> decltype(makeNeg(make##Name(a.a, b))) { \
+		return makeNeg(make##Name(a.a, b)); \
+	} \
+	template<class A, class B> \
+	auto make##Name(A a, Neg<B> b) -> decltype(makeNeg(make##Name(a, b.a))) { \
+		return makeNeg(make##Name(a, b.a)); \
+	} \
+	template<class A, class B> \
+	auto make##Name(Neg<A> a, Neg<B> b) -> decltype(make##Name(a.a, b.a)) { \
+		return make##Name(a.a, b.a); \
+	}
+	SIGNALSMITH_AUDIO_LINEAR_NEG_FACTOR(Mul)
+	SIGNALSMITH_AUDIO_LINEAR_NEG_FACTOR(Div)
+#undef SIGNALSMITH_AUDIO_LINEAR_NEG_FACTOR
+	// A + -B -> A - B
+	template<class A, class B>
+	auto makeAdd(A a, Neg<B> b) -> decltype(makeSub(a, b.a)) {
+		return makeSub(a, b.a);
+	}
+	// -A + B -> B - A
+	template<class A, class B>
+	auto makeAdd(Neg<A> a, B b) -> decltype(makeSub(b, a.a)) {
+		return makeSub(b, a.a);
+	}
+	// -A + -B -> -(A + B)
+	template<class A, class B>
+	auto makeAdd(Neg<A> a, Neg<B> b) -> decltype(makeNeg(makeAdd(a.a, b.a))) {
+		return makeNeg(makeAdd(a.a, b.a));
+	}
+	// A - -B -> A + B
+	template<class A, class B>
+	auto makeSub(A a, Neg<B> b) -> decltype(makeAdd(a, b.a)) {
+		return makeAdd(a, b.a);
+	}
+	// k - -B -> B + k (constants on the right, as for the operators)
+	template<class V, class B>
+	auto makeSub(ConstantExpr<V> a, Neg<B> b) -> decltype(makeAdd(b.a, a)) {
+		return makeAdd(b.a, a);
+	}
+	// -A - B -> -(A + B)
+	template<class A, class B>
+	auto makeSub(Neg<A> a, B b) -> decltype(makeNeg(makeAdd(a.a, b))) {
+		return makeNeg(makeAdd(a.a, b));
+	}
+	// -A - -B -> B - A
+	template<class A, class B>
+	auto makeSub(Neg<A> a, Neg<B> b) -> decltype(makeSub(b.a, a.a)) {
+		return makeSub(b.a, a.a);
+	}
+}
+
 // Specific commutative swaps we want in a canonical form.  When there's a commonly-matched shape, we put the "more interesting" one on the left
 // A + B*C -> B*C + A
 template<class A, class B, class C>
-const Expression<expression::Add<expression::Mul<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator+(const Expression<A> &a, const Expression<expression::Mul<B, C>> &bc) {
-	return {bc, a};
+auto operator+(const Expression<A> &a, const Expression<expression::Mul<B, C>> &bc) -> const Expression<decltype(makeAdd(expression::unwrap(bc), expression::unwrap(a)))> {
+	return makeAdd(expression::unwrap(bc), expression::unwrap(a));
 }
 // A*(B + C) -> (B + C)*A
 template<class A, class B, class C>
-const Expression<expression::Mul<expression::Add<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Add<B, C>> &bc) {
-	return {bc, a};
+auto operator*(const Expression<A> &a, const Expression<expression::Add<B, C>> &bc) -> const Expression<decltype(makeMul(expression::unwrap(bc), expression::unwrap(a)))> {
+	return makeMul(expression::unwrap(bc), expression::unwrap(a));
 }
 // A*(B - C) -> (B - C)*A
 template<class A, class B, class C>
-const Expression<expression::Mul<expression::Sub<expression::Unwrap<B>, expression::Unwrap<C>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Sub<B, C>> &bc) {
-	return {bc, a};
+auto operator*(const Expression<A> &a, const Expression<expression::Sub<B, C>> &bc) -> const Expression<decltype(makeMul(expression::unwrap(bc), expression::unwrap(a)))> {
+	return makeMul(expression::unwrap(bc), expression::unwrap(a));
 }
 
 namespace expression {
@@ -496,8 +577,8 @@ namespace expression {
 
 // A*conj(B) -> conj(B)*A
 template<class A, class B>
-const Expression<expression::Mul<expression::Conj<expression::Unwrap<B>>, expression::Unwrap<A>>> operator*(const Expression<A> &a, const Expression<expression::Conj<B>> &b) {
-	return {b, a};
+auto operator*(const Expression<A> &a, const Expression<expression::Conj<B>> &b) -> const Expression<decltype(makeMul(expression::unwrap(b), expression::unwrap(a)))> {
+	return makeMul(expression::unwrap(b), expression::unwrap(a));
 }
 
 template<class BaseExpr>

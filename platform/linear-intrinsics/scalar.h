@@ -136,6 +136,12 @@ struct Arch {
 	// Not fused (std::fma() is slow without hardware support)
 	template<class V>
 	static V fma(V a, V b, V c) {return a*b + c;}
+	template<class V>
+	static V fms(V a, V b, V c) {return a*b - c;}
+	template<class V>
+	static V fnma(V a, V b, V c) {return c - a*b;}
+	template<class V>
+	static V fnms(V a, V b, V c) {return -(a*b + c);}
 
 #define SIGNALSMITH_SSMF1(name) \
 	static float name(float a) {return ssmf_##name##f(a);} \
