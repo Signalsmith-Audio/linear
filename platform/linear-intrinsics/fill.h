@@ -260,6 +260,16 @@ struct SimdFill {
 	static C complexConjMul(C a, C b) {
 		return {Arch::fma(a.real, b.real, Arch::mul(a.imag, b.imag)), Arch::fms(a.real, b.imag, Arch::mul(a.imag, b.real))};
 	}
+	// a*b + c
+	template<class C>
+	static C complexMulAdd(C a, C b, C c) {
+		return {Arch::fma(a.real, b.real, Arch::fnma(a.imag, b.imag, c.real)), Arch::fma(a.real, b.imag, Arch::fma(a.imag, b.real, c.imag))};
+	}
+	// conj(a)*b + c
+	template<class C>
+	static C complexConjMulAdd(C a, C b, C c) {
+		return {Arch::fma(a.real, b.real, Arch::fma(a.imag, b.imag, c.real)), Arch::fma(a.real, b.imag, Arch::fnma(a.imag, b.real, c.imag))};
+	}
 	template<class C>
 	static C complexDiv(C a, C b) {
 		auto mag2 = complexNorm(b);
@@ -661,6 +671,55 @@ struct SimdFill {
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Mul<expression::Conj<A>, B> expr, size_t i) {
 		return complexConjMul(getCDouble<aligned>(expr.a.a, i), getCDouble<aligned>(expr.b, i));
+	}
+	// A*B + C (complex C)
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, ComplexFloat>>> getCFloat(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		return complexMulAdd(getCFloat<aligned>(expr.a.a, i), getCFloat<aligned>(expr.a.b, i), getCFloat<aligned>(expr.b, i));
+	}
+	// A is conjugate
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeCF<A, ItemTypeCF<B, ItemTypeCF<C, ComplexFloat>>> getCFloat(expression::Add<expression::Mul<expression::Conj<A>, B>, C> expr, size_t i) {
+		return complexConjMulAdd(getCFloat<aligned>(expr.a.a.a, i), getCFloat<aligned>(expr.a.b, i), getCFloat<aligned>(expr.b, i));
+	}
+	// B is real
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeCF<A, ItemTypeF<B, ItemTypeCF<C, ComplexFloat>>> getCFloat(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		auto a = getCFloat<aligned>(expr.a.a, i);
+		auto b = getFloat<aligned>(expr.a.b, i);
+		auto c = getCFloat<aligned>(expr.b, i);
+		return {Arch::fma(a.real, b, c.real), Arch::fma(a.imag, b, c.imag)};
+	}
+	// A is real
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeF<A, ItemTypeCF<B, ItemTypeCF<C, ComplexFloat>>> getCFloat(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		auto a = getFloat<aligned>(expr.a.a, i);
+		auto b = getCFloat<aligned>(expr.a.b, i);
+		auto c = getCFloat<aligned>(expr.b, i);
+		return {Arch::fma(a, b.real, c.real), Arch::fma(a, b.imag, c.imag)};
+	}
+	// Same but for doubles
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, ComplexDouble>>> getCDouble(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		return complexMulAdd(getCDouble<aligned>(expr.a.a, i), getCDouble<aligned>(expr.a.b, i), getCDouble<aligned>(expr.b, i));
+	}
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeCD<A, ItemTypeCD<B, ItemTypeCD<C, ComplexDouble>>> getCDouble(expression::Add<expression::Mul<expression::Conj<A>, B>, C> expr, size_t i) {
+		return complexConjMulAdd(getCDouble<aligned>(expr.a.a.a, i), getCDouble<aligned>(expr.a.b, i), getCDouble<aligned>(expr.b, i));
+	}
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeCD<A, ItemTypeD<B, ItemTypeCD<C, ComplexDouble>>> getCDouble(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		auto a = getCDouble<aligned>(expr.a.a, i);
+		auto b = getDouble<aligned>(expr.a.b, i);
+		auto c = getCDouble<aligned>(expr.b, i);
+		return {Arch::fma(a.real, b, c.real), Arch::fma(a.imag, b, c.imag)};
+	}
+	template<bool aligned, class A, class B, class C>
+	static ItemTypeD<A, ItemTypeCD<B, ItemTypeCD<C, ComplexDouble>>> getCDouble(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		auto a = getDouble<aligned>(expr.a.a, i);
+		auto b = getCDouble<aligned>(expr.a.b, i);
+		auto c = getCDouble<aligned>(expr.b, i);
+		return {Arch::fma(a, b.real, c.real), Arch::fma(a, b.imag, c.imag)};
 	}
 	// Div
 	template<bool aligned, class A, class B>
