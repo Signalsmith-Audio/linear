@@ -31,7 +31,7 @@ Like fill.h, this is unguarded and namespace-agnostic: it's included from x86-av
 #define SSMF_VF_MIN(a, b) _mm256_min_ps(a, b)
 #define SSMF_VF_SQRT(v) _mm256_sqrt_ps(v)
 #define SSMF_VF_RSQRT_EST(v) _mm256_rsqrt_ps(v)
-#define SSMF_RSQRT_EST_BITS 11 // relative error <= 1.5*2^-12
+#define SSMF_RSQRT_EST_BITS 11.4 // relative error <= 1.5*2^-12
 #ifdef SIGNALSMITH_LINEAR_AVX2
 #	define SSMF_VF_RSHIFT_K(a, bits) _mm256_castsi256_ps(_mm256_srli_epi32(_mm256_castps_si256(a), bits))
 #	define SSMF_VF_LSHIFT_K(a, bits) _mm256_castsi256_ps(_mm256_slli_epi32(_mm256_castps_si256(a), bits))
