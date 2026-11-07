@@ -25,6 +25,8 @@ Like fill.h, this is unguarded and namespace-agnostic: it's included from x86-ss
 #define SSMF_VF_MAX(a, b) _mm_max_ps(a, b)
 #define SSMF_VF_MIN(a, b) _mm_min_ps(a, b)
 #define SSMF_VF_SQRT(v) _mm_sqrt_ps(v)
+#define SSMF_VF_RSQRT_ESTIMATE(v) _mm_rsqrt_ps(v)
+#define SSMF_RSQRT_ESTIMATE_BITS 11 // relative error <= 1.5*2^-12
 #define SSMF_VF_RSHIFT_K(a, bits) _mm_castsi128_ps(_mm_srli_epi32(_mm_castps_si128(a), bits))
 #define SSMF_VF_LSHIFT_K(a, bits) _mm_castsi128_ps(_mm_slli_epi32(_mm_castps_si128(a), bits))
 #ifdef SIGNALSMITH_LINEAR_SSE41
@@ -66,6 +68,7 @@ inline __m128 asmBarrier(__m128 v) {
 #define SSMF_VF_MAX(a, b) _mm_max_pd(a, b)
 #define SSMF_VF_MIN(a, b) _mm_min_pd(a, b)
 #define SSMF_VF_SQRT(v) _mm_sqrt_pd(v)
+// Skipping RSQRT_EST here because it's not actually faster
 #define SSMF_VF_RSHIFT_K(a, b) _mm_castsi128_pd(_mm_srli_epi64(_mm_castpd_si128(a), b))
 #define SSMF_VF_LSHIFT_K(a, b) _mm_castsi128_pd(_mm_slli_epi64(_mm_castpd_si128(a), b))
 #ifdef SIGNALSMITH_LINEAR_SSE41

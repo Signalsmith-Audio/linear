@@ -30,6 +30,8 @@ Like fill.h, this is unguarded and namespace-agnostic: it's included from x86-av
 #define SSMF_VF_MAX(a, b) _mm256_max_ps(a, b)
 #define SSMF_VF_MIN(a, b) _mm256_min_ps(a, b)
 #define SSMF_VF_SQRT(v) _mm256_sqrt_ps(v)
+#define SSMF_VF_RSQRT_ESTIMATE(v) _mm256_rsqrt_ps(v)
+#define SSMF_RSQRT_ESTIMATE_BITS 11 // relative error <= 1.5*2^-12
 #ifdef SIGNALSMITH_LINEAR_AVX2
 #	define SSMF_VF_RSHIFT_K(a, bits) _mm256_castsi256_ps(_mm256_srli_epi32(_mm256_castps_si256(a), bits))
 #	define SSMF_VF_LSHIFT_K(a, bits) _mm256_castsi256_ps(_mm256_slli_epi32(_mm256_castps_si256(a), bits))
@@ -73,6 +75,7 @@ inline __m256 asmBarrier(__m256 v) {
 #define SSMF_VF_MAX(a, b) _mm256_max_pd(a, b)
 #define SSMF_VF_MIN(a, b) _mm256_min_pd(a, b)
 #define SSMF_VF_SQRT(v) _mm256_sqrt_pd(v)
+// Skipping RSQRT_EST here because it's not actually faster
 #ifdef SIGNALSMITH_LINEAR_AVX2
 #	define SSMF_VF_RSHIFT_K(a, bits) _mm256_castsi256_pd(_mm256_srli_epi64(_mm256_castpd_si256(a), bits))
 #	define SSMF_VF_LSHIFT_K(a, bits) _mm256_castsi256_pd(_mm256_slli_epi64(_mm256_castpd_si256(a), bits))
