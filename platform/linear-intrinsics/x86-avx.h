@@ -152,6 +152,14 @@ struct Arch {
 	SIGNALSMITH_AVX_OP2(max, _mm256_max_ps, _mm256_max_pd)
 	SIGNALSMITH_AVX_OP2(min, _mm256_min_ps, _mm256_min_pd)
 	SIGNALSMITH_AVX_OP1(sqrt, _mm256_sqrt_ps, _mm256_sqrt_pd)
+	// a*b + c
+#ifdef SIGNALSMITH_LINEAR_AVX2
+	static __m256 fma(__m256 a, __m256 b, __m256 c) {return _mm256_fmadd_ps(a, b, c);}
+	static __m256d fma(__m256d a, __m256d b, __m256d c) {return _mm256_fmadd_pd(a, b, c);}
+#else
+	static __m256 fma(__m256 a, __m256 b, __m256 c) {return _mm256_add_ps(_mm256_mul_ps(a, b), c);}
+	static __m256d fma(__m256d a, __m256d b, __m256d c) {return _mm256_add_pd(_mm256_mul_pd(a, b), c);}
+#endif
 #define SIGNALSMITH_SSMF1(name) SIGNALSMITH_AVX_OP1(name, ssmf_##name##f, ssmf_##name##d)
 #define SIGNALSMITH_SSMF2(name) SIGNALSMITH_AVX_OP2(name, ssmf_##name##f, ssmf_##name##d)
 	SIGNALSMITH_SSMF1(abs)

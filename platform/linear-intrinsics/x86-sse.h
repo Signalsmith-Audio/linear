@@ -147,6 +147,9 @@ struct Arch {
 	SIGNALSMITH_SSE_OP2(max, _mm_max_ps, _mm_max_pd)
 	SIGNALSMITH_SSE_OP2(min, _mm_min_ps, _mm_min_pd)
 	SIGNALSMITH_SSE_OP1(sqrt, _mm_sqrt_ps, _mm_sqrt_pd)
+	// a*b + c: there are no fused 128-bit instructions without AVX2+FMA
+	static __m128 fma(__m128 a, __m128 b, __m128 c) {return _mm_add_ps(_mm_mul_ps(a, b), c);}
+	static __m128d fma(__m128d a, __m128d b, __m128d c) {return _mm_add_pd(_mm_mul_pd(a, b), c);}
 #define SIGNALSMITH_SSMF1(name) SIGNALSMITH_SSE_OP1(name, ssmf_##name##f, ssmf_##name##d)
 #define SIGNALSMITH_SSMF2(name) SIGNALSMITH_SSE_OP2(name, ssmf_##name##f, ssmf_##name##d)
 	SIGNALSMITH_SSMF1(abs)

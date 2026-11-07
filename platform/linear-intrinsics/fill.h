@@ -476,6 +476,15 @@ struct SimdFill {
 	SIGNALSMITH_EXPR_BINARY(Atan2, Arch::atan2)
 	SIGNALSMITH_EXPR_BINARY(Hypot, Arch::hypot)
 #undef SIGNALSMITH_EXPR_BINARY
+	// a*b + c (linear.h puts the Mul on the left)
+	template<bool aligned, class A, class B, class C>
+	static F getFloat(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		return Arch::fma(getFloat<aligned>(expr.a.a, i), getFloat<aligned>(expr.a.b, i), getFloat<aligned>(expr.b, i));
+	}
+	template<bool aligned, class A, class B, class C>
+	static D getDouble(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
+		return Arch::fma(getDouble<aligned>(expr.a.a, i), getDouble<aligned>(expr.a.b, i), getDouble<aligned>(expr.b, i));
+	}
 
 	// One-argument complex-to-complex
 	template<bool aligned, class A>
