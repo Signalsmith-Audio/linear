@@ -1274,6 +1274,8 @@ private:
 #elif defined(SIGNALSMITH_USE_INTRINSICS)
 #	if (defined(_M_X64) || defined(__x86_64__))
 #		include "./platform/linear-intrinsics-x86_64.h"
+#	elif (defined(__ARM_NEON) || defined(__ARM_NEON__))
+#		include "./platform/linear-intrinsics-arm-neon.h"
 #	else
 #		error "Linear doesn't have an intrinsics implementation for this architecture"
 #	endif
