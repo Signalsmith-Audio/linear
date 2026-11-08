@@ -12,7 +12,7 @@
 			_mm_setcsr(controlStatusRegister);
 		}
 	};
-#elif (defined (__ARM_NEON) || defined (__ARM_NEON__))
+#elif defined(__aarch64__)
 	class StopDenormals {
 		uintptr_t status;
 	public:
@@ -25,6 +25,22 @@
 		~StopDenormals() {
 			uintptr_t asmStatus = status;
 			asm volatile("msr fpcr, %0" : : "ri"(asmStatus));
+		}
+	};
+#elif (defined (__ARM_NEON) || defined (__ARM_NEON__))
+	// 32-bit ARM: same Flush-to-Zero bit, but in FPSCR
+	class StopDenormals {
+		uint32_t status;
+	public:
+		StopDenormals() {
+			uint32_t asmStatus;
+			asm volatile("vmrs %0, fpscr" : "=r"(asmStatus));
+			status = asmStatus;
+			asmStatus |= 0x01000000U;
+			asm volatile("vmsr fpscr, %0" : : "r"(asmStatus));
+		}
+		~StopDenormals() {
+			asm volatile("vmsr fpscr, %0" : : "r"(status));
 		}
 	};
 #else
