@@ -1276,25 +1276,21 @@ private:
 #	include "./platform/linear-intrinsics/scalar.h"
 #	if (defined(_M_X64) || defined(__x86_64__))
 #		include "./platform/linear-intrinsics/x86.h"
-namespace signalsmith { namespace linear {
-	template<>
-	struct LinearImpl<true> : public LinearImplIntrinsics<simd_x86_dispatch::SimdFillDispatch> {};
-}}
+#		define SIGNALSMITH_INTRINSICS_FILL simd_x86_dispatch::SimdFillDispatch
 #	elif (defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(_M_ARM64))
 #		include "./platform/linear-intrinsics/arm-neon.h"
-namespace signalsmith { namespace linear {
-	template<>
-	struct LinearImpl<true> : public LinearImplIntrinsics<simd_neon::SimdFill> {};
-}}
+#		define SIGNALSMITH_INTRINSICS_FILL simd_neon::SimdFill
 #	elif defined(__wasm_simd128__)
 #		include "./platform/linear-intrinsics/wasm-simd128.h"
-namespace signalsmith { namespace linear {
-	template<>
-	struct LinearImpl<true> : public LinearImplIntrinsics<simd_wasm_simd128::SimdFill> {};
-}}
+#		define SIGNALSMITH_INTRINSICS_FILL simd_wasm_simd128::SimdFill
 #	else
 #		error "Linear doesn't have an intrinsics implementation for this architecture"
 #	endif
+namespace signalsmith { namespace linear {
+	template<>
+	struct LinearImpl<true> : public LinearImplIntrinsics<SIGNALSMITH_INTRINSICS_FILL> {};
+}}
+#	undef SIGNALSMITH_INTRINSICS_FILL
 #elif defined(SIGNALSMITH_USE_XSIMD)
 #	include "./platform/linear-xsimd.h"
 #elif defined(SIGNALSMITH_USE_CMSISDSP)
