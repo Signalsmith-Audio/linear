@@ -78,28 +78,23 @@ private:
 	using Avx1Fill = simd_avx1::SimdFill;
 	using Avx2Fill = simd_avx2::SimdFill;
 
-	template<class Pointer, class Expr>
-	void fillExpr(Pointer pointer, Expr expr, size_t size) {
-		fillBasic(pointer, expr, size);
-	}
-
 	// Most generic fill
 	template<class V, class Expr>
-	void fillBasic(RealPointer<V> pointer, Expr expr, size_t size) {
+	void fillExpr(RealPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
 		for (size_t i = 0; i < size; ++i) {
 			pointer[i] = expr.get(i);
 		}
 	}
 	template<class V, class Expr>
-	void fillBasic(ComplexPointer<V> pointer, Expr expr, size_t size) {
+	void fillExpr(ComplexPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
 		for (size_t i = 0; i < size; ++i) {
 			pointer[i] = expr.get(i);
 		}
 	}
 	template<class V, class Expr>
-	void fillBasic(SplitPointer<V> pointer, Expr expr, size_t size) {
+	void fillExpr(SplitPointer<V> pointer, Expr expr, size_t size) {
 		basicFillWarning<Expr>();
 		using Complex = typename SplitPointer<V>::Complex;
 		for (size_t i = 0; i < size; ++i) {
@@ -110,7 +105,7 @@ private:
 	}
 
 	template<class Expr>
-	void fillBasic(RealPointer<float> pointer, Expr expr, size_t size) {
+	void fillExpr(RealPointer<float> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillReal(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillReal(pointer, expr, size);
@@ -119,7 +114,7 @@ private:
 		}
 	}
 	template<class Expr>
-	void fillBasic(RealPointer<double> pointer, Expr expr, size_t size) {
+	void fillExpr(RealPointer<double> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillReal(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillReal(pointer, expr, size);
@@ -128,7 +123,7 @@ private:
 		}
 	}
 	template<class Expr>
-	ItemTypeCF<Expr> fillBasic(ComplexPointer<float> pointer, Expr expr, size_t size) {
+	ItemTypeCF<Expr> fillExpr(ComplexPointer<float> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillComplex(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillComplex(pointer, expr, size);
@@ -137,7 +132,7 @@ private:
 		}
 	}
 	template<class Expr>
-	ItemTypeCD<Expr> fillBasic(ComplexPointer<double> pointer, Expr expr, size_t size) {
+	ItemTypeCD<Expr> fillExpr(ComplexPointer<double> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillComplex(pointer, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillComplex(pointer, expr, size);
@@ -146,7 +141,7 @@ private:
 		}
 	}
 	template<class Expr>
-	ItemTypeCF<Expr> fillBasic(SplitPointer<float> pointer, Expr expr, size_t size) {
+	ItemTypeCF<Expr> fillExpr(SplitPointer<float> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillSplit(pointer.real, pointer.imag, expr, size);
@@ -155,7 +150,7 @@ private:
 		}
 	}
 	template<class Expr>
-	ItemTypeCD<Expr> fillBasic(SplitPointer<double> pointer, Expr expr, size_t size) {
+	ItemTypeCD<Expr> fillExpr(SplitPointer<double> pointer, Expr expr, size_t size) {
 		switch (simdArch) {
 			case SimdArch::sse2: return Sse2Fill::fillSplit(pointer.real, pointer.imag, expr, size);
 			case SimdArch::sse4_1: return Sse41Fill::fillSplit(pointer.real, pointer.imag, expr, size);
@@ -176,12 +171,12 @@ private:
 	}
 	// Filling a split-complex vector with real values won't hit the specialisations below, so we handle it here
 	template<class Expr>
-	ItemTypeF<Expr> fillBasic(SplitPointer<float> pointer, Expr expr, size_t size) {
+	ItemTypeF<Expr> fillExpr(SplitPointer<float> pointer, Expr expr, size_t size) {
 		fillExpr(pointer.real, expr, size);
 		clear(pointer.imag, size);
 	}
 	template<class Expr>
-	ItemTypeD<Expr> fillBasic(SplitPointer<double> pointer, Expr expr, size_t size) {
+	ItemTypeD<Expr> fillExpr(SplitPointer<double> pointer, Expr expr, size_t size) {
 		fillExpr(pointer.real, expr, size);
 		clear(pointer.imag, size);
 	}

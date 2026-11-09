@@ -1,57 +1,50 @@
-/* Generic SIMD expression evaluation, given a class of basic operations (types, memory access, arithmetic and SSMF functions) such as `Sse2`.
+/* Generic SIMD expression evaluation, given basic operations (types, memory access, arithmetic and SSMF functions) for each scalar type, as `ArchFloat` and `ArchDouble`.
 
-GCC/Clang need #pragma wrapped around all the functions which we want to inline with a particular architecture inside, which means we can't just do it with a template.  Instead, we have this (unguarded, namespace-agnostic) fill class which assumes the architecture is present as `Arch`, and can be included from with different namespaces.
+GCC/Clang need #pragma wrapped around all the functions which we want to inline with a particular architecture inside, which means we can't just do it with a template.  Instead, we have this (unguarded, namespace-agnostic) fill class which assumes `ArchFloat` and `ArchDouble` are present, and can be included from with different namespaces.
+
+Each of those has a vector type `V` (which can be the same type for both, e.g. MSVC's NEON types are all `__n128`) and a `Scalar` type.  The vector type is never used to choose between them: float code calls `ArchFloat::` and double code calls `ArchDouble::`.
 */
 struct SimdFill {
 	// The elements left over after the last full vector
 	using ScalarFill = ::signalsmith::linear::simd_scalar::SimdFill;
 
-	using F = typename Arch::Float;
-	using D = typename Arch::Double;
+	using F = typename ArchFloat::V;
+	using D = typename ArchDouble::V;
 	struct ComplexFloat {
+		using Arch = ArchFloat;
 		F real, imag;
 	};
 	struct ComplexDouble {
+		using Arch = ArchDouble;
 		D real, imag;
 	};
-	// Vector type for a scalar type, and how many lanes it has.  These can differ between float and double (e.g. for the scalar `Arch`)
 	template<class S>
-	using Vector = decltype(Arch::load((const S *)nullptr));
+	using ArchFor = typename std::conditional<std::is_same<S, float>::value, ArchFloat, ArchDouble>::type;
+	// How many lanes for a scalar type.  These can differ between float and double (e.g. for the scalar `ArchDouble` used by 32-bit NEON)
 	template<class S>
 	static constexpr size_t lanes() {
-		return sizeof(Vector<S>)/sizeof(S);
+		return sizeof(typename ArchFor<S>::V)/sizeof(S);
 	}
 
 	template<class S>
 	static bool pointerAligned(const S *ptr) {
-		return (size_t(ptr)&(sizeof(Vector<S>) - 1)) == 0;
+		return (size_t(ptr)&(sizeof(typename ArchFor<S>::V) - 1)) == 0;
 	}
 	template<class S>
 	static bool pointerAligned(const std::complex<S> *ptr) {
 		return pointerAligned(reinterpret_cast<const S *>(ptr));
 	}
 
-	template<class V>
-	static V k(double v) {
-		V result;
-		Arch::splat(result, v);
-		return result;
-	}
-	static float scalarOf(F);
-	static double scalarOf(D);
-	static F smallestNormal(F) {return k<F>(std::numeric_limits<float>::min());}
-	static D smallestNormal(D) {return k<D>(std::numeric_limits<double>::min());}
-
 	template<bool aligned, class S>
-	static auto load(const S *pointer) -> decltype(Arch::load(pointer)) {
-		return aligned ? Arch::load(pointer) : Arch::loadu(pointer);
+	static typename ArchFor<S>::V load(const S *pointer) {
+		return aligned ? ArchFor<S>::load(pointer) : ArchFor<S>::loadu(pointer);
 	}
-	template<bool aligned, class S, class V>
-	static void store(S *pointer, V v) {
+	template<bool aligned, class S>
+	static void store(S *pointer, typename ArchFor<S>::V v) {
 		if (aligned) {
-			Arch::store(pointer, v);
+			ArchFor<S>::store(pointer, v);
 		} else {
-			Arch::storeu(pointer, v);
+			ArchFor<S>::storeu(pointer, v);
 		}
 	}
 
@@ -92,7 +85,7 @@ struct SimdFill {
 			auto c = getComplex<aligned>(expr, i, (const S *)nullptr);
 			S *s = reinterpret_cast<S *>(pointer + i);
 			decltype(c.real) a, b;
-			Arch::interleave(c.real, c.imag, a, b);
+			ArchFor<S>::interleave(c.real, c.imag, a, b);
 			store<aligned>(s, a);
 			store<aligned>(s + lanes, b);
 		}
@@ -155,7 +148,7 @@ struct SimdFill {
 	static C loadComplex(const std::complex<S> *pointer) {
 		const S *s = reinterpret_cast<const S *>(pointer);
 		C c;
-		Arch::deinterleave(load<aligned>(s), load<aligned>(s + lanes<S>()), c.real, c.imag);
+		ArchFor<S>::deinterleave(load<aligned>(s), load<aligned>(s + lanes<S>()), c.real, c.imag);
 		return c;
 	}
 	template<bool aligned>
@@ -187,60 +180,67 @@ struct SimdFill {
 	}
 	template<bool aligned, class V>
 	static F getFloat(expression::ConstantExpr<V> expr, size_t) {
-		return k<F>(float(expr.value));
+		return ArchFloat::splat(float(expr.value));
 	}
 	template<bool aligned, class V>
 	static D getDouble(expression::ConstantExpr<V> expr, size_t) {
-		return k<D>(double(expr.value));
+		return ArchDouble::splat(double(expr.value));
 	}
 	template<bool aligned, class V>
 	static ComplexFloat getCFloat(expression::ConstantExpr<V> expr, size_t) {
 		std::complex<float> value = expr.value;
-		return {k<F>(value.real()), k<F>(value.imag())};
+		return {ArchFloat::splat(value.real()), ArchFloat::splat(value.imag())};
 	}
 	template<bool aligned, class V>
 	static ComplexDouble getCDouble(expression::ConstantExpr<V> expr, size_t) {
 		std::complex<double> value = expr.value;
-		return {k<D>(value.real()), k<D>(value.imag())};
+		return {ArchDouble::splat(value.real()), ArchDouble::splat(value.imag())};
 	}
 
 	// Functions which mathfun doesn't define, composed from ones it does
-	template<class V>
-	static V asinh(V x) {
+	template<class A>
+	static typename A::V asinh(typename A::V x) {
+		using V = typename A::V;
 		// log(|x| + sqrt(x² + 1)): absolute (not relative) accuracy near 0, and x² overflows for |x| > ~1e19 (or ~1e154 for double)
-		V ax = Arch::abs(x);
-		V r = Arch::log(Arch::add(ax, Arch::sqrt(Arch::add(Arch::pow2(ax), k<V>(1)))));
-		return Arch::copysign(r, x);
+		V ax = A::abs(x);
+		V r = A::log(A::add(ax, A::sqrt(A::add(A::pow2(ax), A::splat(1)))));
+		return A::copysign(r, x);
 	}
-	template<class V>
-	static V acosh(V x) {
+	template<class A>
+	static typename A::V acosh(typename A::V x) {
+		using V = typename A::V;
 		// log(x + sqrt((x - 1)(x + 1))): absolute (not relative) accuracy near 1, and overflows for x > ~1e19 (or ~1e154 for double)
-		V s = Arch::sqrt(Arch::mul(Arch::sub(x, k<V>(1)), Arch::add(x, k<V>(1))));
-		return Arch::log(Arch::add(x, s));
+		V s = A::sqrt(A::mul(A::sub(x, A::splat(1)), A::add(x, A::splat(1))));
+		return A::log(A::add(x, s));
 	}
-	template<class V>
-	static V atanh(V x) {
+	template<class A>
+	static typename A::V atanh(typename A::V x) {
+		using V = typename A::V;
 		// log((1 + x)/(1 - x))/2: absolute (not relative) accuracy near 0
-		V ratio = Arch::div(Arch::add(k<V>(1), x), Arch::sub(k<V>(1), x));
-		return Arch::mul(Arch::log(ratio), k<V>(0.5));
+		V ratio = A::div(A::add(A::splat(1), x), A::sub(A::splat(1), x));
+		return A::mul(A::log(ratio), A::splat(0.5));
 	}
 
 	// Complex functions, from the real ones.  Unless noted, they have similar accuracy to the real ones (relative to |z| or |result|), and they work for any z which doesn't overflow or produce Inf/NaN.
 	template<class C>
 	static decltype(C::real) complexAbs(C z) {
-		return Arch::hypot(z.real, z.imag);
+		using A = typename C::Arch;
+		return A::hypot(z.real, z.imag);
 	}
 	template<class C>
 	static decltype(C::real) complexNorm(C z) {
-		return Arch::fma(z.real, z.real, Arch::pow2(z.imag));
+		using A = typename C::Arch;
+		return A::fma(z.real, z.real, A::pow2(z.imag));
 	}
 	template<class C>
 	static decltype(C::real) complexArg(C z) {
-		return Arch::atan2(z.imag, z.real); // nonsense for z == 0
+		using A = typename C::Arch;
+		return A::atan2(z.imag, z.real); // nonsense for z == 0
 	}
 	template<class C>
 	static C complexConj(C z) {
-		return {z.real, Arch::neg(z.imag)};
+		using A = typename C::Arch;
+		return {z.real, A::neg(z.imag)};
 	}
 	template<class C>
 	static decltype(C::real) complexReal(C z) {
@@ -253,172 +253,189 @@ struct SimdFill {
 	// Complex multiply/divide use FMA, so e.g. z*conj(z) can have a non-zero imaginary part
 	template<class C>
 	static C complexMul(C a, C b) {
-		return {Arch::fms(a.real, b.real, Arch::mul(a.imag, b.imag)), Arch::fma(a.real, b.imag, Arch::mul(a.imag, b.real))};
+		using A = typename C::Arch;
+		return {A::fms(a.real, b.real, A::mul(a.imag, b.imag)), A::fma(a.real, b.imag, A::mul(a.imag, b.real))};
 	}
 	// conj(a)*b
 	template<class C>
 	static C complexConjMul(C a, C b) {
-		return {Arch::fma(a.real, b.real, Arch::mul(a.imag, b.imag)), Arch::fms(a.real, b.imag, Arch::mul(a.imag, b.real))};
+		using A = typename C::Arch;
+		return {A::fma(a.real, b.real, A::mul(a.imag, b.imag)), A::fms(a.real, b.imag, A::mul(a.imag, b.real))};
 	}
 	// a*b + c
 	template<class C>
 	static C complexMulAdd(C a, C b, C c) {
-		return {Arch::fma(a.real, b.real, Arch::fnma(a.imag, b.imag, c.real)), Arch::fma(a.real, b.imag, Arch::fma(a.imag, b.real, c.imag))};
+		using A = typename C::Arch;
+		return {A::fma(a.real, b.real, A::fnma(a.imag, b.imag, c.real)), A::fma(a.real, b.imag, A::fma(a.imag, b.real, c.imag))};
 	}
 	// conj(a)*b + c
 	template<class C>
 	static C complexConjMulAdd(C a, C b, C c) {
-		return {Arch::fma(a.real, b.real, Arch::fma(a.imag, b.imag, c.real)), Arch::fma(a.real, b.imag, Arch::fnma(a.imag, b.real, c.imag))};
+		using A = typename C::Arch;
+		return {A::fma(a.real, b.real, A::fma(a.imag, b.imag, c.real)), A::fma(a.real, b.imag, A::fnma(a.imag, b.real, c.imag))};
 	}
 	template<class C>
 	static C complexDiv(C a, C b) {
+		using A = typename C::Arch;
 		auto mag2 = complexNorm(b);
 		C n = complexConjMul(b, a);
-		return {Arch::div(n.real, mag2), Arch::div(n.imag, mag2)};
+		return {A::div(n.real, mag2), A::div(n.imag, mag2)};
 	}
 	template<class C>
 	static C complexExp(C z) {
-		using V = decltype(z.real);
-		V e = Arch::exp(z.real), s, c;
-		Arch::sincos(z.imag, s, c);
-		return {Arch::mul(e, c), Arch::mul(e, s)};
+		using A = typename C::Arch;
+		using V = typename A::V;
+		V e = A::exp(z.real), s, c;
+		A::sincos(z.imag, &s, &c);
+		return {A::mul(e, c), A::mul(e, s)};
 	}
 	template<class C>
 	static C complexLog(C z) {
+		using A = typename C::Arch;
 		// Absolute (not relative) accuracy for the real part when |z| is close to 1, and nonsense for z == 0
-		return {Arch::log(complexAbs(z)), complexArg(z)};
+		return {A::log(complexAbs(z)), complexArg(z)};
 	}
 	template<class C>
 	static C complexLog10(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		C l = complexLog(z);
-		V scale = k<V>(0.43429448190325182); // 1/ln(10)
-		return {Arch::mul(l.real, scale), Arch::mul(l.imag, scale)};
+		V scale = A::splat(0.43429448190325182); // 1/ln(10)
+		return {A::mul(l.real, scale), A::mul(l.imag, scale)};
 	}
 	template<class C>
 	static C complexSqrt(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		// t = sqrt((|z| + |re|)/2) and h = im/(2t) are both accurate, and are (re, im) or (|im|, ±re) depending on the sign of re
-		V w = Arch::mul(Arch::add(complexAbs(z), Arch::abs(z.real)), k<V>(0.5));
+		V w = A::mul(A::add(complexAbs(z), A::abs(z.real)), A::splat(0.5));
 		// Clamped so that t (and h) are exactly 0 when z == 0
-		V invT = Arch::div(k<V>(1), Arch::sqrt(Arch::max(w, smallestNormal(w))));
-		V t = Arch::mul(w, invT), h = Arch::mul(Arch::mul(z.imag, k<V>(0.5)), invT);
-		return {Arch::ifNegative(z.real, Arch::abs(h), t), Arch::ifNegative(z.real, Arch::copysign(t, z.imag), h)};
+		V invT = A::div(A::splat(1), A::sqrt(A::max(w, A::splat(std::numeric_limits<typename A::Scalar>::min()))));
+		V t = A::mul(w, invT), h = A::mul(A::mul(z.imag, A::splat(0.5)), invT);
+		return {A::ifNegative(z.real, A::abs(h), t), A::ifNegative(z.real, A::copysign(t, z.imag), h)};
 	}
 	template<class C>
 	static C complexSin(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		V s, c;
-		Arch::sincos(z.real, s, c);
-		return {Arch::mul(s, Arch::cosh(z.imag)), Arch::mul(c, Arch::sinh(z.imag))};
+		A::sincos(z.real, &s, &c);
+		return {A::mul(s, A::cosh(z.imag)), A::mul(c, A::sinh(z.imag))};
 	}
 	template<class C>
 	static C complexCos(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		V s, c;
-		Arch::sincos(z.real, s, c);
-		return {Arch::mul(c, Arch::cosh(z.imag)), Arch::neg(Arch::mul(s, Arch::sinh(z.imag)))};
+		A::sincos(z.real, &s, &c);
+		return {A::mul(c, A::cosh(z.imag)), A::neg(A::mul(s, A::sinh(z.imag)))};
 	}
 	template<class C>
 	static C complexSinh(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		V s, c;
-		Arch::sincos(z.imag, s, c);
-		return {Arch::mul(Arch::sinh(z.real), c), Arch::mul(Arch::cosh(z.real), s)};
+		A::sincos(z.imag, &s, &c);
+		return {A::mul(A::sinh(z.real), c), A::mul(A::cosh(z.real), s)};
 	}
 	template<class C>
 	static C complexCosh(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		V s, c;
-		Arch::sincos(z.imag, s, c);
-		return {Arch::mul(Arch::cosh(z.real), c), Arch::mul(Arch::sinh(z.real), s)};
+		A::sincos(z.imag, &s, &c);
+		return {A::mul(A::cosh(z.real), c), A::mul(A::sinh(z.real), s)};
 	}
 	template<class C>
 	static C complexTan(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		// (sin(2a), sinh(2b))/(cos(2a) + cosh(2b)), with the denominator written as 2(cos²(a) + sinh²(b)) to avoid cancellation near the poles.  sinh²(b) overflows for |b| > ~44 (or ~355 for double)
-		V s, c, sh = Arch::sinh(z.imag), ch = Arch::cosh(z.imag);
-		Arch::sincos(z.real, s, c);
-		V invD = Arch::div(k<V>(1), Arch::add(Arch::pow2(c), Arch::pow2(sh)));
-		return {Arch::mul(Arch::mul(s, c), invD), Arch::mul(Arch::mul(sh, ch), invD)};
+		V s, c, sh = A::sinh(z.imag), ch = A::cosh(z.imag);
+		A::sincos(z.real, &s, &c);
+		V invD = A::div(A::splat(1), A::add(A::pow2(c), A::pow2(sh)));
+		return {A::mul(A::mul(s, c), invD), A::mul(A::mul(sh, ch), invD)};
 	}
 	template<class C>
 	static C complexTanh(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		// (sinh(2a), sin(2b))/(cosh(2a) + cos(2b)), with the denominator written as 2(sinh²(a) + cos²(b)) to avoid cancellation near the poles.  sinh²(a) overflows for |a| > ~44 (or ~355 for double)
-		V s, c, sh = Arch::sinh(z.real), ch = Arch::cosh(z.real);
-		Arch::sincos(z.imag, s, c);
-		V invD = Arch::div(k<V>(1), Arch::add(Arch::pow2(sh), Arch::pow2(c)));
-		return {Arch::mul(Arch::mul(sh, ch), invD), Arch::mul(Arch::mul(s, c), invD)};
+		V s, c, sh = A::sinh(z.real), ch = A::cosh(z.real);
+		A::sincos(z.imag, &s, &c);
+		V invD = A::div(A::splat(1), A::add(A::pow2(sh), A::pow2(c)));
+		return {A::mul(A::mul(sh, ch), invD), A::mul(A::mul(s, c), invD)};
 	}
 	template<class C>
 	static C complexAsinh(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		// log(w + sqrt(w² + 1)) with w = ±z so that re(w) >= 0 (avoiding cancellation), then the sign put back.
 		// Absolute (not relative) accuracy near 0 and near the branch points ±i, and w² overflows for |z| > ~1e19 (or ~1e154 for double)
-		V sign = Arch::copysign(k<V>(1), z.real);
-		C w{Arch::abs(z.real), Arch::mul(z.imag, sign)};
-		C w2p1{Arch::add(Arch::mul(Arch::sub(w.real, w.imag), Arch::add(w.real, w.imag)), k<V>(1)), Arch::mul(Arch::add(w.real, w.real), w.imag)};
+		V sign = A::copysign(A::splat(1), z.real);
+		C w{A::abs(z.real), A::mul(z.imag, sign)};
+		C w2p1{A::add(A::mul(A::sub(w.real, w.imag), A::add(w.real, w.imag)), A::splat(1)), A::mul(A::add(w.real, w.real), w.imag)};
 		C q = complexSqrt(w2p1);
-		C l = complexLog(C{Arch::add(w.real, q.real), Arch::add(w.imag, q.imag)});
-		return {Arch::mul(l.real, sign), Arch::mul(l.imag, sign)};
+		C l = complexLog(C{A::add(w.real, q.real), A::add(w.imag, q.imag)});
+		return {A::mul(l.real, sign), A::mul(l.imag, sign)};
 	}
 	template<class C>
 	static C complexAsin(C z) {
+		using A = typename C::Arch;
 		// -i*asinh(i*z)
-		C a = complexAsinh(C{Arch::neg(z.imag), z.real});
-		return {a.imag, Arch::neg(a.real)};
+		C a = complexAsinh(C{A::neg(z.imag), z.real});
+		return {a.imag, A::neg(a.real)};
 	}
 	template<class C>
 	static C complexAcos(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
 		// pi/2 - asin(z)
 		C a = complexAsin(z);
-		return {Arch::sub(k<V>(1.5707963267948966), a.real), Arch::neg(a.imag)};
+		return {A::sub(A::splat(1.5707963267948966), a.real), A::neg(a.imag)};
 	}
 	template<class C>
 	static C complexAcosh(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
 		// log(z + sqrt(z + 1)*sqrt(z - 1)): absolute (not relative) accuracy near ±1, and z² overflows for |z| > ~1e19 (or ~1e154 for double)
-		C s = complexMul(complexSqrt(C{Arch::add(z.real, k<V>(1)), z.imag}), complexSqrt(C{Arch::sub(z.real, k<V>(1)), z.imag}));
-		return complexLog(C{Arch::add(z.real, s.real), Arch::add(z.imag, s.imag)});
+		C s = complexMul(complexSqrt(C{A::add(z.real, A::splat(1)), z.imag}), complexSqrt(C{A::sub(z.real, A::splat(1)), z.imag}));
+		return complexLog(C{A::add(z.real, s.real), A::add(z.imag, s.imag)});
 	}
 	template<class C>
 	static C complexAtanh(C z) {
-		using V = decltype(z.real);
+		using A = typename C::Arch;
+		using V = typename A::V;
 		// (log(|1 + z|²/|1 - z|²)/4, atan2(2b, (1 - a)(1 + a) - b²)/2): absolute (not relative) accuracy near 0 and near the branch points ±1
-		V b2 = Arch::pow2(z.imag);
-		V onePlus = Arch::add(k<V>(1), z.real), oneMinus = Arch::sub(k<V>(1), z.real);
-		V ratio = Arch::div(Arch::add(Arch::pow2(onePlus), b2), Arch::add(Arch::pow2(oneMinus), b2));
-		V angle = Arch::atan2(Arch::add(z.imag, z.imag), Arch::sub(Arch::mul(oneMinus, onePlus), b2));
-		return {Arch::mul(Arch::log(ratio), k<V>(0.25)), Arch::mul(angle, k<V>(0.5))};
+		V b2 = A::pow2(z.imag);
+		V onePlus = A::add(A::splat(1), z.real), oneMinus = A::sub(A::splat(1), z.real);
+		V ratio = A::div(A::add(A::pow2(onePlus), b2), A::add(A::pow2(oneMinus), b2));
+		V angle = A::atan2(A::add(z.imag, z.imag), A::sub(A::mul(oneMinus, onePlus), b2));
+		return {A::mul(A::log(ratio), A::splat(0.25)), A::mul(angle, A::splat(0.5))};
 	}
 	template<class C>
 	static C complexAtan(C z) {
+		using A = typename C::Arch;
 		// -i*atanh(i*z)
-		C a = complexAtanh(C{Arch::neg(z.imag), z.real});
-		return {a.imag, Arch::neg(a.real)};
+		C a = complexAtanh(C{A::neg(z.imag), z.real});
+		return {a.imag, A::neg(a.real)};
 	}
-	static ComplexFloat complexPolar(F r, F theta) {
-		F s, c;
-		Arch::sincos(theta, s, c);
-		return {Arch::mul(r, c), Arch::mul(r, s)};
-	}
-	static ComplexDouble complexPolar(D r, D theta) {
-		D s, c;
-		Arch::sincos(theta, s, c);
-		return {Arch::mul(r, c), Arch::mul(r, s)};
+	template<class C>
+	static C complexPolar(decltype(C::real) r, decltype(C::real) theta) {
+		using A = typename C::Arch;
+		decltype(C::real) s, c;
+		A::sincos(theta, &s, &c);
+		return {A::mul(r, c), A::mul(r, s)};
 	}
 
 	// No vector approximation: call the `std::` function on each lane
 #define SIGNALSMITH_SCALAR_FALLBACK(fn) \
-	template<class V> \
-	static V fn(V v) { \
-		using S = decltype(scalarOf(v)); \
+	template<class A> \
+	static typename A::V fn(typename A::V v) { \
+		using V = typename A::V; \
+		using S = typename A::Scalar; \
 		alignas(V) S array[sizeof(V)/sizeof(S)]; \
-		Arch::store(array, v); \
+		A::store(array, v); \
 		for (auto &x : array) x = std::fn(x); \
-		return Arch::load(array); \
+		return A::load(array); \
 	}
 	SIGNALSMITH_SCALAR_FALLBACK(tgamma)
 	SIGNALSMITH_SCALAR_FALLBACK(lgamma)
@@ -445,80 +462,80 @@ struct SimdFill {
 #undef SIGNALSMITH_EXPR_BINARY
 
 	// Expressions which map neatly to a single function
-#define SIGNALSMITH_EXPR_UNARY(Name, fn) \
+#define SIGNALSMITH_EXPR_UNARY(Name, fnFloat, fnDouble) \
 	template<class A> \
 	static bool isAligned(expression::Name<A> expr) { \
 		return isAligned(expr.a); \
 	} \
 	template<bool aligned, class A, class=ItemTypeF<A>> \
 	static F getFloat(expression::Name<A> expr, size_t i) { \
-		return fn(getFloat<aligned>(expr.a, i)); \
+		return fnFloat(getFloat<aligned>(expr.a, i)); \
 	} \
 	template<bool aligned, class A, class=ItemTypeD<A>> \
 	static D getDouble(expression::Name<A> expr, size_t i) { \
-		return fn(getDouble<aligned>(expr.a, i)); \
+		return fnDouble(getDouble<aligned>(expr.a, i)); \
 	}
-	SIGNALSMITH_EXPR_UNARY(Norm, Arch::pow2)
-	SIGNALSMITH_EXPR_UNARY(Abs, Arch::abs)
-	SIGNALSMITH_EXPR_UNARY(Neg, Arch::neg)
-	SIGNALSMITH_EXPR_UNARY(Sqrt, Arch::sqrt)
-	SIGNALSMITH_EXPR_UNARY(Cbrt, Arch::cbrt)
-	SIGNALSMITH_EXPR_UNARY(Ceil, Arch::ceil)
-	SIGNALSMITH_EXPR_UNARY(Floor, Arch::floor)
-	SIGNALSMITH_EXPR_UNARY(Trunc, Arch::trunc)
-	SIGNALSMITH_EXPR_UNARY(Round, Arch::round)
-	SIGNALSMITH_EXPR_UNARY(Log, Arch::log)
-	SIGNALSMITH_EXPR_UNARY(Log2, Arch::log2)
-	SIGNALSMITH_EXPR_UNARY(Log10, Arch::log10)
-	SIGNALSMITH_EXPR_UNARY(Exp, Arch::exp)
-	SIGNALSMITH_EXPR_UNARY(Exp2, Arch::exp2)
-	SIGNALSMITH_EXPR_UNARY(Sin, Arch::sin)
-	SIGNALSMITH_EXPR_UNARY(Cos, Arch::cos)
-	SIGNALSMITH_EXPR_UNARY(Tan, Arch::tan)
-	SIGNALSMITH_EXPR_UNARY(Asin, Arch::asin)
-	SIGNALSMITH_EXPR_UNARY(Acos, Arch::acos)
-	SIGNALSMITH_EXPR_UNARY(Atan, Arch::atan)
-	SIGNALSMITH_EXPR_UNARY(Sinh, Arch::sinh)
-	SIGNALSMITH_EXPR_UNARY(Cosh, Arch::cosh)
-	SIGNALSMITH_EXPR_UNARY(Tanh, Arch::tanh)
-	SIGNALSMITH_EXPR_UNARY(Asinh, asinh)
-	SIGNALSMITH_EXPR_UNARY(Acosh, acosh)
-	SIGNALSMITH_EXPR_UNARY(Atanh, atanh)
-	SIGNALSMITH_EXPR_UNARY(Erf, Arch::erf)
-	SIGNALSMITH_EXPR_UNARY(Erfc, Arch::erfc)
-	SIGNALSMITH_EXPR_UNARY(Tgamma, tgamma)
-	SIGNALSMITH_EXPR_UNARY(Lgamma, lgamma)
+	SIGNALSMITH_EXPR_UNARY(Norm, ArchFloat::pow2, ArchDouble::pow2)
+	SIGNALSMITH_EXPR_UNARY(Abs, ArchFloat::abs, ArchDouble::abs)
+	SIGNALSMITH_EXPR_UNARY(Neg, ArchFloat::neg, ArchDouble::neg)
+	SIGNALSMITH_EXPR_UNARY(Sqrt, ArchFloat::sqrt, ArchDouble::sqrt)
+	SIGNALSMITH_EXPR_UNARY(Cbrt, ArchFloat::cbrt, ArchDouble::cbrt)
+	SIGNALSMITH_EXPR_UNARY(Ceil, ArchFloat::ceil, ArchDouble::ceil)
+	SIGNALSMITH_EXPR_UNARY(Floor, ArchFloat::floor, ArchDouble::floor)
+	SIGNALSMITH_EXPR_UNARY(Trunc, ArchFloat::trunc, ArchDouble::trunc)
+	SIGNALSMITH_EXPR_UNARY(Round, ArchFloat::round, ArchDouble::round)
+	SIGNALSMITH_EXPR_UNARY(Log, ArchFloat::log, ArchDouble::log)
+	SIGNALSMITH_EXPR_UNARY(Log2, ArchFloat::log2, ArchDouble::log2)
+	SIGNALSMITH_EXPR_UNARY(Log10, ArchFloat::log10, ArchDouble::log10)
+	SIGNALSMITH_EXPR_UNARY(Exp, ArchFloat::exp, ArchDouble::exp)
+	SIGNALSMITH_EXPR_UNARY(Exp2, ArchFloat::exp2, ArchDouble::exp2)
+	SIGNALSMITH_EXPR_UNARY(Sin, ArchFloat::sin, ArchDouble::sin)
+	SIGNALSMITH_EXPR_UNARY(Cos, ArchFloat::cos, ArchDouble::cos)
+	SIGNALSMITH_EXPR_UNARY(Tan, ArchFloat::tan, ArchDouble::tan)
+	SIGNALSMITH_EXPR_UNARY(Asin, ArchFloat::asin, ArchDouble::asin)
+	SIGNALSMITH_EXPR_UNARY(Acos, ArchFloat::acos, ArchDouble::acos)
+	SIGNALSMITH_EXPR_UNARY(Atan, ArchFloat::atan, ArchDouble::atan)
+	SIGNALSMITH_EXPR_UNARY(Sinh, ArchFloat::sinh, ArchDouble::sinh)
+	SIGNALSMITH_EXPR_UNARY(Cosh, ArchFloat::cosh, ArchDouble::cosh)
+	SIGNALSMITH_EXPR_UNARY(Tanh, ArchFloat::tanh, ArchDouble::tanh)
+	SIGNALSMITH_EXPR_UNARY(Asinh, asinh<ArchFloat>, asinh<ArchDouble>)
+	SIGNALSMITH_EXPR_UNARY(Acosh, acosh<ArchFloat>, acosh<ArchDouble>)
+	SIGNALSMITH_EXPR_UNARY(Atanh, atanh<ArchFloat>, atanh<ArchDouble>)
+	SIGNALSMITH_EXPR_UNARY(Erf, ArchFloat::erf, ArchDouble::erf)
+	SIGNALSMITH_EXPR_UNARY(Erfc, ArchFloat::erfc, ArchDouble::erfc)
+	SIGNALSMITH_EXPR_UNARY(Tgamma, tgamma<ArchFloat>, tgamma<ArchDouble>)
+	SIGNALSMITH_EXPR_UNARY(Lgamma, lgamma<ArchFloat>, lgamma<ArchDouble>)
 #undef SIGNALSMITH_EXPR_UNARY
 #define SIGNALSMITH_EXPR_BINARY(Name, fn) \
 	template<bool aligned, class A, class B> \
 	static F getFloat(expression::Name<A, B> expr, size_t i) { \
-		return fn(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i)); \
+		return ArchFloat::fn(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i)); \
 	} \
 	template<bool aligned, class A, class B> \
 	static D getDouble(expression::Name<A, B> expr, size_t i) { \
-		return fn(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i)); \
+		return ArchDouble::fn(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i)); \
 	}
-	SIGNALSMITH_EXPR_BINARY(Add, Arch::add)
-	SIGNALSMITH_EXPR_BINARY(Sub, Arch::sub)
-	SIGNALSMITH_EXPR_BINARY(Mul, Arch::mul)
-	SIGNALSMITH_EXPR_BINARY(Div, Arch::div)
-	SIGNALSMITH_EXPR_BINARY(Max, Arch::max)
-	SIGNALSMITH_EXPR_BINARY(Min, Arch::min)
-	SIGNALSMITH_EXPR_BINARY(Dim, Arch::dim)
-	SIGNALSMITH_EXPR_BINARY(Copysign, Arch::copysign)
-	SIGNALSMITH_EXPR_BINARY(Pow, Arch::pow)
-	SIGNALSMITH_EXPR_BINARY(Atan2, Arch::atan2)
-	SIGNALSMITH_EXPR_BINARY(Hypot, Arch::hypot)
+	SIGNALSMITH_EXPR_BINARY(Add, add)
+	SIGNALSMITH_EXPR_BINARY(Sub, sub)
+	SIGNALSMITH_EXPR_BINARY(Mul, mul)
+	SIGNALSMITH_EXPR_BINARY(Div, div)
+	SIGNALSMITH_EXPR_BINARY(Max, max)
+	SIGNALSMITH_EXPR_BINARY(Min, min)
+	SIGNALSMITH_EXPR_BINARY(Dim, dim)
+	SIGNALSMITH_EXPR_BINARY(Copysign, copysign)
+	SIGNALSMITH_EXPR_BINARY(Pow, pow)
+	SIGNALSMITH_EXPR_BINARY(Atan2, atan2)
+	SIGNALSMITH_EXPR_BINARY(Hypot, hypot)
 #undef SIGNALSMITH_EXPR_BINARY
 	// Fused multiply-add shapes.  linear.h puts things in a consistent shape for better matching
 #define SIGNALSMITH_EXPR_FMA(fn, a, b, c, ...) \
 	template<bool aligned, class A, class B, class C> \
 	static F getFloat(__VA_ARGS__ expr, size_t i) { \
-		return Arch::fn(getFloat<aligned>(a, i), getFloat<aligned>(b, i), getFloat<aligned>(c, i)); \
+		return ArchFloat::fn(getFloat<aligned>(a, i), getFloat<aligned>(b, i), getFloat<aligned>(c, i)); \
 	} \
 	template<bool aligned, class A, class B, class C> \
 	static D getDouble(__VA_ARGS__ expr, size_t i) { \
-		return Arch::fn(getDouble<aligned>(a, i), getDouble<aligned>(b, i), getDouble<aligned>(c, i)); \
+		return ArchDouble::fn(getDouble<aligned>(a, i), getDouble<aligned>(b, i), getDouble<aligned>(c, i)); \
 	}
 	SIGNALSMITH_EXPR_FMA(fma, expr.a.a, expr.a.b, expr.b, expression::Add<expression::Mul<A, B>, C>) // A*B + C
 	SIGNALSMITH_EXPR_FMA(fms, expr.a.a, expr.a.b, expr.b, expression::Sub<expression::Mul<A, B>, C>) // A*B - C
@@ -528,32 +545,32 @@ struct SimdFill {
 	// A/sqrt(B) -> A*rsqrt(B), which isn't exact (but is often faster)
 	template<bool aligned, class A, class B>
 	static F getFloat(expression::Div<A, expression::Sqrt<B>> expr, size_t i) {
-		return Arch::mul(getFloat<aligned>(expr.a, i), Arch::rsqrt(getFloat<aligned>(expr.b.a, i)));
+		return ArchFloat::mul(getFloat<aligned>(expr.a, i), ArchFloat::rsqrt(getFloat<aligned>(expr.b.a, i)));
 	}
 	template<bool aligned, class A, class B>
 	static D getDouble(expression::Div<A, expression::Sqrt<B>> expr, size_t i) {
-		return Arch::mul(getDouble<aligned>(expr.a, i), Arch::rsqrt(getDouble<aligned>(expr.b.a, i)));
+		return ArchDouble::mul(getDouble<aligned>(expr.a, i), ArchDouble::rsqrt(getDouble<aligned>(expr.b.a, i)));
 	}
 	// A*B - C*D matches both of the Sub shapes above, so it needs its own
 	template<bool aligned, class A, class B, class C, class D2>
 	static F getFloat(expression::Sub<expression::Mul<A, B>, expression::Mul<C, D2>> expr, size_t i) {
-		return Arch::fms(getFloat<aligned>(expr.a.a, i), getFloat<aligned>(expr.a.b, i), getFloat<aligned>(expr.b, i));
+		return ArchFloat::fms(getFloat<aligned>(expr.a.a, i), getFloat<aligned>(expr.a.b, i), getFloat<aligned>(expr.b, i));
 	}
 	template<bool aligned, class A, class B, class C, class D2>
 	static D getDouble(expression::Sub<expression::Mul<A, B>, expression::Mul<C, D2>> expr, size_t i) {
-		return Arch::fms(getDouble<aligned>(expr.a.a, i), getDouble<aligned>(expr.a.b, i), getDouble<aligned>(expr.b, i));
+		return ArchDouble::fms(getDouble<aligned>(expr.a.a, i), getDouble<aligned>(expr.a.b, i), getDouble<aligned>(expr.b, i));
 	}
 
 	// One-argument complex-to-complex
 	template<bool aligned, class A>
 	static ItemTypeCF<A, ComplexFloat> getCFloat(expression::Neg<A> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
-		return {Arch::neg(a.real), Arch::neg(a.imag)};
+		return {ArchFloat::neg(a.real), ArchFloat::neg(a.imag)};
 	}
 	template<bool aligned, class A>
 	static ItemTypeCD<A, ComplexDouble> getCDouble(expression::Neg<A> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a, i);
-		return {Arch::neg(a.real), Arch::neg(a.imag)};
+		return {ArchDouble::neg(a.real), ArchDouble::neg(a.imag)};
 	}
 
 	// Add
@@ -561,74 +578,74 @@ struct SimdFill {
 	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Add<A, B> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
 		auto b = getCFloat<aligned>(expr.b, i);
-		return {Arch::add(a.real, b.real), Arch::add(a.imag, b.imag)};
+		return {ArchFloat::add(a.real, b.real), ArchFloat::add(a.imag, b.imag)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Add<A, B> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a, i);
 		auto b = getCDouble<aligned>(expr.b, i);
-		return {Arch::add(a.real, b.real), Arch::add(a.imag, b.imag)};
+		return {ArchDouble::add(a.real, b.real), ArchDouble::add(a.imag, b.imag)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Add<A, B> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
 		auto b = getFloat<aligned>(expr.b, i);
-		return {Arch::add(a.real, b), a.imag};
+		return {ArchFloat::add(a.real, b), a.imag};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Add<A, B> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a, i);
 		auto b = getDouble<aligned>(expr.b, i);
-		return {Arch::add(a.real, b), a.imag};
+		return {ArchDouble::add(a.real, b), a.imag};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Add<A, B> expr, size_t i) {
 		auto a = getFloat<aligned>(expr.a, i);
 		auto b = getCFloat<aligned>(expr.b, i);
-		return {Arch::add(a, b.real), b.imag};
+		return {ArchFloat::add(a, b.real), b.imag};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Add<A, B> expr, size_t i) {
 		auto a = getDouble<aligned>(expr.a, i);
 		auto b = getCDouble<aligned>(expr.b, i);
-		return {Arch::add(a, b.real), b.imag};
+		return {ArchDouble::add(a, b.real), b.imag};
 	}
 	// Sub
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Sub<A, B> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
 		auto b = getCFloat<aligned>(expr.b, i);
-		return {Arch::sub(a.real, b.real), Arch::sub(a.imag, b.imag)};
+		return {ArchFloat::sub(a.real, b.real), ArchFloat::sub(a.imag, b.imag)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Sub<A, B> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a, i);
 		auto b = getCDouble<aligned>(expr.b, i);
-		return {Arch::sub(a.real, b.real), Arch::sub(a.imag, b.imag)};
+		return {ArchDouble::sub(a.real, b.real), ArchDouble::sub(a.imag, b.imag)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Sub<A, B> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
 		auto b = getFloat<aligned>(expr.b, i);
-		return {Arch::sub(a.real, b), a.imag};
+		return {ArchFloat::sub(a.real, b), a.imag};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Sub<A, B> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a, i);
 		auto b = getDouble<aligned>(expr.b, i);
-		return {Arch::sub(a.real, b), a.imag};
+		return {ArchDouble::sub(a.real, b), a.imag};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Sub<A, B> expr, size_t i) {
 		auto a = getFloat<aligned>(expr.a, i);
 		auto b = getCFloat<aligned>(expr.b, i);
-		return {Arch::sub(a, b.real), Arch::neg(b.imag)};
+		return {ArchFloat::sub(a, b.real), ArchFloat::neg(b.imag)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Sub<A, B> expr, size_t i) {
 		auto a = getDouble<aligned>(expr.a, i);
 		auto b = getCDouble<aligned>(expr.b, i);
-		return {Arch::sub(a, b.real), Arch::neg(b.imag)};
+		return {ArchDouble::sub(a, b.real), ArchDouble::neg(b.imag)};
 	}
 	// Mul
 	template<bool aligned, class A, class B>
@@ -643,25 +660,25 @@ struct SimdFill {
 	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Mul<A, B> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
 		auto b = getFloat<aligned>(expr.b, i);
-		return {Arch::mul(a.real, b), Arch::mul(a.imag, b)};
+		return {ArchFloat::mul(a.real, b), ArchFloat::mul(a.imag, b)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Mul<A, B> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a, i);
 		auto b = getDouble<aligned>(expr.b, i);
-		return {Arch::mul(a.real, b), Arch::mul(a.imag, b)};
+		return {ArchDouble::mul(a.real, b), ArchDouble::mul(a.imag, b)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Mul<A, B> expr, size_t i) {
 		auto a = getFloat<aligned>(expr.a, i);
 		auto b = getCFloat<aligned>(expr.b, i);
-		return {Arch::mul(a, b.real), Arch::mul(a, b.imag)};
+		return {ArchFloat::mul(a, b.real), ArchFloat::mul(a, b.imag)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Mul<A, B> expr, size_t i) {
 		auto a = getDouble<aligned>(expr.a, i);
 		auto b = getCDouble<aligned>(expr.b, i);
-		return {Arch::mul(a, b.real), Arch::mul(a, b.imag)};
+		return {ArchDouble::mul(a, b.real), ArchDouble::mul(a, b.imag)};
 	}
 	// conj(A)*B (linear.h puts the Conj on the left)
 	template<bool aligned, class A, class B>
@@ -688,7 +705,7 @@ struct SimdFill {
 		auto a = getCFloat<aligned>(expr.a.a, i);
 		auto b = getFloat<aligned>(expr.a.b, i);
 		auto c = getCFloat<aligned>(expr.b, i);
-		return {Arch::fma(a.real, b, c.real), Arch::fma(a.imag, b, c.imag)};
+		return {ArchFloat::fma(a.real, b, c.real), ArchFloat::fma(a.imag, b, c.imag)};
 	}
 	// A is real
 	template<bool aligned, class A, class B, class C>
@@ -696,7 +713,7 @@ struct SimdFill {
 		auto a = getFloat<aligned>(expr.a.a, i);
 		auto b = getCFloat<aligned>(expr.a.b, i);
 		auto c = getCFloat<aligned>(expr.b, i);
-		return {Arch::fma(a, b.real, c.real), Arch::fma(a, b.imag, c.imag)};
+		return {ArchFloat::fma(a, b.real, c.real), ArchFloat::fma(a, b.imag, c.imag)};
 	}
 	// A and B are complex, C is real
 	template<bool aligned, class A, class B, class C>
@@ -704,7 +721,7 @@ struct SimdFill {
 		auto a = getCFloat<aligned>(expr.a.a, i);
 		auto b = getCFloat<aligned>(expr.a.b, i);
 		auto c = getFloat<aligned>(expr.b, i);
-		return {Arch::fma(a.real, b.real, Arch::fnma(a.imag, b.imag, c)), Arch::fma(a.real, b.imag, Arch::mul(a.imag, b.real))};
+		return {ArchFloat::fma(a.real, b.real, ArchFloat::fnma(a.imag, b.imag, c)), ArchFloat::fma(a.real, b.imag, ArchFloat::mul(a.imag, b.real))};
 	}
 	// Same but for doubles
 	template<bool aligned, class A, class B, class C>
@@ -720,21 +737,21 @@ struct SimdFill {
 		auto a = getCDouble<aligned>(expr.a.a, i);
 		auto b = getDouble<aligned>(expr.a.b, i);
 		auto c = getCDouble<aligned>(expr.b, i);
-		return {Arch::fma(a.real, b, c.real), Arch::fma(a.imag, b, c.imag)};
+		return {ArchDouble::fma(a.real, b, c.real), ArchDouble::fma(a.imag, b, c.imag)};
 	}
 	template<bool aligned, class A, class B, class C>
 	static ItemTypeD<A, ItemTypeCD<B, ItemTypeCD<C, ComplexDouble>>> getCDouble(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
 		auto a = getDouble<aligned>(expr.a.a, i);
 		auto b = getCDouble<aligned>(expr.a.b, i);
 		auto c = getCDouble<aligned>(expr.b, i);
-		return {Arch::fma(a, b.real, c.real), Arch::fma(a, b.imag, c.imag)};
+		return {ArchDouble::fma(a, b.real, c.real), ArchDouble::fma(a, b.imag, c.imag)};
 	}
 	template<bool aligned, class A, class B, class C>
 	static ItemTypeCD<A, ItemTypeCD<B, ItemTypeD<C, ComplexDouble>>> getCDouble(expression::Add<expression::Mul<A, B>, C> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a.a, i);
 		auto b = getCDouble<aligned>(expr.a.b, i);
 		auto c = getDouble<aligned>(expr.b, i);
-		return {Arch::fma(a.real, b.real, Arch::fnma(a.imag, b.imag, c)), Arch::fma(a.real, b.imag, Arch::mul(a.imag, b.real))};
+		return {ArchDouble::fma(a.real, b.real, ArchDouble::fnma(a.imag, b.imag, c)), ArchDouble::fma(a.real, b.imag, ArchDouble::mul(a.imag, b.real))};
 	}
 	// Div
 	template<bool aligned, class A, class B>
@@ -749,39 +766,39 @@ struct SimdFill {
 	static ItemTypeCF<A, ItemTypeF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
 		auto a = getCFloat<aligned>(expr.a, i);
 		auto b = getFloat<aligned>(expr.b, i);
-		return {Arch::div(a.real, b), Arch::div(a.imag, b)};
+		return {ArchFloat::div(a.real, b), ArchFloat::div(a.imag, b)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeCD<A, ItemTypeD<B, ComplexDouble>> getCDouble(expression::Div<A, B> expr, size_t i) {
 		auto a = getCDouble<aligned>(expr.a, i);
 		auto b = getDouble<aligned>(expr.b, i);
-		return {Arch::div(a.real, b), Arch::div(a.imag, b)};
+		return {ArchDouble::div(a.real, b), ArchDouble::div(a.imag, b)};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeF<A, ItemTypeCF<B, ComplexFloat>> getCFloat(expression::Div<A, B> expr, size_t i) {
 		auto a = getFloat<aligned>(expr.a, i);
 		auto b = getCFloat<aligned>(expr.b, i);
 		auto mag2B = complexNorm(b);
-		auto abNum = Arch::div(a, mag2B);
-		return {Arch::mul(abNum, b.real), Arch::mul(abNum, Arch::neg(b.imag))};
+		auto abNum = ArchFloat::div(a, mag2B);
+		return {ArchFloat::mul(abNum, b.real), ArchFloat::mul(abNum, ArchFloat::neg(b.imag))};
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeD<A, ItemTypeCD<B, ComplexDouble>> getCDouble(expression::Div<A, B> expr, size_t i) {
 		auto a = getDouble<aligned>(expr.a, i);
 		auto b = getCDouble<aligned>(expr.b, i);
 		auto mag2B = complexNorm(b);
-		auto abNum = Arch::div(a, mag2B);
-		return {Arch::mul(abNum, b.real), Arch::mul(abNum, Arch::neg(b.imag))};
+		auto abNum = ArchDouble::div(a, mag2B);
+		return {ArchDouble::mul(abNum, b.real), ArchDouble::mul(abNum, ArchDouble::neg(b.imag))};
 	}
 
 	 // Only two-argument float-to-complex
 	template<bool aligned, class A, class B>
 	static ItemTypeF<A, ComplexFloat> getCFloat(expression::Polar<A, B> expr, size_t i) {
-		return complexPolar(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i));
+		return complexPolar<ComplexFloat>(getFloat<aligned>(expr.a, i), getFloat<aligned>(expr.b, i));
 	}
 	template<bool aligned, class A, class B>
 	static ItemTypeD<A, ComplexDouble> getCDouble(expression::Polar<A, B> expr, size_t i) {
-		return complexPolar(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i));
+		return complexPolar<ComplexDouble>(getDouble<aligned>(expr.a, i), getDouble<aligned>(expr.b, i));
 	}
 
 	// Complex -> real
