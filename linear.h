@@ -1286,6 +1286,12 @@ namespace signalsmith { namespace linear {
 	template<>
 	struct LinearImpl<true> : public LinearImplIntrinsics<simd_neon::SimdFill> {};
 }}
+#	elif defined(__wasm_simd128__)
+#		include "./platform/linear-intrinsics/wasm.h"
+namespace signalsmith { namespace linear {
+	template<>
+	struct LinearImpl<true> : public LinearImplIntrinsics<simd_wasm::SimdFill> {};
+}}
 #	else
 #		error "Linear doesn't have an intrinsics implementation for this architecture"
 #	endif
