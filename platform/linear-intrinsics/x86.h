@@ -1,20 +1,19 @@
+// This meta-arch picks SSE2, SSE4.1, AVX or AVX2+FMA at runtime
+
 #include <immintrin.h>
-#include "./linear-intrinsics/scalar.h"
-#include "./linear-intrinsics/x86-sse2.h"
-#include "./linear-intrinsics/x86-sse41.h"
-#include "./linear-intrinsics/x86-avx1.h"
-#include "./linear-intrinsics/x86-avx2.h"
 #if defined(_MSC_VER) && !defined(__clang__)
 #	include <intrin.h> // __cpuid, __cpuidex
 #endif
 
-#include "./intrinsics.h"
+#include "./x86-sse2.h"
+#include "./x86-sse41.h"
+#include "./x86-avx1.h"
+#include "./x86-avx2.h"
 
-namespace signalsmith { namespace linear {
+namespace signalsmith { namespace linear { namespace simd_x86_dispatch {
 
-// Picks SSE2, SSE4.1, AVX or AVX2+FMA at runtime
-struct ArchFillX64 {
-	ArchFillX64() : simdArch(detectArch()) {}
+struct SimdFill {
+	SimdFill() : simdArch(detectArch()) {}
 
 	template<class S, class Expr>
 	void fillReal(S *pointer, Expr expr, size_t size) const {
@@ -77,7 +76,4 @@ private:
 	}
 };
 
-template<>
-struct LinearImpl<true> : public LinearImplIntrinsics<ArchFillX64> {};
-
-}}; // namespace
+}}}; // namespace

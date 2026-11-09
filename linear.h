@@ -1272,10 +1272,20 @@ private:
 #if defined(SIGNALSMITH_USE_ACCELERATE)
 #	include "./platform/linear-accelerate.h"
 #elif defined(SIGNALSMITH_USE_INTRINSICS)
+#	include "./platform/linear-intrinsics.h"
+#	include "./platform/linear-intrinsics/scalar.h"
 #	if (defined(_M_X64) || defined(__x86_64__))
-#		include "./platform/linear-intrinsics-x86_64.h"
+#		include "./platform/linear-intrinsics/x86.h"
+namespace signalsmith { namespace linear {
+	template<>
+	struct LinearImpl<true> : public LinearImplIntrinsics<simd_x86_dispatch::SimdFill> {};
+}}
 #	elif (defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(_M_ARM64))
-#		include "./platform/linear-intrinsics-arm-neon.h"
+#		include "./platform/linear-intrinsics/arm-neon.h"
+namespace signalsmith { namespace linear {
+	template<>
+	struct LinearImpl<true> : public LinearImplIntrinsics<simd_neon::SimdFill> {};
+}}
 #	else
 #		error "Linear doesn't have an intrinsics implementation for this architecture"
 #	endif

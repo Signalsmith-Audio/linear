@@ -8,9 +8,6 @@ inline __m128 asmBarrier(__m128 v) {
 	__asm__("" : "+x"(v)); // empty ASM block which the compiler doesn't re-associate through
 	return v;
 }
-#endif
-
-#if defined(__clang__) || defined(__GNUC__)
 inline __m128d asmBarrier(__m128d v) {
 	__asm__("" : "+x"(v));
 	return v;
