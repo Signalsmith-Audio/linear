@@ -8,7 +8,7 @@
 #	define SIGNALSMITH_LINEAR_WASM_RELAXED
 #else
 
-namespace signalsmith { namespace linear { namespace simd_wasm {
+namespace signalsmith { namespace linear { namespace simd_wasm_simd128 {
 
 // Everything specific to WASM: vector types, memory access, complex (de-)interleaving and arithmetic, plus the SSMF functions (included as static members).
 // There's only one vector type (`v128_t`), so float/double are only distinguished by which struct they're in.
