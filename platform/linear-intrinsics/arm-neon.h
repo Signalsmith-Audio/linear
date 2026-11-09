@@ -1,14 +1,6 @@
+// 128-bit ARM NEON.  This covers both the AArch64 version (which has everything, including sqrt/rounding/...) and the 32-bit version (which needs to explicitly target NEON, and is float-only, so double falls back to scalar)
+
 #include <arm_neon.h>
-
-/* SSMF functions and basic operations (`ArchFloat`/`ArchDouble`) for 128-bit ARM NEON, followed by `SimdFill`.
-
-There's no runtime dispatch: NEON is always present on AArch64, and on 32-bit ARM we only get here if the compiler is targeting NEON (`__ARM_NEON`).
-
-AArch64 has everything we want (division, sqrt, FMA, rounding, `float64x2_t`).  32-bit ARM NEON is float-only, without division or sqrt, and FMA/rounding depend on the target:
--	division is done one lane at a time (VFP division is exact, and an estimate+refine wouldn't be)
--	sqrt comes from SSMF's rsqrt()
--	`double` is scalar, using the functions from ./scalar.h
-*/
 
 #if defined(__aarch64__) || defined(_M_ARM64)
 #	define SIGNALSMITH_LINEAR_NEON_A64
@@ -18,16 +10,6 @@ namespace signalsmith { namespace linear { namespace simd_neon {
 
 #define SIGNALSMITH_NEON_BITS32(op, a, b) vreinterpretq_f32_u32(op(vreinterpretq_u32_f32(a), vreinterpretq_u32_f32(b)))
 #define SIGNALSMITH_NEON_BITS64(op, a, b) vreinterpretq_f64_u64(op(vreinterpretq_u64_f64(a), vreinterpretq_u64_f64(b)))
-
-#ifndef SIGNALSMITH_LINEAR_NEON_A64
-inline float32x4_t divLanes(float32x4_t a, float32x4_t b) {
-	float fa[4], fb[4];
-	vst1q_f32(fa, a);
-	vst1q_f32(fb, b);
-	for (int i = 0; i < 4; ++i) fa[i] /= fb[i];
-	return vld1q_f32(fa);
-}
-#endif
 
 #if defined(__clang__) || defined(__GNUC__)
 inline float32x4_t asmBarrier(float32x4_t v) {
@@ -80,7 +62,14 @@ struct ArchFloat {
 #ifdef SIGNALSMITH_LINEAR_NEON_A64
 	static V div(V a, V b) {return vdivq_f32(a, b);}
 #else
-	static V div(V a, V b) {return divLanes(a, b);}
+	// 32-bit NEON doesn't have division - write to the stack, do as calar, and read back out
+	static V div(V a, V b) {
+		float fa[4], fb[4];
+		vst1q_f32(fa, a);
+		vst1q_f32(fb, b);
+		for (int i = 0; i < 4; ++i) fa[i] /= fb[i];
+		return vld1q_f32(fa);
+	}
 #endif
 	static V max(V a, V b) {return vmaxq_f32(a, b);}
 	static V min(V a, V b) {return vminq_f32(a, b);}
@@ -129,7 +118,7 @@ struct ArchFloat {
 #	define SSMF_VF_DIV(a, b) vdivq_f32(a, b)
 #	define SSMF_VF_SQRT(v) vsqrtq_f32(v)
 #else
-#	define SSMF_VF_DIV(a, b) divLanes(a, b)
+#	define SSMF_VF_DIV(a, b) div(a, b)
 #endif
 #if defined(SIGNALSMITH_LINEAR_NEON_A64) || defined(__ARM_FEATURE_FMA)
 #	define SSMF_VF_FMA(a, b, c) vfmaq_f32(c, a, b)
@@ -183,44 +172,44 @@ struct ArchDouble {
 	static V fnma(V a, V b, V c) {return vfmsq_f64(c, a, b);}
 	static V fnms(V a, V b, V c) {return vnegq_f64(vfmaq_f64(c, a, b));}
 
-#define SSMF_BITS 64
-#if defined(SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY64)
-#	define SSMF_ACCURACY SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY64
-#elif defined(SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY)
-#	define SSMF_ACCURACY SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY
-#endif
-#define SSMF_VF float64x2_t
-#define SSMF_VF_0 vdupq_n_f64(0.0)
-#define SSMF_VF_F(v) vdupq_n_f64(double(v))
-#define SSMF_VF_I(v) vreinterpretq_f64_s64(vdupq_n_s64(v))
-#define SSMF_VF_AND(a, b) SIGNALSMITH_NEON_BITS64(vandq_u64, a, b)
-#define SSMF_VF_ANDNOT(a, b) SIGNALSMITH_NEON_BITS64(vbicq_u64, b, a)
-#define SSMF_VF_OR(a, b) SIGNALSMITH_NEON_BITS64(vorrq_u64, a, b)
-#define SSMF_VF_XOR(a, b) SIGNALSMITH_NEON_BITS64(veorq_u64, a, b)
-#define SSMF_VF_NOT(a) vreinterpretq_f64_u32(vmvnq_u32(vreinterpretq_u32_f64(a)))
-#define SSMF_VF_RSHIFT_K(a, bits) vreinterpretq_f64_u64(vshrq_n_u64(vreinterpretq_u64_f64(a), bits))
-#define SSMF_VF_LSHIFT_K(a, bits) vreinterpretq_f64_u64(vshlq_n_u64(vreinterpretq_u64_f64(a), bits))
-#define SSMF_VF_ADD(a, b) vaddq_f64(a, b)
-#define SSMF_VF_SUB(a, b) vsubq_f64(a, b)
-#define SSMF_VF_MUL(a, b) vmulq_f64(a, b)
-#define SSMF_VF_DIV(a, b) vdivq_f64(a, b)
-#define SSMF_VF_MAX(a, b) vmaxq_f64(a, b)
-#define SSMF_VF_MIN(a, b) vminq_f64(a, b)
-#define SSMF_VF_SQRT(v) vsqrtq_f64(v)
-#define SSMF_VF_ABS(v) vabsq_f64(v)
-#define SSMF_VF_NEG(v) vnegq_f64(v)
-#define SSMF_VF_COPYSIGN(a, b) vbslq_f64(vdupq_n_u64(0x8000000000000000ull), b, a)
+#	define SSMF_BITS 64
+#	if defined(SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY64)
+#		define SSMF_ACCURACY SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY64
+#	elif defined(SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY)
+#		define SSMF_ACCURACY SIGNALSMITH_LINEAR_INTRINSICS_ACCURACY
+#	endif
+#	define SSMF_VF float64x2_t
+#	define SSMF_VF_0 vdupq_n_f64(0.0)
+#	define SSMF_VF_F(v) vdupq_n_f64(double(v))
+#	define SSMF_VF_I(v) vreinterpretq_f64_s64(vdupq_n_s64(v))
+#	define SSMF_VF_AND(a, b) SIGNALSMITH_NEON_BITS64(vandq_u64, a, b)
+#	define SSMF_VF_ANDNOT(a, b) SIGNALSMITH_NEON_BITS64(vbicq_u64, b, a)
+#	define SSMF_VF_OR(a, b) SIGNALSMITH_NEON_BITS64(vorrq_u64, a, b)
+#	define SSMF_VF_XOR(a, b) SIGNALSMITH_NEON_BITS64(veorq_u64, a, b)
+#	define SSMF_VF_NOT(a) vreinterpretq_f64_u32(vmvnq_u32(vreinterpretq_u32_f64(a)))
+#	define SSMF_VF_RSHIFT_K(a, bits) vreinterpretq_f64_u64(vshrq_n_u64(vreinterpretq_u64_f64(a), bits))
+#	define SSMF_VF_LSHIFT_K(a, bits) vreinterpretq_f64_u64(vshlq_n_u64(vreinterpretq_u64_f64(a), bits))
+#	define SSMF_VF_ADD(a, b) vaddq_f64(a, b)
+#	define SSMF_VF_SUB(a, b) vsubq_f64(a, b)
+#	define SSMF_VF_MUL(a, b) vmulq_f64(a, b)
+#	define SSMF_VF_DIV(a, b) vdivq_f64(a, b)
+#	define SSMF_VF_MAX(a, b) vmaxq_f64(a, b)
+#	define SSMF_VF_MIN(a, b) vminq_f64(a, b)
+#	define SSMF_VF_SQRT(v) vsqrtq_f64(v)
+#	define SSMF_VF_ABS(v) vabsq_f64(v)
+#	define SSMF_VF_NEG(v) vnegq_f64(v)
+#	define SSMF_VF_COPYSIGN(a, b) vbslq_f64(vdupq_n_u64(0x8000000000000000ull), b, a)
 // Skipping RSQRT_EST: it's only 8 bits, so it takes 3 refinement steps
-#define SSMF_VF_FMA(a, b, c) vfmaq_f64(c, a, b)
-#define SSMF_VF_FMAK(a, b, k) vfmaq_f64(vdupq_n_f64(double(k)), a, b)
-#define SSMF_VF_ROUND(v) vrndnq_f64(v)
-#define SSMF_VF_FLOOR(v) vrndmq_f64(v)
-#if defined(__clang__) || defined(__GNUC__)
-#	define SSMF_VF_BARRIER(v) asmBarrier(v)
-#endif
-#define SSMF_NAME(fn) fn // static member functions
-#define SSMF_INLINE static inline
-#include "../signalsmith-mathfun.h"
+#	define SSMF_VF_FMA(a, b, c) vfmaq_f64(c, a, b)
+#	define SSMF_VF_FMAK(a, b, k) vfmaq_f64(vdupq_n_f64(double(k)), a, b)
+#	define SSMF_VF_ROUND(v) vrndnq_f64(v)
+#	define SSMF_VF_FLOOR(v) vrndmq_f64(v)
+#	if defined(__clang__) || defined(__GNUC__)
+#		define SSMF_VF_BARRIER(v) asmBarrier(v)
+#	endif
+#	define SSMF_NAME(fn) fn // static member functions
+#	define SSMF_INLINE static inline
+#	include "../signalsmith-mathfun.h"
 };
 #else
 // 32-bit NEON has no double vectors, so `double` uses the scalar version (one lane)
