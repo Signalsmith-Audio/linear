@@ -1278,7 +1278,7 @@ private:
 #		include "./platform/linear-intrinsics/x86.h"
 namespace signalsmith { namespace linear {
 	template<>
-	struct LinearImpl<true> : public LinearImplIntrinsics<simd_x86_dispatch::SimdFill> {};
+	struct LinearImpl<true> : public LinearImplIntrinsics<simd_x86_dispatch::SimdFillDispatch> {};
 }}
 #	elif (defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(_M_ARM64))
 #		include "./platform/linear-intrinsics/arm-neon.h"

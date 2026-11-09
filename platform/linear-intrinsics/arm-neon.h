@@ -62,7 +62,7 @@ struct ArchFloat {
 #ifdef SIGNALSMITH_LINEAR_NEON_A64
 	static V div(V a, V b) {return vdivq_f32(a, b);}
 #else
-	// 32-bit NEON doesn't have division - write to the stack, do as calar, and read back out
+	// 32-bit NEON doesn't have division - write to the stack, do as scalar, and read back out
 	static V div(V a, V b) {
 		float fa[4], fb[4];
 		vst1q_f32(fa, a);
