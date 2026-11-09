@@ -6,7 +6,7 @@
 // Use Relaxed SIMD if it's enabled
 #if defined(__wasm_relaxed_simd__)
 #	define SIGNALSMITH_LINEAR_WASM_RELAXED
-#else
+#endif
 
 namespace signalsmith { namespace linear { namespace simd_wasm_simd128 {
 
