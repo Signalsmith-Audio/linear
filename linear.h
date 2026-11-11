@@ -1271,7 +1271,7 @@ private:
 
 #if defined(SIGNALSMITH_USE_ACCELERATE)
 #	include "./platform/linear-accelerate.h"
-#elif defined(SIGNALSMITH_USE_INTRINSICS)
+#elif defined(SIGNALSMITH_USE_INTRINSICS) || defined(SIGNALSMITH_USE_SSMF)
 #	include "./platform/linear-intrinsics.h"
 #	include "./platform/linear-intrinsics/scalar.h"
 #	if (defined(_M_X64) || defined(__x86_64__))
@@ -1283,6 +1283,9 @@ private:
 #	elif defined(__wasm_simd128__)
 #		include "./platform/linear-intrinsics/wasm-simd128.h"
 #		define SIGNALSMITH_INTRINSICS_FILL simd_wasm_simd128::SimdFill
+#	elif defined(SIGNALSMITH_USE_SSMF)
+#		include "./platform/linear-intrinsics/scalar.h"
+#		define SIGNALSMITH_INTRINSICS_FILL simd_scalar::SimdFill
 #	else
 #		error "Linear doesn't have an intrinsics implementation for this architecture"
 #	endif
