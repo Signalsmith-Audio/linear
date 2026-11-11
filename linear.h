@@ -1284,7 +1284,6 @@ private:
 #		include "./platform/linear-intrinsics/wasm-simd128.h"
 #		define SIGNALSMITH_INTRINSICS_FILL simd_wasm_simd128::SimdFill
 #	elif defined(SIGNALSMITH_USE_SSMF)
-#		include "./platform/linear-intrinsics/scalar.h"
 #		define SIGNALSMITH_INTRINSICS_FILL simd_scalar::SimdFill
 #	else
 #		error "Linear doesn't have an intrinsics implementation for this architecture"
