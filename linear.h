@@ -1296,8 +1296,8 @@ namespace signalsmith { namespace linear {
 #	undef SIGNALSMITH_INTRINSICS_FILL
 #elif defined(SIGNALSMITH_USE_XSIMD)
 #	include "./platform/linear-xsimd.h"
-#elif defined(SIGNALSMITH_USE_CMSISDSP)
-#	include "./platform/linear-cmsisdsp.h"
+//#elif defined(SIGNALSMITH_USE_CMSISDSP)
+//#	include "./platform/linear-cmsisdsp.h"
 //#elif defined(SIGNALSMITH_USE_IPP)
 //#	include "./platform/linear-ipp.h"
 #endif
